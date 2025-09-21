@@ -248,7 +248,10 @@ function startTcpServer() {
 ipcMain.handle("send-file", async (event, peer, fileObj) => {
   return new Promise((resolve, reject) => {
     try {
-      const { name, size, path: filePath } = fileObj;
+      const { name, size, data } = fileObj;
+
+      // Convert arrayBuffer to Buffer
+      const fileBuffer = Buffer.from(data);
 
       // Metadata buffer
       const metadata = JSON.stringify({ name, size });
@@ -262,47 +265,41 @@ ipcMain.handle("send-file", async (event, peer, fileObj) => {
       client.connect(peer.port, peer.host, () => {
         console.log(`Connected to ${peer.name} at ${peer.host}:${peer.port}`);
 
-        // Send metadata first
+        // Send metadata
         client.write(metaLengthBuffer);
         client.write(metaBuffer);
 
-        // Then stream file
-        const fileStream = fs.createReadStream(filePath, {
-          highWaterMark: 64 * 1024, // 64KB chunks
-        });
+        // Send file in chunks
+        const CHUNK_SIZE = 64 * 1024;
+        let offset = 0;
 
-        fileStream.on("data", (chunk) => {
-          bytesSent += chunk.length;
+        function sendNext() {
+          if (offset >= fileBuffer.length) {
+            client.end();
+            return;
+          }
+          const chunk = fileBuffer.slice(offset, offset + CHUNK_SIZE);
+          offset += chunk.length;
 
           if (!client.write(chunk)) {
-            fileStream.pause(); // backpressure
-            client.once("drain", () => fileStream.resume());
+            client.once("drain", sendNext);
+          } else {
+            sendNext();
           }
 
-          // Progress update
+          // Progress
           mainWindow.webContents.send("send-progress", {
             peer,
-            sent: bytesSent,
+            sent: offset,
             total: size,
           });
-        });
+        }
 
-        fileStream.on("end", () => {
-          client.end();
-        });
-
-        fileStream.on("error", (err) => {
-          reject("File read error: " + err.message);
-        });
+        sendNext();
       });
 
-      client.on("close", () => {
-        resolve("File sent successfully!");
-      });
-
-      client.on("error", (err) => {
-        reject("Error sending file: " + err.message);
-      });
+      client.on("close", () => resolve("File sent successfully!"));
+      client.on("error", (err) => reject("Error sending file: " + err.message));
     } catch (err) {
       reject("Unexpected error: " + err.message);
     }
