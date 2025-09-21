@@ -162,25 +162,24 @@ function startTcpServer() {
           metaLength = metaBuffer.readUInt32BE(0);
         }
 
-        // Still waiting for full metadata
+        // Got full metadata but haven’t opened file stream yet
         if (
           metaLength !== null &&
           metaBuffer.length >= 4 + metaLength &&
           !fileStream
         ) {
-          // Extract metadata JSON
           const metadata = JSON.parse(
             metaBuffer.slice(4, 4 + metaLength).toString()
           );
           expectedFileSize = metadata.size;
 
-          // Remaining bytes (may already contain part of file)
           const remaining = metaBuffer.slice(4 + metaLength);
-
-          // ✅ Clear metaBuffer so we don’t reprocess
           metaBuffer = Buffer.alloc(0);
 
-          // Ask save location (non-blocking relative to TCP stream)
+          // ✅ pause socket so sender doesn't flood us
+          socket.pause();
+
+          // Ask save location
           const { canceled, filePaths } = await dialog.showOpenDialog(
             mainWindow,
             {
@@ -196,7 +195,6 @@ function startTcpServer() {
           const saveDir = filePaths[0];
           let filePath = path.join(saveDir, metadata.name);
 
-          // Prevent overwrite
           let counter = 1;
           while (fs.existsSync(filePath)) {
             const parsed = path.parse(filePath);
@@ -209,13 +207,15 @@ function startTcpServer() {
 
           fileStream = fs.createWriteStream(filePath);
 
-          // Write any leftover file bytes we buffered
+          // Write leftover bytes if any
           if (remaining.length > 0) {
             fileStream.write(remaining);
             receivedFileSize += remaining.length;
           }
+
+          // ✅ now resume reading the socket
+          socket.resume();
         } else if (fileStream) {
-          // Already got metadata → these are file chunks
           fileStream.write(chunk);
           receivedFileSize += chunk.length;
         }
@@ -231,7 +231,6 @@ function startTcpServer() {
         console.log(
           `File received (${receivedFileSize}/${expectedFileSize} bytes)`
         );
-
         mainWindow.webContents.send("file-received", "File saved successfully");
       }
     });
