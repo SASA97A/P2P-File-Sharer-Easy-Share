@@ -74,6 +74,8 @@ function startBonjour() {
   });
 }
 
+const peerLastSeen = {};
+
 function startUdpDiscovery() {
   const udp = dgram.createSocket("udp4");
 
@@ -82,6 +84,10 @@ function startUdpDiscovery() {
     try {
       const peer = JSON.parse(msg.toString());
       if (peer.name === serviceName) return;
+
+      // Track last seen time
+      const key = `${peer.host}:${peer.port}`;
+      peerLastSeen[key] = Date.now();
 
       if (mainWindow) {
         mainWindow.webContents.send("peer-found", peer);
@@ -105,6 +111,24 @@ function startUdpDiscovery() {
       udp.send(peer, 0, peer.length, UDP_PORT, "255.255.255.255");
     }, 5000);
   });
+
+  // Cleanup stale peers every 15s
+  setInterval(() => {
+    const now = Date.now();
+    for (const key in peerLastSeen) {
+      if (now - peerLastSeen[key] > 15000) {
+        // not seen in 15s
+        delete peerLastSeen[key];
+        if (mainWindow) {
+          const [host, port] = key.split(":");
+          mainWindow.webContents.send("peer-lost", {
+            host,
+            port: Number(port),
+          });
+        }
+      }
+    }
+  }, 5000);
 }
 
 function getLocalIp() {
