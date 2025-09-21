@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.removeAllListeners("file-received");
     ipcRenderer.on("file-received", (event, path) => callback(path));
   },
+  onSendProgress: (callback) => {
+    ipcRenderer.removeAllListeners("send-progress");
+    ipcRenderer.on("send-progress", (event, progress) => callback(progress));
+  },
   sendFile: (peer, fileBuffer) =>
     ipcRenderer.invoke("send-file", peer, fileBuffer),
 });

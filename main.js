@@ -63,10 +63,13 @@ function startBonjour() {
 
   // When peer disappears
   browser.on("down", (service) => {
-    discoveredPeers = discoveredPeers.filter(
-      (p) => !(p.host === service.referer.address && p.port === service.port)
-    );
-    renderPeers();
+    if (mainWindow) {
+      mainWindow.webContents.send("peer-lost", {
+        name: service.name,
+        host: service.referer.address,
+        port: service.port,
+      });
+    }
   });
 }
 
@@ -149,7 +152,19 @@ function startTcpServer() {
         const saveDir = filePaths[0];
         const filePath = path.join(saveDir, metadata.name);
 
-        fs.writeFileSync(filePath, fileData);
+        // File overwrite preventation
+        let finalPath = filePath;
+        let counter = 1;
+        while (fs.existsSync(finalPath)) {
+          const parsed = path.parse(filePath);
+          finalPath = path.join(
+            parsed.dir,
+            `${parsed.name}(${counter})${parsed.ext}`
+          );
+          counter++;
+        }
+        fs.writeFileSync(finalPath, fileData);
+
         console.log(`File received: ${metadata.name} (${metadata.size} bytes)`);
 
         mainWindow.webContents.send("file-received", filePath);
@@ -172,9 +187,35 @@ ipcMain.handle("send-file", async (event, peer, fileBuffer) => {
   return new Promise((resolve, reject) => {
     try {
       const client = new net.Socket();
+      let bytesSent = 0;
+      const totalBytes = fileBuffer.length;
+
       client.connect(peer.port, peer.host, () => {
-        client.write(fileBuffer);
-        client.end();
+        // Send in chunks for progress
+        const CHUNK_SIZE = 64 * 1024; // 64KB
+        function sendNext() {
+          if (bytesSent >= totalBytes) {
+            client.end();
+            return;
+          }
+          const chunk = fileBuffer.slice(bytesSent, bytesSent + CHUNK_SIZE);
+          bytesSent += chunk.length;
+
+          // Try writing, handle backpressure
+          if (!client.write(chunk)) {
+            client.once("drain", sendNext);
+          } else {
+            sendNext();
+          }
+
+          // Report progress back to renderer
+          mainWindow.webContents.send("send-progress", {
+            peer,
+            sent: bytesSent,
+            total: totalBytes,
+          });
+        }
+        sendNext();
       });
 
       client.on("close", () => resolve("File sent successfully!"));

@@ -11,7 +11,74 @@ let selectedPeer = null;
 
 renderPeers(); // show "Searching..." on startup
 
-// File handling
+// ===== Handle peers from Bonjour =====
+window.api.onPeerFound((peer) => {
+  // Normalize peer key
+  const key = peer.host + ":" + peer.port;
+  const existingIndex = discoveredPeers.findIndex(
+    (p) => p.host + ":" + p.port === key
+  );
+
+  if (existingIndex !== -1) {
+    // Update existing peer (e.g. fill in osType if missing)
+    discoveredPeers[existingIndex] = {
+      ...discoveredPeers[existingIndex],
+      ...peer,
+    };
+  } else {
+    discoveredPeers.push(peer);
+  }
+
+  renderPeers();
+});
+
+// Remove peers
+window.api.onPeerLost((peer) => {
+  const key = peer.host + ":" + peer.port;
+  discoveredPeers = discoveredPeers.filter(
+    (p) => p.host + ":" + p.port !== key
+  );
+  renderPeers();
+});
+
+/*function getDeviceImg(type) {
+  const icons = {
+    Windows_NT: "🖥️",
+    Darwin: "💻",
+    Linux: "🐧",
+  };
+  return icons[type] || "📱";
+}*/
+
+function renderPeers() {
+  deviceList.innerHTML = "";
+
+  if (discoveredPeers.length === 0) {
+    // Show loader if no peers found
+    const loader = document.createElement("div");
+    loader.className = "loader";
+    loader.textContent = "Searching for devices...";
+    deviceList.appendChild(loader);
+    return;
+  }
+
+  discoveredPeers.forEach((peer, index) => {
+    const div = document.createElement("div");
+    div.className = "device";
+    //const icon = getDeviceImg(peer.osType);
+    div.innerHTML = `<div class="device-icon">🖥️</div><div class="device-name">${peer.name}</div>`;
+    div.addEventListener("click", () => {
+      selectedPeer = peer;
+      document
+        .querySelectorAll(".device")
+        .forEach((d) => (d.style.border = "none"));
+      div.style.border = "2px solid #4caf50";
+    });
+    deviceList.appendChild(div);
+  });
+}
+
+// ===== Handle files =====
 dropArea.addEventListener("click", () => fileInput.click());
 dropArea.addEventListener("dragover", (e) => {
   e.preventDefault();
@@ -57,97 +124,6 @@ function updateFileList() {
   });
 }
 
-// ===== Handle peers from Bonjour =====
-window.api.onPeerFound((peer) => {
-  // Check if already in list
-  const exists = discoveredPeers.some(
-    (p) => p.host === peer.host && p.port === peer.port
-  );
-
-  if (!exists) {
-    discoveredPeers.push(peer);
-    renderPeers();
-  }
-});
-
-// Remove peers
-window.api.onPeerLost((peer) => {
-  discoveredPeers = discoveredPeers.filter(
-    (p) => !(p.host === peer.host && p.port === peer.port)
-  );
-  renderPeers();
-});
-
-function renderPeers() {
-  deviceList.innerHTML = "";
-
-  if (discoveredPeers.length === 0) {
-    // Show loader if no peers found
-    const loader = document.createElement("div");
-    loader.className = "loader";
-    loader.textContent = "Searching for devices...";
-    deviceList.appendChild(loader);
-    return;
-  }
-
-  discoveredPeers.forEach((peer, index) => {
-    const div = document.createElement("div");
-    div.className = "device";
-    div.innerHTML = `<div class="device-icon">🖥️</div><div class="device-name">${peer.name}</div>`;
-    div.addEventListener("click", () => {
-      selectedPeer = peer;
-      document
-        .querySelectorAll(".device")
-        .forEach((d) => (d.style.border = "none"));
-      div.style.border = "2px solid #4caf50";
-    });
-    deviceList.appendChild(div);
-  });
-}
-
-/*
-function getDeviceImg(type) {
-  const icons = {
-    Windows_NT: "🖥️",
-    Darwin: "💻",
-    Linux: "🐧",
-  };
-  return icons[type] || "📱";
-}
-*/
-
-// ===== Handle files =====
-fileInput.addEventListener("change", () => addFiles(fileInput.files));
-
-function addFiles(files) {
-  for (const file of files) {
-    selectedFiles.push(file);
-  }
-  updateFileList();
-}
-
-function updateFileList() {
-  fileList.innerHTML = "";
-  selectedFiles.forEach((file, index) => {
-    const item = document.createElement("div");
-    item.className = "file-item";
-    item.innerHTML = `
-      <span>${file.name}</span>
-      <span>${(file.size / 1024).toFixed(1)} KB</span>
-      <button class="remove-btn" data-index="${index}">✖</button>
-    `;
-    fileList.appendChild(item);
-  });
-
-  document.querySelectorAll(".remove-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const index = e.target.dataset.index;
-      selectedFiles.splice(index, 1);
-      updateFileList();
-    });
-  });
-}
-
 // ===== Send File =====
 sendBtn.addEventListener("click", async () => {
   if (!selectedPeer) {
@@ -184,9 +160,15 @@ sendBtn.addEventListener("click", async () => {
       await window.api.sendFile(selectedPeer, finalBuffer);
 
       // Update progress (simple per-file percentage)
-      const percent = Math.round(((i + 1) / selectedFiles.length) * 100);
-      progressBar.style.width = percent + "%";
+      // const percent = Math.round(((i + 1) / selectedFiles.length) * 100);
+      // progressBar.style.width = percent + "%";
     }
+
+    // Update progress
+    window.api.onSendProgress?.((progress) => {
+      const percent = Math.round((progress.sent / progress.total) * 100);
+      progressBar.style.width = percent + "%";
+    });
 
     alert("All files sent successfully!");
     progressBar.style.width = "100%";
@@ -202,10 +184,25 @@ window.api.onFileReceived((filePath) => {
 
 // Manual peer add
 document.getElementById("manualAddBtn").addEventListener("click", () => {
-  const host = document.getElementById("manualIp").value;
+  const host = document.getElementById("manualIp").value.trim();
   if (!host) return;
 
-  const peer = { name: "Manual", host, port: 5050 };
-  discoveredPeers.push(peer);
+  const peer = { name: "Manual", host, port: 5050, osType: "Unknown" };
+  const key = peer.host + ":" + peer.port;
+
+  const existingIndex = discoveredPeers.findIndex(
+    (p) => p.host + ":" + p.port === key
+  );
+
+  if (existingIndex !== -1) {
+    // Update existing (e.g. if Bonjour already had it but no osType/name)
+    discoveredPeers[existingIndex] = {
+      ...discoveredPeers[existingIndex],
+      ...peer,
+    };
+  } else {
+    discoveredPeers.push(peer);
+  }
+
   renderPeers();
 });
