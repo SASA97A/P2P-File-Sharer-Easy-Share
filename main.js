@@ -155,31 +155,32 @@ function startTcpServer() {
 
     socket.on("data", async (chunk) => {
       try {
-        // If we haven't parsed metadata yet
-        if (metaLength === null) {
-          // Not enough data yet to read the 4-byte length
-          if (metaBuffer.length + chunk.length < 4) {
-            metaBuffer = Buffer.concat([metaBuffer, chunk]);
-            return;
-          }
+        metaBuffer = Buffer.concat([metaBuffer, chunk]);
 
-          // Combine and extract metadata length
-          metaBuffer = Buffer.concat([metaBuffer, chunk]);
+        // Still waiting for metadata length
+        if (metaLength === null && metaBuffer.length >= 4) {
           metaLength = metaBuffer.readUInt32BE(0);
+        }
 
-          // Still waiting for full metadata
-          if (metaBuffer.length < 4 + metaLength) return;
-
+        // Still waiting for full metadata
+        if (
+          metaLength !== null &&
+          metaBuffer.length >= 4 + metaLength &&
+          !fileStream
+        ) {
           // Extract metadata JSON
           const metadata = JSON.parse(
             metaBuffer.slice(4, 4 + metaLength).toString()
           );
           expectedFileSize = metadata.size;
 
-          // Remaining buffer after metadata (may contain file data)
+          // Remaining bytes (may already contain part of file)
           const remaining = metaBuffer.slice(4 + metaLength);
 
-          // Ask user for save location
+          // ✅ Clear metaBuffer so we don’t reprocess
+          metaBuffer = Buffer.alloc(0);
+
+          // Ask save location (non-blocking relative to TCP stream)
           const { canceled, filePaths } = await dialog.showOpenDialog(
             mainWindow,
             {
@@ -208,13 +209,13 @@ function startTcpServer() {
 
           fileStream = fs.createWriteStream(filePath);
 
-          // Write remaining data (after metadata) to file
+          // Write any leftover file bytes we buffered
           if (remaining.length > 0) {
             fileStream.write(remaining);
             receivedFileSize += remaining.length;
           }
-        } else {
-          // Already past metadata → write chunks directly
+        } else if (fileStream) {
+          // Already got metadata → these are file chunks
           fileStream.write(chunk);
           receivedFileSize += chunk.length;
         }
