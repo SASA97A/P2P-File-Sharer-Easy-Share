@@ -71,13 +71,34 @@ body {
   min-height: 50px;
 }
 .device {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   cursor: pointer;
+  padding: 10px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  transition: border 0.2s, background 0.2s;
 }
 .device:hover {
-  opacity: 0.8;
+  background: #f2f2f2;
+}
+.device.selected {
+  border: 2px solid #4caf50;
+  background: #eafbea;
+}
+.checkmark {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 18px;
+  color: #4caf50;
+  font-weight: bold;
+}
+.device.selected .checkmark {
+  display: block;
 }
 .device-icon {
   font-size: 40px;

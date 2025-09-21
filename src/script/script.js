@@ -13,14 +13,10 @@ renderPeers(); // show "Searching..." on startup
 
 // ===== Handle peers from Bonjour =====
 window.api.onPeerFound((peer) => {
-  // Normalize peer key
-  const key = peer.host + ":" + peer.port;
-  const existingIndex = discoveredPeers.findIndex(
-    (p) => p.host + ":" + p.port === key
-  );
+  const key = getPeerKey(peer);
+  const existingIndex = discoveredPeers.findIndex((p) => getPeerKey(p) === key);
 
   if (existingIndex !== -1) {
-    // Update existing peer (e.g. fill in osType if missing)
     discoveredPeers[existingIndex] = {
       ...discoveredPeers[existingIndex],
       ...peer,
@@ -34,12 +30,14 @@ window.api.onPeerFound((peer) => {
 
 // Remove peers
 window.api.onPeerLost((peer) => {
-  const key = peer.host + ":" + peer.port;
-  discoveredPeers = discoveredPeers.filter(
-    (p) => p.host + ":" + p.port !== key
-  );
+  const key = getPeerKey(peer);
+  discoveredPeers = discoveredPeers.filter((p) => getPeerKey(p) !== key);
   renderPeers();
 });
+
+function getPeerKey(peer) {
+  return `${peer.host}:${peer.port}`;
+}
 
 /*function getDeviceImg(type) {
   const icons = {
@@ -54,7 +52,6 @@ function renderPeers() {
   deviceList.innerHTML = "";
 
   if (discoveredPeers.length === 0) {
-    // Show loader if no peers found
     const loader = document.createElement("div");
     loader.className = "loader";
     loader.textContent = "Searching for devices...";
@@ -62,18 +59,27 @@ function renderPeers() {
     return;
   }
 
-  discoveredPeers.forEach((peer, index) => {
+  discoveredPeers.forEach((peer) => {
     const div = document.createElement("div");
     div.className = "device";
-    //const icon = getDeviceImg(peer.osType);
-    div.innerHTML = `<div class="device-icon">🖥️</div><div class="device-name">${peer.name}</div>`;
+
+    div.innerHTML = `
+      <div class="device-icon">🖥️</div>
+      <div class="device-name">${peer.name}</div>
+      <div class="checkmark">✔</div>
+    `;
+
     div.addEventListener("click", () => {
-      selectedPeer = peer;
+      // Deselect all others
       document
         .querySelectorAll(".device")
-        .forEach((d) => (d.style.border = "none"));
-      div.style.border = "2px solid #4caf50";
+        .forEach((d) => d.classList.remove("selected"));
+
+      // Select this one
+      div.classList.add("selected");
+      selectedPeer = peer;
     });
+
     deviceList.appendChild(div);
   });
 }
@@ -157,13 +163,12 @@ sendBtn.addEventListener("click", async () => {
       progressBar.style.width = percent + "%";
     });
 
-    alert("All files sent successfully!");
+    alert("File transfer request has been sent!");
     progressBar.style.width = "100%";
   } catch (err) {
     alert("Error sending files: " + err);
   }
 });
-
 
 // ===== Receive File Event =====
 window.api.onFileReceived((filePath) => {
