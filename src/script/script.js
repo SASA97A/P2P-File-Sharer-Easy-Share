@@ -148,13 +148,7 @@ sendBtn.addEventListener("click", async () => {
 
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
-
-      // ⚠️ use file.path, not arrayBuffer
-      await window.api.sendFile(selectedPeer, {
-        name: file.name,
-        size: file.size,
-        path: file.path, // <--- this is what fs.createReadStream needs
-      });
+      await window.api.sendFile(selectedPeer, file);
     }
 
     window.api.onSendProgress?.((progress) => {

@@ -15,5 +15,12 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.removeAllListeners("send-progress");
     ipcRenderer.on("send-progress", (event, progress) => callback(progress));
   },
-  sendFile: (peer, fileObj) => ipcRenderer.invoke("send-file", peer, fileObj),
+  sendFile: (peer, file) => {
+    // Marshal File object into plain serializable object
+    return ipcRenderer.invoke("send-file", peer, {
+      name: file.name,
+      size: file.size,
+      path: file.path, // in preload, this is available
+    });
+  },
 });
