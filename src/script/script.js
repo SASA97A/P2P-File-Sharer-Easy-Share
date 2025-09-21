@@ -141,30 +141,17 @@ sendBtn.addEventListener("click", async () => {
     // Send files one by one
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
-      const buffer = await file.arrayBuffer();
+      const arrayBuffer = await file.arrayBuffer();
 
-      // Metadata for this file
-      const metadata = JSON.stringify({ name: file.name, size: file.size });
-      const metaBuffer = window.api.Buffer.from(metadata);
-      const metaLengthBuffer = Buffer.alloc(4);
-      metaLengthBuffer.writeUInt32BE(metaBuffer.length, 0);
-
-      // Final buffer: [meta length][metadata][file bytes]
-      const finalBuffer = Buffer.concat([
-        metaLengthBuffer,
-        metaBuffer,
-        Buffer.from(buffer),
-      ]);
-
-      // Send via IPC
-      await window.api.sendFile(selectedPeer, finalBuffer);
-
-      // Update progress (simple per-file percentage)
-      // const percent = Math.round(((i + 1) / selectedFiles.length) * 100);
-      // progressBar.style.width = percent + "%";
+      // Send raw data + metadata to main
+      await window.api.sendFile(selectedPeer, {
+        name: file.name,
+        size: file.size,
+        data: arrayBuffer,
+      });
     }
 
-    // Update progress
+    // Update progress listener
     window.api.onSendProgress?.((progress) => {
       const percent = Math.round((progress.sent / progress.total) * 100);
       progressBar.style.width = percent + "%";
@@ -176,6 +163,7 @@ sendBtn.addEventListener("click", async () => {
     alert("Error sending files: " + err);
   }
 });
+
 
 // ===== Receive File Event =====
 window.api.onFileReceived((filePath) => {

@@ -183,32 +183,49 @@ function startTcpServer() {
   });
 }
 
-ipcMain.handle("send-file", async (event, peer, fileBuffer) => {
+ipcMain.handle("send-file", async (event, peer, fileObj) => {
   return new Promise((resolve, reject) => {
     try {
+      const { name, size, data } = fileObj;
+
+      // Convert renderer’s ArrayBuffer to Node Buffer
+      const fileBuffer = Buffer.from(data);
+
+      // Prepare metadata
+      const metadata = JSON.stringify({ name, size });
+      const metaBuffer = Buffer.from(metadata);
+      const metaLengthBuffer = Buffer.alloc(4);
+      metaLengthBuffer.writeUInt32BE(metaBuffer.length, 0);
+
+      // Final packet = [meta length][metadata][file data]
+      const finalBuffer = Buffer.concat([
+        metaLengthBuffer,
+        metaBuffer,
+        fileBuffer,
+      ]);
+
+      // TCP sending
       const client = new net.Socket();
       let bytesSent = 0;
-      const totalBytes = fileBuffer.length;
+      const totalBytes = finalBuffer.length;
 
       client.connect(peer.port, peer.host, () => {
-        // Send in chunks for progress
         const CHUNK_SIZE = 64 * 1024; // 64KB
         function sendNext() {
           if (bytesSent >= totalBytes) {
             client.end();
             return;
           }
-          const chunk = fileBuffer.slice(bytesSent, bytesSent + CHUNK_SIZE);
+          const chunk = finalBuffer.slice(bytesSent, bytesSent + CHUNK_SIZE);
           bytesSent += chunk.length;
 
-          // Try writing, handle backpressure
           if (!client.write(chunk)) {
             client.once("drain", sendNext);
           } else {
             sendNext();
           }
 
-          // Report progress back to renderer
+          // Progress update
           mainWindow.webContents.send("send-progress", {
             peer,
             sent: bytesSent,

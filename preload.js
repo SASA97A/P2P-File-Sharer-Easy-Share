@@ -1,9 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("api", {
-  Buffer: Buffer,
   onPeerFound: (callback) => {
-    // Remove previous listeners to avoid duplicates
     ipcRenderer.removeAllListeners("peer-found");
     ipcRenderer.on("peer-found", (event, peer) => callback(peer));
   },
@@ -17,6 +15,5 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.removeAllListeners("send-progress");
     ipcRenderer.on("send-progress", (event, progress) => callback(progress));
   },
-  sendFile: (peer, fileBuffer) =>
-    ipcRenderer.invoke("send-file", peer, fileBuffer),
+  sendFile: (peer, fileObj) => ipcRenderer.invoke("send-file", peer, fileObj),
 });
