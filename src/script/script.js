@@ -146,20 +146,17 @@ sendBtn.addEventListener("click", async () => {
   try {
     progressBar.style.width = "0%";
 
-    // Send files one by one
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
-      const arrayBuffer = await file.arrayBuffer();
 
-      // Send raw data + metadata to main
+      // ⚠️ use file.path, not arrayBuffer
       await window.api.sendFile(selectedPeer, {
         name: file.name,
         size: file.size,
-        data: arrayBuffer,
+        path: file.path, // <--- this is what fs.createReadStream needs
       });
     }
 
-    // Update progress listener
     window.api.onSendProgress?.((progress) => {
       const percent = Math.round((progress.sent / progress.total) * 100);
       progressBar.style.width = percent + "%";
