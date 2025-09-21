@@ -147,54 +147,91 @@ function startTcpServer() {
   const server = net.createServer((socket) => {
     console.log("Incoming connection:", socket.remoteAddress);
 
-    let receivedData = Buffer.alloc(0);
-    socket.on("data", (chunk) => {
-      receivedData = Buffer.concat([receivedData, chunk]);
+    let metaLength = null;
+    let metaBuffer = Buffer.alloc(0);
+    let fileStream = null;
+    let expectedFileSize = 0;
+    let receivedFileSize = 0;
+
+    socket.on("data", async (chunk) => {
+      try {
+        // If we haven't parsed metadata yet
+        if (metaLength === null) {
+          // Not enough data yet to read the 4-byte length
+          if (metaBuffer.length + chunk.length < 4) {
+            metaBuffer = Buffer.concat([metaBuffer, chunk]);
+            return;
+          }
+
+          // Combine and extract metadata length
+          metaBuffer = Buffer.concat([metaBuffer, chunk]);
+          metaLength = metaBuffer.readUInt32BE(0);
+
+          // Still waiting for full metadata
+          if (metaBuffer.length < 4 + metaLength) return;
+
+          // Extract metadata JSON
+          const metadata = JSON.parse(
+            metaBuffer.slice(4, 4 + metaLength).toString()
+          );
+          expectedFileSize = metadata.size;
+
+          // Remaining buffer after metadata (may contain file data)
+          const remaining = metaBuffer.slice(4 + metaLength);
+
+          // Ask user for save location
+          const { canceled, filePaths } = await dialog.showOpenDialog(
+            mainWindow,
+            {
+              title: "Choose folder to save received file",
+              properties: ["openDirectory"],
+            }
+          );
+          if (canceled || filePaths.length === 0) {
+            socket.destroy();
+            return;
+          }
+
+          const saveDir = filePaths[0];
+          let filePath = path.join(saveDir, metadata.name);
+
+          // Prevent overwrite
+          let counter = 1;
+          while (fs.existsSync(filePath)) {
+            const parsed = path.parse(filePath);
+            filePath = path.join(
+              parsed.dir,
+              `${parsed.name}(${counter})${parsed.ext}`
+            );
+            counter++;
+          }
+
+          fileStream = fs.createWriteStream(filePath);
+
+          // Write remaining data (after metadata) to file
+          if (remaining.length > 0) {
+            fileStream.write(remaining);
+            receivedFileSize += remaining.length;
+          }
+        } else {
+          // Already past metadata → write chunks directly
+          fileStream.write(chunk);
+          receivedFileSize += chunk.length;
+        }
+      } catch (err) {
+        console.error("Error handling chunk:", err);
+        socket.destroy();
+      }
     });
 
-    socket.on("end", async () => {
-      try {
-        let offset = 0;
-
-        const metaLength = receivedData.readUInt32BE(offset);
-        offset += 4;
-
-        const metaBuffer = receivedData.slice(offset, offset + metaLength);
-        const metadata = JSON.parse(metaBuffer.toString());
-        offset += metaLength;
-
-        const fileData = receivedData.slice(offset);
-
-        const { canceled, filePaths } = await dialog.showOpenDialog(
-          mainWindow,
-          {
-            title: "Choose folder to save received file",
-            properties: ["openDirectory"],
-          }
+    socket.on("end", () => {
+      if (fileStream) {
+        fileStream.end();
+        console.log(
+          `File received (${receivedFileSize}/${expectedFileSize} bytes)`
         );
-        if (canceled || filePaths.length === 0) return;
 
-        const saveDir = filePaths[0];
-        const filePath = path.join(saveDir, metadata.name);
-
-        // File overwrite preventation
-        let finalPath = filePath;
-        let counter = 1;
-        while (fs.existsSync(finalPath)) {
-          const parsed = path.parse(filePath);
-          finalPath = path.join(
-            parsed.dir,
-            `${parsed.name}(${counter})${parsed.ext}`
-          );
-          counter++;
-        }
-        fs.writeFileSync(finalPath, fileData);
-
-        console.log(`File received: ${metadata.name} (${metadata.size} bytes)`);
-
-        mainWindow.webContents.send("file-received", filePath);
-      } catch (err) {
-        console.error("Error processing received file:", err);
+        mainWindow.webContents.send("file-received", "File saved successfully");
       }
     });
 
