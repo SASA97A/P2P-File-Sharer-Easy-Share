@@ -1,20 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'"
-    />
-    <meta
-      http-equiv="X-Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'"
-    />
-    <title>Hello from Electron renderer!</title>
+    <title>Easy Share</title>
+    <link rel="stylesheet" href="styles/styles.css" />
   </head>
   <body>
-    <h1>Hello from Electron renderer!</h1>
-    <p>👋</p>
+    <div class="container">
+      <!-- File selection -->
+      <div class="drop-area" id="drop-area">
+        <img
+          src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
+          alt="add icon"
+        />
+        <input type="file" id="fileInput" multiple hidden />
+      </div>
+      <div class="file-list" id="fileList"></div>
+
+      <!-- Manual peer add -->
+      <div class="manual-add">
+        <input
+          type="text"
+          id="manualIp"
+          placeholder="Enter IP (e.g. 192.168.1.42)"
+        />
+        <button id="manualAddBtn">Add Device</button>
+      </div>
+
+      <!-- Devices -->
+      <div class="device-list" id="deviceList">
+        <!-- <div class="device">
+          <div class="device-icon">🖥️</div>
+          <div class="device-name">Device 1</div>
+        </div>
+        <div class="device">
+          <div class="device-icon">🖥️</div>
+          <div class="device-name">Device 2</div>
+        </div>
+        <div class="device">
+          <div class="device-icon">📱</div>
+          <div class="device-name">Device 3</div>
+        </div>-->
+      </div>
+
+      <!-- Send button -->
+      <button class="send-btn">Send</button>
+
+      <!-- Progress bar -->
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <script src="script/script.js"></script>
   </body>
 </html>
