@@ -145,7 +145,7 @@ sendBtn.addEventListener("click", async () => {
 
       // Metadata for this file
       const metadata = JSON.stringify({ name: file.name, size: file.size });
-      const metaBuffer = Buffer.from(metadata);
+      const metaBuffer = window.api.Buffer.from(metadata);
       const metaLengthBuffer = Buffer.alloc(4);
       metaLengthBuffer.writeUInt32BE(metaBuffer.length, 0);
 

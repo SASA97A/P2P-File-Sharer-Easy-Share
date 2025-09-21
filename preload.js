@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("api", {
+  Buffer: Buffer,
   onPeerFound: (callback) => {
     // Remove previous listeners to avoid duplicates
     ipcRenderer.removeAllListeners("peer-found");
