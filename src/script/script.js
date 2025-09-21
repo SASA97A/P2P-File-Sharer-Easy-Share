@@ -22,6 +22,7 @@ window.api.onPeerFound((peer) => {
       ...peer,
     };
   } else {
+    console.log("Found:", key);
     discoveredPeers.push(peer);
   }
 
@@ -32,6 +33,7 @@ window.api.onPeerFound((peer) => {
 window.api.onPeerLost((peer) => {
   const key = getPeerKey(peer);
   discoveredPeers = discoveredPeers.filter((p) => getPeerKey(p) !== key);
+  console.log("Lost:", key);
   renderPeers();
 });
 

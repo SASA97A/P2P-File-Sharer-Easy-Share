@@ -26,6 +26,7 @@ const createWindow = () => {
 
   mainWindow.loadFile("src/index.html");
   mainWindow.setMenuBarVisibility(false);
+  mainWindow.webContents.openDevTools();
 };
 
 app.whenReady().then(() => {
