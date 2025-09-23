@@ -148,80 +148,86 @@ function startTcpServer() {
     console.log("Incoming connection:", socket.remoteAddress);
 
     let metaLength = null;
-    let metaBuffer = Buffer.alloc(0);
+    let metaBytesRead = 0;
+    let metadataBuffer = null;
     let fileStream = null;
     let expectedFileSize = 0;
     let receivedFileSize = 0;
 
     socket.on("data", async (chunk) => {
-      try {
-        metaBuffer = Buffer.concat([metaBuffer, chunk]);
+      let offset = 0;
 
-        // Still waiting for metadata length
-        if (metaLength === null && metaBuffer.length >= 4) {
-          metaLength = metaBuffer.readUInt32BE(0);
+      while (offset < chunk.length) {
+        // Step 1: read metadata length (first 4 bytes)
+        if (metaLength === null && chunk.length - offset >= 4) {
+          metaLength = chunk.readUInt32BE(offset);
+          metadataBuffer = Buffer.alloc(metaLength);
+          metaBytesRead = 0;
+          offset += 4;
         }
 
-        // Got full metadata but haven’t opened file stream yet
-        if (
-          metaLength !== null &&
-          metaBuffer.length >= 4 + metaLength &&
-          !fileStream
-        ) {
-          const metadata = JSON.parse(
-            metaBuffer.slice(4, 4 + metaLength).toString()
-          );
-          expectedFileSize = metadata.size;
+        // Step 2: read metadata JSON
+        if (metaLength !== null && fileStream === null) {
+          const remainingMeta = metaLength - metaBytesRead;
+          const available = chunk.length - offset;
+          const toCopy = Math.min(remainingMeta, available);
 
-          const remaining = metaBuffer.slice(4 + metaLength);
-          metaBuffer = Buffer.alloc(0);
+          chunk.copy(metadataBuffer, metaBytesRead, offset, offset + toCopy);
+          metaBytesRead += toCopy;
+          offset += toCopy;
 
-          // ✅ pause socket so sender doesn't flood us
-          socket.pause();
+          if (metaBytesRead === metaLength) {
+            // Parse metadata
+            const metadata = JSON.parse(metadataBuffer.toString());
+            expectedFileSize = metadata.size;
 
-          // Ask save location
-          const { canceled, filePaths } = await dialog.showOpenDialog(
-            mainWindow,
-            {
-              title: "Choose folder to save received file",
-              properties: ["openDirectory"],
-            }
-          );
-          if (canceled || filePaths.length === 0) {
-            socket.destroy();
-            return;
-          }
-
-          const saveDir = filePaths[0];
-          let filePath = path.join(saveDir, metadata.name);
-
-          let counter = 1;
-          while (fs.existsSync(filePath)) {
-            const parsed = path.parse(filePath);
-            filePath = path.join(
-              parsed.dir,
-              `${parsed.name}(${counter})${parsed.ext}`
+            // Ask user where to save
+            socket.pause();
+            const { canceled, filePaths } = await dialog.showOpenDialog(
+              mainWindow,
+              {
+                title: "Choose folder to save received file",
+                properties: ["openDirectory"],
+              }
             );
-            counter++;
+
+            if (canceled || filePaths.length === 0) {
+              socket.destroy();
+              return;
+            }
+
+            let savePath = path.join(filePaths[0], metadata.name);
+            let counter = 1;
+            while (fs.existsSync(savePath)) {
+              const parsed = path.parse(savePath);
+              savePath = path.join(
+                parsed.dir,
+                `${parsed.name}(${counter})${parsed.ext}`
+              );
+              counter++;
+            }
+
+            fileStream = fs.createWriteStream(savePath);
+
+            // resume receiving data
+            socket.resume();
           }
-
-          fileStream = fs.createWriteStream(filePath);
-
-          // Write leftover bytes if any
-          if (remaining.length > 0) {
-            fileStream.write(remaining);
-            receivedFileSize += remaining.length;
-          }
-
-          // ✅ now resume reading the socket
-          socket.resume();
-        } else if (fileStream) {
-          fileStream.write(chunk);
-          receivedFileSize += chunk.length;
         }
-      } catch (err) {
-        console.error("Error handling chunk:", err);
-        socket.destroy();
+
+        // Step 3: write file bytes
+        if (fileStream) {
+          const toWrite = chunk.length - offset;
+          if (toWrite > 0) {
+            const fileChunk = chunk.slice(offset, offset + toWrite);
+            offset += toWrite;
+
+            receivedFileSize += fileChunk.length;
+            if (!fileStream.write(fileChunk)) {
+              socket.pause();
+              fileStream.once("drain", () => socket.resume());
+            }
+          }
+        }
       }
     });
 
