@@ -37,16 +37,38 @@ body {
   border-top: 1px solid #ddd;
   padding-top: 10px;
 }
+
 .file-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column; /* Stack file info and progress bar */
   padding: 6px 0;
   border-bottom: 1px solid #eee;
+  gap: 6px;
 }
+
 .file-item span {
   flex: 1;
 }
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.file-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* show "..." if name is too long */
+}
+
+.file-size {
+  min-width: 80px;
+  text-align: right;
+  font-size: 12px;
+  color: #666;
+}
+
 .remove-btn {
   background: transparent;
   border: none;
@@ -129,11 +151,13 @@ body {
 .progress-container {
   width: 100%;
   background: #eee;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
+  height: 8px; /* slimmer, modern look */
 }
+
 .progress-bar {
-  height: 16px;
+  height: 100%;
   width: 0%;
   background: #4caf50;
   transition: width 0.3s;
@@ -192,4 +216,51 @@ body {
 
 .manual-add button:hover {
   background: #45a049;
+}
+
+/*Toast styles*/
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1000;
+}
+
+.toast {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: white;
+  animation: fadeInOut 3s forwards;
+}
+
+.toast.success {
+  background: #4caf50;
+}
+.toast.error {
+  background: #f44336;
+}
+.toast.info {
+  background: #2196f3;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
 }

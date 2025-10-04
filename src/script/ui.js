@@ -40,11 +40,18 @@ export function updateFileList(files, removeFileCb) {
   files.forEach((file, index) => {
     const item = document.createElement("div");
     item.className = "file-item";
+
     item.innerHTML = `
-      <span>${file.name}</span>
-      <span>${(file.size / 1024).toFixed(1)} KB</span>
-      <button class="remove-btn" data-index="${index}">✖</button>
+      <div class="file-info">
+        <span class="file-name" title="${file.name}">${file.name}</span>
+        <span class="file-size">${formatFileSize(file.size)}</span>
+        <button class="remove-btn" data-index="${index}">✖</button>
+      </div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progress-${index}"></div>
+      </div>
     `;
+
     fileList.appendChild(item);
   });
 
@@ -53,4 +60,28 @@ export function updateFileList(files, removeFileCb) {
       removeFileCb(e.target.dataset.index);
     });
   });
+}
+
+//Helper to determine file size in KB, MB or GB
+function formatFileSize(bytes) {
+  if (bytes >= 1024 ** 3) {
+    return (bytes / 1024 ** 3).toFixed(2) + " GB";
+  } else if (bytes >= 1024 ** 2) {
+    return (bytes / 1024 ** 2).toFixed(2) + " MB";
+  } else {
+    return (bytes / 1024).toFixed(2) + " KB";
+  }
+}
+
+// Function for toast notifications
+export function showToast(message, type = "info") {
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3000); // disappear after 3s
 }

@@ -3,41 +3,44 @@ import { getSelectedPeer } from "./peers.js";
 
 export function setupTransfer() {
   const sendBtn = document.querySelector(".send-btn");
-  const progressBar = document.getElementById("progressBar");
 
   sendBtn.addEventListener("click", async () => {
     const peer = getSelectedPeer();
     const files = getFiles();
 
     if (!peer) {
-      alert("Please select a device first!");
+      showToast("⚠️ Please select a device first!", "error");
       return;
     }
     if (files.length === 0) {
-      alert("Please choose a file(s) to send!");
+      showToast("⚠️ Please choose a file(s) to send!", "error");
       return;
     }
 
     try {
-      progressBar.style.width = "0%";
-
       for (let i = 0; i < files.length; i++) {
-        await window.api.sendFile(peer, files[i]);
+        const file = files[i];
+
+        // Reset progress
+        const bar = document.getElementById(`progress-${i}`);
+        if (bar) bar.style.width = "0%";
+
+        // Attach listener for this file’s progress
+        window.api.onSendProgress?.((progress) => {
+          const percent = Math.round((progress.sent / progress.total) * 100);
+          if (bar) bar.style.width = percent + "%";
+        });
+
+        await window.api.sendFile(peer, file);
+
+        showToast(`✅ ${file.name} sent successfully!`, "success");
       }
-
-      window.api.onSendProgress?.((progress) => {
-        const percent = Math.round((progress.sent / progress.total) * 100);
-        progressBar.style.width = percent + "%";
-      });
-
-      alert("File transfer request has been sent!");
-      progressBar.style.width = "100%";
     } catch (err) {
-      alert("Error sending files: " + err);
+      showToast("❌ Error sending files: " + err, "error");
     }
   });
 
   window.api.onFileReceived((filePath) => {
-    alert("File received and saved at: " + filePath);
+    showToast(`📥 File received: ${filePath}`, "success");
   });
 }
