@@ -3,25 +3,34 @@ import { getSelectedPeer } from "./peers.js";
 
 export function setupTransfer() {
   const sendBtn = document.querySelector(".send-btn");
+  let isSending = false; // state guard
 
   sendBtn.addEventListener("click", async () => {
+    if (isSending) return; // block if already sending
+    isSending = true;
+
     const peer = getSelectedPeer();
     const files = getFiles();
 
     if (!peer) {
       showToast("⚠️ Please select a device first!", "error");
+      isSending = false;
       return;
     }
     if (files.length === 0) {
       showToast("⚠️ Please choose a file(s) to send!", "error");
+      isSending = false;
       return;
     }
 
     try {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending...";
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        // Reset progress
+        // Reset progress bar for this file
         const bar = document.getElementById(`progress-${i}`);
         if (bar) bar.style.width = "0%";
 
@@ -37,6 +46,11 @@ export function setupTransfer() {
       }
     } catch (err) {
       showToast("❌ Error sending files: " + err, "error");
+    } finally {
+      // restore button state
+      isSending = false;
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
     }
   });
 
