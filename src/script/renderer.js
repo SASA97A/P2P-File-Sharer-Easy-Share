@@ -3,7 +3,6 @@ import { addFiles } from "./files.js";
 import { addManualPeer } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
 import { renderPeers } from "./ui.js";
-import { setupSettings } from "./settings.js";
 
 // Initialize the application when DOM is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -37,7 +36,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Set up file transfer functionality
   setupTransfer();
-  
-  // Set up settings functionality
-  setupSettings();
 });

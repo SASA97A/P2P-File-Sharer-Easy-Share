@@ -9,9 +9,8 @@ const os = require("os");
  * Starts a TCP server to receive files from other devices
  * @param {BrowserWindow} mainWindow - Main application window
  * @param {number} PORT - TCP port to listen on
- * @param {string} downloadLocation - Path to save downloaded files
  */
-function startTcpServer(mainWindow, PORT, downloadLocation) {
+function startTcpServer(mainWindow, PORT) {
   const server = net.createServer((socket) => {
     console.log("Incoming connection:", socket.remoteAddress);
 
@@ -22,7 +21,6 @@ function startTcpServer(mainWindow, PORT, downloadLocation) {
     let fileStream = null; // Stream to write file to disk
     let expectedFileSize = 0; // Total file size from metadata
     let receivedFileSize = 0; // How many bytes we've received so far
-    let currentSavePath = ""; // Path where the file is being saved
 
     socket.on("data", async (chunk) => {
       let offset = 0;
@@ -51,9 +49,11 @@ function startTcpServer(mainWindow, PORT, downloadLocation) {
             const metadata = JSON.parse(metadataBuffer.toString());
             expectedFileSize = metadata.size;
 
-            // Use the configured download location
+            // Get the Downloads folder path
+            const downloadsPath = path.join(os.homedir(), "Downloads");
+            
             // Create a unique filename if file already exists
-            let savePath = path.join(downloadLocation, metadata.name);
+            let savePath = path.join(downloadsPath, metadata.name);
             let counter = 1;
             while (fs.existsSync(savePath)) {
               const parsed = path.parse(savePath);
@@ -66,6 +66,7 @@ function startTcpServer(mainWindow, PORT, downloadLocation) {
 
             // Create write stream and resume socket
             fileStream = fs.createWriteStream(savePath);
+            // Store the savePath to send back to the renderer
             currentSavePath = savePath;
           }
         }
@@ -95,7 +96,7 @@ function startTcpServer(mainWindow, PORT, downloadLocation) {
         console.log(
           `File received (${receivedFileSize}/${expectedFileSize} bytes)`
         );
-        mainWindow.webContents.send("file-received", currentSavePath);
+        mainWindow.webContents.send("file-received", "File saved successfully");
       }
     });
 

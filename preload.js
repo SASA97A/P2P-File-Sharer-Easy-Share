@@ -31,12 +31,4 @@ contextBridge.exposeInMainWorld("api", {
       data: buffer, // Send raw data instead of relying on file path
     });
   },
-  // Function to choose download location
-  chooseDownloadLocation: () => {
-    return ipcRenderer.invoke("choose-download-location");
-  },
-  // Get current download location
-  getDownloadLocation: () => {
-    return ipcRenderer.invoke("get-download-location");
-  },
 });
