@@ -1,6 +1,8 @@
 // Import required Node.js modules
 const net = require("net");
 const fs = require("fs");
+const path = require("path");
+const os = require("os");
 const { ipcMain } = require("electron");
 
 /**
@@ -11,10 +13,17 @@ function setupFileSender(mainWindow) {
   ipcMain.handle("send-file", async (event, peer, fileObj) => {
     return new Promise((resolve, reject) => {
       try {
-        const { name, size, path } = fileObj;
+        const { name, size, data } = fileObj;
         
-        // Create a read stream instead of loading the entire file
-        const fileStream = fs.createReadStream(path);
+        // Create a temporary file path
+        const tempDir = os.tmpdir();
+        const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${name}`);
+        
+        // Write the buffer to a temporary file
+        fs.writeFileSync(tempFilePath, Buffer.from(data));
+        
+        // Create a read stream from the temporary file
+        const fileStream = fs.createReadStream(tempFilePath);
         
         // Prepare metadata
         const metadata = JSON.stringify({ name, size });
@@ -66,11 +75,23 @@ function setupFileSender(mainWindow) {
         
         client.on("close", () => {
           fileStream.destroy();
+          // Clean up the temporary file
+          try {
+            fs.unlinkSync(tempFilePath);
+          } catch (err) {
+            console.error("Error deleting temp file:", err);
+          }
           resolve("File sent successfully!");
         });
         
         client.on("error", (err) => {
           fileStream.destroy();
+          // Clean up the temporary file
+          try {
+            fs.unlinkSync(tempFilePath);
+          } catch (cleanupErr) {
+            console.error("Error deleting temp file:", cleanupErr);
+          }
           reject("Error sending file: " + err.message);
         });
       } catch (err) {
