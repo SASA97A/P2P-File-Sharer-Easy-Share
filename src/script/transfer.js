@@ -1,5 +1,6 @@
 import { getFiles } from "./files.js";
 import { getSelectedPeer } from "./peers.js";
+import { showToast } from "./ui.js";
 
 /**
  * Sets up the file transfer functionality
