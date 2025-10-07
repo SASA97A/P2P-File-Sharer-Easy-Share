@@ -3,6 +3,7 @@ const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const { dialog } = require("electron");
+const os = require("os");
 
 /**
  * Starts a TCP server to receive files from other devices
@@ -48,22 +49,11 @@ function startTcpServer(mainWindow, PORT) {
             const metadata = JSON.parse(metadataBuffer.toString());
             expectedFileSize = metadata.size;
 
-            // Pause socket while asking user where to save the file
-            socket.pause();
-            const { canceled, filePaths } = await dialog.showOpenDialog(
-              mainWindow,
-              {
-                title: "Choose folder to save received file",
-                properties: ["openDirectory"],
-              }
-            );
-            if (canceled || filePaths.length === 0) {
-              socket.destroy();
-              return;
-            }
-
+            // Get the Downloads folder path
+            const downloadsPath = path.join(os.homedir(), "Downloads");
+            
             // Create a unique filename if file already exists
-            let savePath = path.join(filePaths[0], metadata.name);
+            let savePath = path.join(downloadsPath, metadata.name);
             let counter = 1;
             while (fs.existsSync(savePath)) {
               const parsed = path.parse(savePath);
@@ -76,7 +66,8 @@ function startTcpServer(mainWindow, PORT) {
 
             // Create write stream and resume socket
             fileStream = fs.createWriteStream(savePath);
-            socket.resume();
+            // Store the savePath to send back to the renderer
+            currentSavePath = savePath;
           }
         }
 
