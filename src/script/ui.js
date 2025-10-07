@@ -1,8 +1,13 @@
-// Renders peer list in the UI
+/**
+ * Renders the list of discovered peers in the UI
+ * @param {Array} peers - Array of peer objects
+ * @param {Function} onSelectPeer - Callback when a peer is selected
+ */
 export function renderPeers(peers, onSelectPeer) {
   const deviceList = document.getElementById("deviceList");
   deviceList.innerHTML = "";
 
+  // Show loading indicator if no peers found
   if (peers.length === 0) {
     const loader = document.createElement("div");
     loader.className = "loader";
@@ -11,6 +16,7 @@ export function renderPeers(peers, onSelectPeer) {
     return;
   }
 
+  // Create UI elements for each peer
   peers.forEach((peer) => {
     const div = document.createElement("div");
     div.className = "device";
@@ -20,6 +26,7 @@ export function renderPeers(peers, onSelectPeer) {
       <div class="checkmark">✔</div>
     `;
 
+    // Handle peer selection
     div.addEventListener("click", () => {
       document
         .querySelectorAll(".device")
@@ -32,11 +39,16 @@ export function renderPeers(peers, onSelectPeer) {
   });
 }
 
-// Renders file list in the UI
+/**
+ * Updates the file list in the UI
+ * @param {Array} files - Array of File objects
+ * @param {Function} removeFileCb - Callback to remove a file
+ */
 export function updateFileList(files, removeFileCb) {
   const fileList = document.getElementById("fileList");
   fileList.innerHTML = "";
 
+  // Create UI elements for each file
   files.forEach((file, index) => {
     const item = document.createElement("div");
     item.className = "file-item";
@@ -55,6 +67,7 @@ export function updateFileList(files, removeFileCb) {
     fileList.appendChild(item);
   });
 
+  // Add event listeners to remove buttons
   fileList.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       removeFileCb(e.target.dataset.index);
@@ -62,7 +75,11 @@ export function updateFileList(files, removeFileCb) {
   });
 }
 
-//Helper to determine file size in KB, MB or GB
+/**
+ * Formats file size in human-readable format (KB, MB, GB)
+ * @param {number} bytes - File size in bytes
+ * @returns {string} Formatted file size
+ */
 function formatFileSize(bytes) {
   if (bytes >= 1024 ** 3) {
     return (bytes / 1024 ** 3).toFixed(2) + " GB";
@@ -73,7 +90,11 @@ function formatFileSize(bytes) {
   }
 }
 
-// Function for toast notifications
+/**
+ * Shows a toast notification
+ * @param {string} message - Message to display
+ * @param {string} type - Type of toast (info, success, error)
+ */
 export function showToast(message, type = "info") {
   const container = document.getElementById("toast-container");
   const toast = document.createElement("div");
@@ -81,7 +102,8 @@ export function showToast(message, type = "info") {
   toast.textContent = message;
   container.appendChild(toast);
 
+  // Auto-remove toast after 3 seconds
   setTimeout(() => {
     toast.remove();
-  }, 3000); // disappear after 3s
+  }, 3000);
 }

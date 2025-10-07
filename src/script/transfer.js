@@ -1,9 +1,12 @@
 import { getFiles } from "./files.js";
 import { getSelectedPeer } from "./peers.js";
 
+/**
+ * Sets up the file transfer functionality
+ */
 export function setupTransfer() {
   const sendBtn = document.querySelector(".send-btn");
-  let isSending = false; // state guard
+  let isSending = false; // State guard to prevent multiple sends
 
   sendBtn.addEventListener("click", async () => {
     if (isSending) return; // block if already sending
@@ -34,12 +37,13 @@ export function setupTransfer() {
         const bar = document.getElementById(`progress-${i}`);
         if (bar) bar.style.width = "0%";
 
-        // Attach listener for this file’s progress
+        // Attach listener for this file's progress updates
         window.api.onSendProgress?.((progress) => {
           const percent = Math.round((progress.sent / progress.total) * 100);
           if (bar) bar.style.width = percent + "%";
         });
 
+        // Send the file and wait for completion
         await window.api.sendFile(peer, file);
 
         showToast(`✅ ${file.name} sent successfully!`, "success");
@@ -47,13 +51,14 @@ export function setupTransfer() {
     } catch (err) {
       showToast("❌ Error sending files: " + err, "error");
     } finally {
-      // restore button state
+      // Restore button state
       isSending = false;
       sendBtn.disabled = false;
       sendBtn.textContent = "Send";
     }
   });
 
+  // Listen for file received events
   window.api.onFileReceived((filePath) => {
     showToast(`📥 File received: ${filePath}`, "success");
   });

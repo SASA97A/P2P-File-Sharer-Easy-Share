@@ -1,23 +1,31 @@
+// Import required Node.js modules
 const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const { dialog } = require("electron");
 
+/**
+ * Starts a TCP server to receive files from other devices
+ * @param {BrowserWindow} mainWindow - Main application window
+ * @param {number} PORT - TCP port to listen on
+ */
 function startTcpServer(mainWindow, PORT) {
   const server = net.createServer((socket) => {
     console.log("Incoming connection:", socket.remoteAddress);
 
-    let metaLength = null;
-    let metadataBuffer = null;
-    let metaBytesRead = 0;
-    let fileStream = null;
-    let expectedFileSize = 0;
-    let receivedFileSize = 0;
+    // Variables to track file transfer state
+    let metaLength = null; // Length of metadata JSON
+    let metadataBuffer = null; // Buffer to store metadata
+    let metaBytesRead = 0; // How many bytes of metadata we've read
+    let fileStream = null; // Stream to write file to disk
+    let expectedFileSize = 0; // Total file size from metadata
+    let receivedFileSize = 0; // How many bytes we've received so far
 
     socket.on("data", async (chunk) => {
       let offset = 0;
 
       while (offset < chunk.length) {
+        // Step 1: Read metadata length (4 bytes)
         if (metaLength === null && chunk.length - offset >= 4) {
           metaLength = chunk.readUInt32BE(offset);
           metadataBuffer = Buffer.alloc(metaLength);
@@ -25,6 +33,7 @@ function startTcpServer(mainWindow, PORT) {
           offset += 4;
         }
 
+        // Step 2: Read metadata JSON
         if (metaLength !== null && fileStream === null) {
           const remainingMeta = metaLength - metaBytesRead;
           const available = chunk.length - offset;
@@ -34,10 +43,12 @@ function startTcpServer(mainWindow, PORT) {
           metaBytesRead += toCopy;
           offset += toCopy;
 
+          // If we've read all metadata, parse it and prepare for file
           if (metaBytesRead === metaLength) {
             const metadata = JSON.parse(metadataBuffer.toString());
             expectedFileSize = metadata.size;
 
+            // Pause socket while asking user where to save the file
             socket.pause();
             const { canceled, filePaths } = await dialog.showOpenDialog(
               mainWindow,
@@ -51,6 +62,7 @@ function startTcpServer(mainWindow, PORT) {
               return;
             }
 
+            // Create a unique filename if file already exists
             let savePath = path.join(filePaths[0], metadata.name);
             let counter = 1;
             while (fs.existsSync(savePath)) {
@@ -62,11 +74,13 @@ function startTcpServer(mainWindow, PORT) {
               counter++;
             }
 
+            // Create write stream and resume socket
             fileStream = fs.createWriteStream(savePath);
             socket.resume();
           }
         }
 
+        // Step 3: Write file data to disk
         if (fileStream) {
           const toWrite = chunk.length - offset;
           if (toWrite > 0) {
@@ -74,6 +88,7 @@ function startTcpServer(mainWindow, PORT) {
             offset += toWrite;
 
             receivedFileSize += fileChunk.length;
+            // Handle backpressure - pause socket if write stream is full
             if (!fileStream.write(fileChunk)) {
               socket.pause();
               fileStream.once("drain", () => socket.resume());
@@ -83,6 +98,7 @@ function startTcpServer(mainWindow, PORT) {
       }
     });
 
+    // When transfer is complete
     socket.on("end", () => {
       if (fileStream) {
         fileStream.end();

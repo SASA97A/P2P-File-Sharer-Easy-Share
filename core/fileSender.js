@@ -1,6 +1,11 @@
+// Import required Node.js modules
 const net = require("net");
 const { ipcMain } = require("electron");
 
+/**
+ * Sets up IPC handlers for sending files to other devices
+ * @param {BrowserWindow} mainWindow - Main application window
+ */
 function setupFileSender(mainWindow) {
   ipcMain.handle("send-file", async (event, peer, fileObj) => {
     return new Promise((resolve, reject) => {
@@ -22,8 +27,9 @@ function setupFileSender(mainWindow) {
           client.write(metaLengthBuffer);
           client.write(metaBuffer);
 
-          const CHUNK_SIZE = 64 * 1024;
+          const CHUNK_SIZE = 64 * 1024; // 64KB chunks
 
+          // Recursive function to send file in chunks
           function sendNext() {
             if (offset >= fileBuffer.length) {
               client.end();
@@ -32,12 +38,14 @@ function setupFileSender(mainWindow) {
             const chunk = fileBuffer.slice(offset, offset + CHUNK_SIZE);
             offset += chunk.length;
 
+            // Handle backpressure - wait for drain if buffer is full
             if (!client.write(chunk)) {
               client.once("drain", sendNext);
             } else {
               sendNext();
             }
 
+            // Update progress in renderer
             mainWindow.webContents.send("send-progress", {
               peer,
               sent: offset,

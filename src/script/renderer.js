@@ -1,20 +1,22 @@
+// Import modules for file handling, peer management, and UI
 import { addFiles } from "./files.js";
 import { addManualPeer } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
 import { renderPeers } from "./ui.js";
 
+// Initialize the application when DOM is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
   const dropArea = document.getElementById("drop-area");
   const fileInput = document.getElementById("fileInput");
 
-  // Initial render
+  // Initial render of empty peer list
   renderPeers([], () => {});
 
-  // File input / drag & drop
+  // Set up file input and drag & drop functionality
   dropArea.addEventListener("click", () => fileInput.click());
   dropArea.addEventListener("dragover", (e) => {
     e.preventDefault();
-    dropArea.style.background = "#f0f0f0";
+    dropArea.style.background = "#f0f0f0"; // Visual feedback
   });
   dropArea.addEventListener("dragleave", () => {
     dropArea.style.background = "transparent";
@@ -26,12 +28,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   fileInput.addEventListener("change", () => addFiles(fileInput.files));
 
-  // Manual peer add
+  // Set up manual peer addition
   document.getElementById("manualAddBtn").addEventListener("click", () => {
     const host = document.getElementById("manualIp").value.trim();
     addManualPeer(host);
   });
 
-  // File transfer setup
+  // Set up file transfer functionality
   setupTransfer();
 });
