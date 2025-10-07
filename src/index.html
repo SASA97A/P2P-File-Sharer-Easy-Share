@@ -27,20 +27,25 @@
         <button id="manualAddBtn">Add Device</button>
       </div>
 
+      <!-- Settings section -->
+      <div class="settings-section">
+        <button id="chooseDownloadBtn">Choose Download Location</button>
+        <div id="currentDownloadPath">Default: Downloads folder</div>
+      </div>
+
+      <!-- Manual peer add -->
+      <div class="manual-add">
+        <input
+          type="text"
+          id="manualIp"
+          placeholder="Enter IP (e.g. 192.168.1.42)"
+        />
+        <button id="manualAddBtn">Add Device</button>
+      </div>
+
       <!-- Devices -->
       <div class="device-list" id="deviceList">
-        <!-- <div class="device">
-          <div class="device-icon">🖥️</div>
-          <div class="device-name">Device 1</div>
-        </div>
-        <div class="device">
-          <div class="device-icon">🖥️</div>
-          <div class="device-name">Device 2</div>
-        </div>
-        <div class="device">
-          <div class="device-icon">📱</div>
-          <div class="device-name">Device 3</div>
-        </div>-->
+        <!-- Device items will be added here dynamically -->
       </div>
 
       <!-- Send button -->
