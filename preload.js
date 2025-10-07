@@ -1,5 +1,6 @@
 // Import Electron modules for IPC communication
 const { contextBridge, ipcRenderer } = require("electron");
+const { dialog } = require("electron");
 
 // Expose a limited API to the renderer process
 contextBridge.exposeInMainWorld("api", {
@@ -23,12 +24,34 @@ contextBridge.exposeInMainWorld("api", {
   },
   // Function to send a file to a peer
   sendFile: async (peer, file) => {
-    // Convert file to arrayBuffer for transfer
-    const buffer = await file.arrayBuffer();
+    // For web File objects, we need to save to a temporary file first
+    // and then pass the path to the main process
+    const tempPath = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        // Use dialog to get save location
+        const { filePath } = await dialog.showSaveDialog({
+          title: 'Save Temporary File',
+          defaultPath: file.name,
+          buttonLabel: 'Save'
+        });
+        
+        if (!filePath) {
+          resolve(null);
+          return;
+        }
+        
+        resolve(filePath);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+    
+    if (!tempPath) return Promise.reject("File save cancelled");
+    
     return ipcRenderer.invoke("send-file", peer, {
       name: file.name,
       size: file.size,
-      data: buffer, // Send raw data instead of relying on file path
+      path: tempPath
     });
   },
 });

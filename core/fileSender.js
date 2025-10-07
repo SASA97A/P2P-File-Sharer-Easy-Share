@@ -1,5 +1,6 @@
 // Import required Node.js modules
 const net = require("net");
+const fs = require("fs");
 const { ipcMain } = require("electron");
 
 /**
@@ -10,56 +11,68 @@ function setupFileSender(mainWindow) {
   ipcMain.handle("send-file", async (event, peer, fileObj) => {
     return new Promise((resolve, reject) => {
       try {
-        const { name, size, data } = fileObj;
-        const fileBuffer = Buffer.from(data);
-
+        const { name, size, path } = fileObj;
+        
+        // Create a read stream instead of loading the entire file
+        const fileStream = fs.createReadStream(path);
+        
+        // Prepare metadata
         const metadata = JSON.stringify({ name, size });
         const metaBuffer = Buffer.from(metadata);
         const metaLengthBuffer = Buffer.alloc(4);
         metaLengthBuffer.writeUInt32BE(metaBuffer.length, 0);
-
+        
         const client = new net.Socket();
-        let offset = 0;
-
+        let bytesSent = 0;
+        
         client.connect(peer.port, peer.host, () => {
           console.log(`Connected to ${peer.name}`);
-
+          
+          // Send metadata first
           client.write(metaLengthBuffer);
           client.write(metaBuffer);
-
-          const CHUNK_SIZE = 64 * 1024; // 64KB chunks
-
-          // Recursive function to send file in chunks
-          function sendNext() {
-            if (offset >= fileBuffer.length) {
-              client.end();
-              return;
-            }
-            const chunk = fileBuffer.slice(offset, offset + CHUNK_SIZE);
-            offset += chunk.length;
-
-            // Handle backpressure - wait for drain if buffer is full
-            if (!client.write(chunk)) {
-              client.once("drain", sendNext);
-            } else {
-              sendNext();
-            }
-
+          
+          // Pipe the file stream to the socket with proper handling
+          fileStream.on('data', (chunk) => {
+            // Check if socket can accept more data
+            const canContinue = client.write(chunk);
+            bytesSent += chunk.length;
+            
             // Update progress in renderer
             mainWindow.webContents.send("send-progress", {
               peer,
-              sent: offset,
+              sent: bytesSent,
               total: size,
             });
-          }
-
-          sendNext();
+            
+            // Handle backpressure
+            if (!canContinue) {
+              fileStream.pause();
+              client.once('drain', () => {
+                fileStream.resume();
+              });
+            }
+          });
+          
+          fileStream.on('end', () => {
+            client.end();
+          });
+          
+          fileStream.on('error', (err) => {
+            client.destroy();
+            reject("Error reading file: " + err.message);
+          });
         });
-
-        client.on("close", () => resolve("File sent successfully!"));
-        client.on("error", (err) =>
-          reject("Error sending file: " + err.message)
-        );
+        
+        client.on("close", () => {
+          fileStream.destroy();
+          resolve("File sent successfully!");
+        });
+        
+        client.on("error", (err) => {
+          fileStream.destroy();
+          reject("Error sending file: " + err.message);
+        });
       } catch (err) {
         reject("Unexpected error: " + err.message);
       }
