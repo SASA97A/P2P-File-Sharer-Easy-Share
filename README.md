@@ -12,7 +12,9 @@ A fast, lightweight **local file sharing app** built with **Electron**, enabling
 - 🧭 **Manual IP add** option
 - 📈 **Per-file progress bars**
 - 🔔 **Toast notifications** for send/receive updates
+- ⚙️ **Custom save location** for received files
 - 🔒 100% local – no cloud, no data collection
+- 📏 **Supports files up to 2 GB each**
 
 ---
 
@@ -34,3 +36,4 @@ Clone this repository and install dependencies:
 git clone https://github.com/<your-username>/<your-repo-name>.git
 cd <your-repo-name>
 npm install
+
