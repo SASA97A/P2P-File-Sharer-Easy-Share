@@ -33,7 +33,7 @@ A fast, lightweight **local file sharing app** built with **Electron**, enabling
 Clone this repository and install dependencies:
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo-name>.git
-cd <your-repo-name>
+git clone https://github.com/SASA97A/P2P-File-Sharer-Easy-Share.git
+cd P2P-File-Sharer-Easy-Share
 npm install
 
