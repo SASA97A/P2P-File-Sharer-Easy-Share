@@ -1,8 +1,6 @@
 // Import required Node.js modules
 const net = require("net");
 const fs = require("fs");
-const path = require("path");
-const os = require("os");
 const { ipcMain } = require("electron");
 
 /**
@@ -12,90 +10,85 @@ const { ipcMain } = require("electron");
 function setupFileSender(mainWindow) {
   ipcMain.handle("send-file", async (event, peer, fileObj) => {
     return new Promise((resolve, reject) => {
+      // Destructure the expected fullPath property from the renderer
+      const { name, size, fullPath } = fileObj;
+
+      // 🎯 CRITICAL FIX: Explicitly check for the missing path.
+      // This is what caused "Received undefined" and the subsequent fs error.
+      if (!fullPath) {
+        console.error(
+          "IPC Error: File path is missing from the renderer file object."
+        );
+        return reject(
+          "Error: Cannot start file stream. The file's disk path is unavailable. Please ensure 'files.js' is correctly extracting the 'file.path' property."
+        );
+      }
+
       try {
-        const { name, size, data } = fileObj;
-        
-        // Create a temporary file path
-        const tempDir = os.tmpdir();
-        const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${name}`);
-        
-        // Write the buffer to a temporary file
-        fs.writeFileSync(tempFilePath, Buffer.from(data));
-        
-        // Create a read stream from the temporary file
-        const fileStream = fs.createReadStream(tempFilePath);
-        
+        // Create a read stream directly from the source file path
+        const fileStream = fs.createReadStream(fullPath);
+
         // Prepare metadata
         const metadata = JSON.stringify({ name, size });
         const metaBuffer = Buffer.from(metadata);
-        const metaLengthBuffer = Buffer.alloc(4);
-        metaLengthBuffer.writeUInt32BE(metaBuffer.length, 0);
-        
+
+        // PROTOCOL ENHANCEMENT: Use 64-bit integer for metadata length (8 bytes)
+        const metaLengthBuffer = Buffer.alloc(8);
+        metaLengthBuffer.writeBigUInt64BE(BigInt(metaBuffer.length), 0);
+
         const client = new net.Socket();
         let bytesSent = 0;
-        
+
         client.connect(peer.port, peer.host, () => {
           console.log(`Connected to ${peer.name}`);
-          
-          // Send metadata first
+
+          // Send 64-bit metadata length header first
           client.write(metaLengthBuffer);
           client.write(metaBuffer);
-          
+
           // Pipe the file stream to the socket with proper handling
-          fileStream.on('data', (chunk) => {
-            // Check if socket can accept more data
+          fileStream.on("data", (chunk) => {
             const canContinue = client.write(chunk);
             bytesSent += chunk.length;
-            
+
             // Update progress in renderer
             mainWindow.webContents.send("send-progress", {
               peer,
               sent: bytesSent,
               total: size,
             });
-            
+
             // Handle backpressure
             if (!canContinue) {
               fileStream.pause();
-              client.once('drain', () => {
+              client.once("drain", () => {
                 fileStream.resume();
               });
             }
           });
-          
-          fileStream.on('end', () => {
+
+          fileStream.on("end", () => {
             client.end();
           });
-          
-          fileStream.on('error', (err) => {
+
+          fileStream.on("error", (err) => {
             client.destroy();
             reject("Error reading file: " + err.message);
           });
         });
-        
+
         client.on("close", () => {
           fileStream.destroy();
-          // Clean up the temporary file
-          try {
-            fs.unlinkSync(tempFilePath);
-          } catch (err) {
-            console.error("Error deleting temp file:", err);
-          }
           resolve("File sent successfully!");
         });
-        
+
         client.on("error", (err) => {
           fileStream.destroy();
-          // Clean up the temporary file
-          try {
-            fs.unlinkSync(tempFilePath);
-          } catch (cleanupErr) {
-            console.error("Error deleting temp file:", cleanupErr);
-          }
           reject("Error sending file: " + err.message);
         });
       } catch (err) {
-        reject("Unexpected error: " + err.message);
+        // Catch errors like bad path format
+        reject("Unexpected stream error: " + err.message);
       }
     });
   });

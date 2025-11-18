@@ -1,6 +1,8 @@
 // Import required Electron modules
-const { app } = require("electron");
+const { app, ipcMain, dialog } = require("electron");
 const os = require("os");
+const fs = require("fs");
+const path = require("path");
 // Import custom modules for window creation and network services
 const { createWindow } = require("./core/window");
 const { startBonjour } = require("./core/bonjour");
@@ -20,6 +22,27 @@ let mainWindow;
 app.whenReady().then(() => {
   // Create the main application window
   mainWindow = createWindow();
+
+  // Register IPC handler for file selection dialog
+  ipcMain.handle("open-file-select-dialog", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openFile", "multiSelections"],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((filePath) => {
+      let size = 0;
+      try {
+        size = fs.statSync(filePath).size;
+      } catch (e) {
+        /* ignore size read errors */
+      }
+      return {
+        path: filePath,
+        name: path.basename(filePath),
+        size,
+      };
+    });
+  });
 
   // Start network services for peer discovery and file transfer
   startBonjour(mainWindow, serviceName, SERVICE_TYPE, PORT); // mDNS discovery

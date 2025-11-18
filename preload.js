@@ -21,14 +21,15 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.removeAllListeners("send-progress");
     ipcRenderer.on("send-progress", (event, progress) => callback(progress));
   },
-  // Function to send a file to a peer
-  sendFile: async (peer, file) => {
-    // Convert file to arrayBuffer for transfer
-    const buffer = await file.arrayBuffer();
-    return ipcRenderer.invoke("send-file", peer, {
-      name: file.name,
-      size: file.size,
-      data: buffer, // Send raw data instead of relying on file path
-    });
+
+  // 🎯 FIX A: New function to trigger file selection in the Main Process
+  openFileSelectDialog: () => {
+    return ipcRenderer.invoke("open-file-select-dialog");
+  },
+
+  // 🎯 FIX B: Function to send a file to a peer - Pass the structured object
+  sendFile: (peer, fileToSend) => {
+    // fileToSend now contains name, size, and the verified fullPath (see files.js)
+    return ipcRenderer.invoke("send-file", peer, fileToSend);
   },
 });

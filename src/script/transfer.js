@@ -1,3 +1,5 @@
+// transfer.js (Revised)
+
 import { getFiles } from "./files.js";
 import { getSelectedPeer } from "./peers.js";
 import { showToast } from "./ui.js";
@@ -10,7 +12,7 @@ export function setupTransfer() {
   let isSending = false; // State guard to prevent multiple sends
 
   sendBtn.addEventListener("click", async () => {
-    if (isSending) return; // block if already sending
+    if (isSending) return;
     isSending = true;
 
     const peer = getSelectedPeer();
@@ -43,6 +45,14 @@ export function setupTransfer() {
           const percent = Math.round((progress.sent / progress.total) * 100);
           if (bar) bar.style.width = percent + "%";
         });
+
+        // **KEY FIX:** Pass a stripped-down object containing the path, not the data
+        const fileToSend = {
+          name: file.name,
+          size: file.size,
+          // The fullPath must now be available on the file object
+          fullPath: file.fullPath,
+        };
 
         // Send the file and wait for completion
         await window.api.sendFile(peer, file);

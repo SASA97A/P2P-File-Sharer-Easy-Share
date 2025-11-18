@@ -18,7 +18,14 @@ export function getFiles() {
  */
 export function addFiles(files) {
   for (const file of files) {
-    selectedFiles.push(file);
+    // **KEY FIX:** Ensure the fullPath property is saved for later streaming
+    selectedFiles.push({
+      name: file.name,
+      size: file.size,
+      // Electron File objects from input/drop events have a path property
+      fullPath: file.path,
+      // Add other necessary properties
+    });
   }
   updateFileList(selectedFiles, removeFile);
 }

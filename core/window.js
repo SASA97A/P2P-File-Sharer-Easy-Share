@@ -24,7 +24,7 @@ function createWindow() {
   // Hide the default menu bar
   mainWindow.setMenuBarVisibility(false);
   // Open DevTools for debugging
-  mainWindow.webContents.openDevTools();
+  //mainWindow.webContents.openDevTools();
 
   return mainWindow;
 }
