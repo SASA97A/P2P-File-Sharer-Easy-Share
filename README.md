@@ -8,13 +8,12 @@ A fast, lightweight **local file sharing app** built with **Electron**, enabling
 
 - 📡 **Automatic device discovery** (via Bonjour + UDP broadcast)
 - 💻 **Cross-platform** – works on Windows, macOS, and Linux
-- 📂 **Drag & Drop file sharing**
+- 📂 **Drag & Drop file sharing** - **REMOVED**
 - 🧭 **Manual IP add** option
 - 📈 **Per-file progress bars**
 - 🔔 **Toast notifications** for send/receive updates
 - ⚙️ **Auto Save to Downloads folder** for received files
 - 🔒 100% local – no cloud, no data collection
-- 📏 **Supports files up to 2 GB each**
 
 ---
 
