@@ -37,13 +37,20 @@ export function setupTransfer() {
         const file = files[i];
 
         // Reset progress bar for this file
-        const bar = document.getElementById(`progress-${i}`);
-        if (bar) bar.style.width = "0%";
+        const fileItem = document.getElementById(`file-${i}`); //if (bar) bar.style.width = "0%";
 
         // Attach listener for this file's progress updates
         window.api.onSendProgress?.((progress) => {
           const percent = Math.round((progress.sent / progress.total) * 100);
-          if (bar) bar.style.width = percent + "%";
+
+          if (fileItem) {
+            fileItem.style.setProperty("--progress", percent + "%");
+
+            // Optional: mark completed
+            if (percent === 100) {
+              fileItem.classList.add("completed");
+            }
+          }
         });
 
         // **KEY FIX:** Pass a stripped-down object containing the path, not the data

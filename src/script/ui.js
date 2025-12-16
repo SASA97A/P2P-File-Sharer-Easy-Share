@@ -52,17 +52,16 @@ export function updateFileList(files, removeFileCb) {
   files.forEach((file, index) => {
     const item = document.createElement("div");
     item.className = "file-item";
+    item.id = `file-${index}`;
+    item.style.setProperty("--progress", "0%");
 
     item.innerHTML = `
-      <div class="file-info">
-        <span class="file-name" title="${file.name}">${file.name}</span>
-        <span class="file-size">${formatFileSize(file.size)}</span>
-        <button class="remove-btn" data-index="${index}">✖</button>
-      </div>
-      <div class="progress-container">
-        <div class="progress-bar" id="progress-${index}"></div>
-      </div>
-    `;
+    <div class="file-info">
+      <span class="file-name" title="${file.name}">${file.name}</span>
+      <span class="file-size">${formatFileSize(file.size)}</span>
+      <button class="remove-btn" data-index="${index}">✖</button>
+    </div>
+  `;
 
     fileList.appendChild(item);
   });
@@ -106,4 +105,27 @@ export function showToast(message, type = "info") {
   setTimeout(() => {
     toast.remove();
   }, 3000);
+}
+
+//update send button based on number of files selected and their size
+export function updateFilesTotalSize(files) {
+  const btn = document.querySelector(".send-btn");
+  const countEl = btn.querySelector(".send-count");
+  const sizeEl = btn.querySelector(".send-size");
+
+  if (!files.length) {
+    btn.disabled = true;
+    countEl.textContent = "0 files";
+    sizeEl.textContent = "0 MB";
+    return;
+  }
+
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  const totalGB = totalBytes / 1024 ** 3;
+  const totalMB = totalBytes / 1024 ** 2;
+
+  btn.disabled = false;
+  countEl.textContent = `${files.length} file${files.length > 1 ? "s" : ""}`;
+  sizeEl.textContent =
+    totalGB >= 1 ? `${totalGB.toFixed(2)} GB` : `${totalMB.toFixed(1)} MB`;
 }

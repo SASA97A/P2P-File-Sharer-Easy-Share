@@ -1,5 +1,6 @@
 // Import UI update function
 import { updateFileList } from "./ui.js";
+import { updateFilesTotalSize } from "./ui.js";
 
 // Array to store selected files for sending
 let selectedFiles = [];
@@ -28,6 +29,7 @@ export function addFiles(files) {
     });
   }
   updateFileList(selectedFiles, removeFile);
+  updateFilesTotalSize(selectedFiles);
 }
 
 /**
@@ -37,4 +39,5 @@ export function addFiles(files) {
 function removeFile(index) {
   selectedFiles.splice(index, 1);
   updateFileList(selectedFiles, removeFile);
+  updateFilesTotalSize(selectedFiles);
 }

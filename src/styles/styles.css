@@ -1,53 +1,113 @@
+/* =========================
+   GLOBAL & LAYOUT
+========================= */
+
+:root {
+  --radius-pill: 999px;
+  --radius-card: 20px;
+}
+
 body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 20px;
-  background: #f9f9f9;
+  background: linear-gradient(180deg, #f8f8f5, #efefe9);
 }
 
 .container {
   display: flex;
   flex-direction: column;
   gap: 20px;
+
   max-width: 900px;
   margin: auto;
-  border: 1px solid #ddd;
-  background: white;
   padding: 20px;
-  border-radius: 12px;
+
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: var(--radius-card);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
-/* File drop area */
-.drop-area {
-  border: 2px dashed #aaa;
-  border-radius: 10px;
-  padding: 40px;
-  text-align: center;
-  color: #666;
-  cursor: pointer;
-}
-.drop-area:hover {
-  background: #f0f0f0;
+.app-shell {
+  border-radius: 24px;
 }
 
-/* File list */
+/* =========================
+   HEADER
+========================= */
+
+.app-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.app-subtitle {
+  font-size: 14px;
+  color: #777;
+}
+
+/* =========================
+   FILE LIST (STACKED PILLS)
+========================= */
+
 .file-list {
-  margin-top: 10px;
-  border-top: 1px solid #ddd;
-  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* space BETWEEN files */
+  margin: 16px 0; /* space FROM other UI */
 }
 
 .file-item {
+  background: #fff;
+  border-radius: var(--radius-pill);
+  padding: 10px 14px;
+
+  border: 1px solid #e6e6db;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+
+  position: relative;
+  overflow: hidden;
+
+  /* progress value (set from JS) */
+  --progress: 0%;
   display: flex;
-  flex-direction: column; /* Stack file info and progress bar */
-  padding: 6px 0;
-  border-bottom: 1px solid #eee;
+  flex-direction: column;
   gap: 6px;
+
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.file-item span {
-  flex: 1;
+.file-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(90deg, #4caf50, #81c784);
+
+  transform: scaleX(var(--progress));
+  transform-origin: left;
+  transition: transform 0.3s ease;
+
+  opacity: 0.18; /* subtle fill */
+  z-index: 0;
+}
+
+.file-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+.file-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 .file-info {
@@ -55,11 +115,26 @@ body {
   align-items: center;
   gap: 10px;
 }
+
+.file-info::before {
+  content: "📄";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+
+  background: #f0f0ea;
+  font-size: 18px;
+}
+
 .file-name {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis; /* show "..." if name is too long */
+  text-overflow: ellipsis;
 }
 
 .file-size {
@@ -76,92 +151,56 @@ body {
   font-size: 16px;
   cursor: pointer;
 }
+
 .remove-btn:hover {
   color: #f00;
 }
 
-/* Device grid */
-.device-list {
+/* =========================
+   DROP AREA (MATCHES PILLS)
+========================= */
+
+.drop-area.compact {
   display: flex;
-  gap: 20px;
-  justify-content: center;
-  flex-wrap: wrap;
-  padding: 20px 0;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  background: #fafafa;
-  min-height: 50px;
-}
-.device {
-  position: relative;
-  display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 12px;
+
+  padding: 10px 14px;
+  margin-top: 8px;
+
+  border: 2px dashed #ddd;
+  border-radius: var(--radius-pill);
+  background: #fafafa;
+
   cursor: pointer;
-  padding: 10px;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  transition: border 0.2s, background 0.2s;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
 }
-.device:hover {
-  background: #f2f2f2;
+
+.drop-area.compact img {
+  width: 24px;
+  height: 24px;
+  opacity: 0.7;
 }
-.device.selected {
-  border: 2px solid #4caf50;
-  background: #eafbea;
-}
-.checkmark {
-  display: none;
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  font-size: 18px;
-  color: #4caf50;
-  font-weight: bold;
-}
-.device.selected .checkmark {
-  display: block;
-}
-.device-icon {
-  font-size: 40px;
-}
-.device-name {
-  margin-top: 5px;
+
+.drop-area.compact .drop-text {
   font-size: 14px;
+  font-weight: 500;
+  color: #666;
 }
 
-/* Send button */
-.send-btn {
-  display: block;
-  margin: 0 auto;
-  padding: 12px 40px;
-  font-size: 16px;
-  font-weight: bold;
-  background: #333;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.send-btn:hover {
-  background: #555;
+.drop-area.compact:hover {
+  background: #f4f4f0;
+  border-color: #4caf50;
+  transform: translateY(-1px);
 }
 
-/* Progress bar */
-.progress-container {
-  width: 100%;
-  background: #eee;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 8px; /* slimmer, modern look */
+.drop-area.compact:hover .drop-text {
+  color: #333;
 }
 
-.progress-bar {
-  height: 100%;
-  width: 0%;
-  background: #4caf50;
-  transition: width 0.3s;
-}
+/* =========================
+   DEVICE LIST
+========================= */
 
 /* Loader */
 .loader {
@@ -192,24 +231,165 @@ body {
   }
 }
 
+.device-list {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+
+  padding: 20px;
+  background: #fafafa;
+
+  border: 1px solid #ddd;
+  border-radius: var(--radius-card);
+}
+
+.device {
+  background: white;
+  border-radius: var(--radius-card);
+  padding: 14px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.device:hover {
+  background: #f2f2f2;
+}
+
+.device.selected {
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.3);
+}
+
+.device-icon {
+  font-size: 40px;
+}
+
+.device-name {
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+.checkmark {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 18px;
+  color: #4caf50;
+  font-weight: bold;
+}
+
+.device.selected .checkmark {
+  display: block;
+}
+
+/* =========================
+   SEND BUTTON
+========================= */
+
+.send-btn {
+  position: sticky;
+  bottom: 20px;
+  margin: 20px auto 0; /* center horizontally */
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  width: 100%;
+  max-width: 500px;
+  padding: 14px 20px;
+
+  background: #333; /* neutral dark */
+  color: #fff;
+
+  border: none;
+  border-radius: var(--radius-pill); /* normal rounding */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+
+  font-size: 15px;
+}
+
+.send-btn:not(:disabled) {
+  cursor: pointer;
+}
+
+.send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Left info */
+.send-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+
+.send-count {
+  font-weight: bold;
+}
+
+.send-size {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* Right side: just text now (no pill) */
+.send-action {
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+/* Hover effect */
+.send-btn:not(:disabled):hover {
+  background: #444;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+/* =========================
+   PROGRESS BAR
+========================= */
+
+.progress-container,
+.progress-bar {
+  display: none;
+}
+
+/* =========================
+   MANUAL ADD
+========================= */
+
 .manual-add {
   display: flex;
   gap: 10px;
-  margin-top: 10px;
+}
+
+.manual-add input,
+.manual-add button {
+  border-radius: var(--radius-pill);
 }
 
 .manual-add input {
   flex: 1;
-  padding: 6px 8px;
+  padding: 8px 12px;
   border: 1px solid #ccc;
-  border-radius: 4px;
 }
 
 .manual-add button {
-  padding: 6px 12px;
+  padding: 8px 14px;
   background: #4caf50;
   border: none;
-  border-radius: 4px;
   color: white;
   cursor: pointer;
 }
@@ -218,7 +398,10 @@ body {
   background: #45a049;
 }
 
-/*Toast styles*/
+/* =========================
+   TOASTS
+========================= */
+
 #toast-container {
   position: fixed;
   top: 20px;
@@ -231,7 +414,7 @@ body {
 
 .toast {
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 14px;
   color: white;
   animation: fadeInOut 3s forwards;

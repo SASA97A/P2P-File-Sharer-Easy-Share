@@ -6,16 +6,21 @@
     <link rel="stylesheet" href="styles/styles.css" />
   </head>
   <body>
-    <div class="container">
+    <div class="container app-shell">
+      <header class="app-header">
+        <h1 class="app-title">Easy Share</h1>
+        <span class="app-subtitle">Local P2P file transfer</span>
+      </header>
       <!-- File selection -->
-      <div class="drop-area" id="drop-area">
+      <div class="file-list" id="fileList"></div>
+      <div class="drop-area compact" id="drop-area">
         <img
           src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
           alt="add icon"
         />
+        <span class="drop-text">Pick files To send</span>
         <input type="file" id="fileInput" multiple hidden />
       </div>
-      <div class="file-list" id="fileList"></div>
 
       <!-- Manual peer add -->
       <div class="manual-add">
@@ -44,7 +49,15 @@
       </div>
 
       <!-- Send button -->
-      <button class="send-btn">Send</button>
+      <button class="send-btn" disabled>
+        <div class="send-info">
+          <span class="send-count">0 files</span>
+          <span class="send-size">0 MB</span>
+        </div>
+        <div class="send-action">
+          <span>Send</span>
+        </div>
+      </button>
     </div>
 
     <!--toast-->

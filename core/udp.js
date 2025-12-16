@@ -39,7 +39,7 @@ function startUdpDiscovery(mainWindow, serviceName, PORT, UDP_PORT) {
       // Track when we last saw this peer
       const key = `${peer.host}:${peer.port}`;
       peerLastSeen[key] = Date.now();
-      
+
       // Notify renderer about discovered peer
       mainWindow.webContents.send("peer-found", peer);
     } catch (err) {
@@ -53,7 +53,7 @@ function startUdpDiscovery(mainWindow, serviceName, PORT, UDP_PORT) {
 
     // Broadcast our presence every 5 seconds
     // Clean up peers that haven't been seen for 15 seconds
-  setInterval(() => {
+    setInterval(() => {
       const peer = JSON.stringify({
         name: serviceName,
         host: getLocalIp(),

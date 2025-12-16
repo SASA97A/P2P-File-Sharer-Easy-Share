@@ -23,7 +23,9 @@ function startTcpServer(mainWindow, PORT) {
     let receivedFileSize = 0; // How many bytes we've received so far
 
     // Constant for the length of the header
-    const META_LENGTH_HEADER_SIZE = 8; // 🎯 FIX: Changed from 4 to 8 bytes
+    const META_LENGTH_HEADER_SIZE = 8;
+
+    let streamClosed = false;
 
     socket.on("data", async (chunk) => {
       let offset = 0;
@@ -84,17 +86,19 @@ function startTcpServer(mainWindow, PORT) {
         }
 
         // Step 3: Write file data to disk
-        if (fileStream) {
+        if (fileStream && !streamClosed) {
           const toWrite = chunk.length - offset;
           if (toWrite > 0) {
             const fileChunk = chunk.slice(offset, offset + toWrite);
             offset += toWrite;
 
             receivedFileSize += fileChunk.length;
-            // Handle backpressure - pause socket if write stream is full
-            if (!fileStream.write(fileChunk)) {
-              socket.pause();
-              fileStream.once("drain", () => socket.resume());
+
+            if (!fileStream.destroyed) {
+              if (!fileStream.write(fileChunk)) {
+                socket.pause();
+                fileStream.once("drain", () => socket.resume());
+              }
             }
           }
         }
@@ -103,7 +107,8 @@ function startTcpServer(mainWindow, PORT) {
 
     // When transfer is complete
     socket.on("end", () => {
-      if (fileStream) {
+      if (fileStream && !streamClosed) {
+        streamClosed = true;
         fileStream.end();
         console.log(
           `File received (${receivedFileSize}/${expectedFileSize} bytes)`
@@ -119,9 +124,9 @@ function startTcpServer(mainWindow, PORT) {
 
     // Handle socket timeout/close for cleanup
     socket.on("close", () => {
-      if (fileStream) {
+      if (fileStream && !streamClosed) {
+        streamClosed = true;
         fileStream.destroy();
-        // Optional: delete incomplete file here
       }
     });
   });
