@@ -178,83 +178,10 @@ body {
   white-space: nowrap;
 }
 
-.identity-room {
+.identity-status {
   font-size: 11px;
   color: var(--color-text-muted);
   font-weight: 500;
-}
-
-/* ============================================================
-   ROOM CONFIGURATION BAR
-   ============================================================ */
-
-.room-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 10px 16px;
-  background: #fafaf6;
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-}
-
-.room-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.room-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #555;
-}
-
-.active-room-tag {
-  display: inline-block;
-  padding: 3px 10px;
-  background: var(--color-primary-light);
-  color: #2e7d32;
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.room-input-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.room-input-group input {
-  padding: 7px 12px;
-  font-size: 13px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  outline: none;
-  background: #ffffff;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  min-width: 180px;
-}
-
-.room-input-group input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-light);
-}
-
-.action-btn {
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  background: #2b2b2b;
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
 }
 
 .action-btn:hover {
@@ -573,7 +500,6 @@ body {
   color: #777;
 }
 
-.room-badge,
 .os-badge {
   display: inline-block;
   padding: 2px 7px;
@@ -582,15 +508,6 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-}
-
-.room-badge {
-  background: #e8f5e9;
-  color: #2e7d32;
-  border: 1px solid #c8e6c9;
-}
-
-.os-badge {
   background: #ede7f6;
   color: #512da8;
   border: 1px solid #d1c4e9;

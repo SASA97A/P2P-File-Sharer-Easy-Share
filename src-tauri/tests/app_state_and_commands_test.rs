@@ -26,7 +26,6 @@ fn sample_device_info() -> DeviceInfo {
         "desktop",
         "windows",
         "2.0.0",
-        Some("Design".to_string()),
         5050,
     )
 }
@@ -43,7 +42,6 @@ async fn test_app_state_creation_and_device_info() {
     let dev_info = app_state.get_device_info().await;
     assert_eq!(dev_info.device_name, "Test-Host");
     assert_eq!(dev_info.os, "windows");
-    assert_eq!(dev_info.room_id, Some("Design".to_string()));
     assert_eq!(app_state.download_dir(), &temp_dir);
     assert!(dev_info.pairing_pin.is_some());
     let initial_pin = dev_info.pairing_pin.unwrap();
@@ -80,7 +78,6 @@ async fn test_pending_consent_workflow_accept_and_decline() {
         "req-test-1",
         "Sender-Alice",
         "windows",
-        None,
         vec![FileMetadata::new("f1", "doc.pdf", 1024, None)],
     );
 
@@ -128,7 +125,6 @@ async fn test_manual_peer_probe_and_fallback() {
         "desktop",
         "linux",
         "2.0.0",
-        Some("Engineering".to_string()),
         0,
     );
     let target_server_state = Arc::new(ServerState::new(target_info, temp_dir.clone()));
@@ -146,7 +142,6 @@ async fn test_manual_peer_probe_and_fallback() {
         .expect("probe should succeed");
     assert_eq!(probed.device_name, "Target-Node");
     assert_eq!(probed.os, "linux");
-    assert_eq!(probed.room_id, Some("Engineering".to_string()));
 
     // 2. Probe unreachable port
     let dead_url = "http://127.0.0.1:59999";
@@ -177,7 +172,7 @@ async fn test_full_client_server_transfer_with_events_payload() {
     let sender_dir = setup_test_dir("tx_e2e");
 
     // 1. Receiver Node
-    let rx_info = DeviceInfo::new("Receiver-PC", "desktop", "windows", "2.0.0", None, 0);
+    let rx_info = DeviceInfo::new("Receiver-PC", "desktop", "windows", "2.0.0", 0);
     let rx_state = Arc::new(ServerState::new(rx_info, receiver_dir.clone()));
     let (rx_port, _rx_task) = start_server(rx_state.clone(), 0).await.unwrap();
 
@@ -185,7 +180,6 @@ async fn test_full_client_server_transfer_with_events_payload() {
         "Receiver-PC",
         "desktop",
         "windows",
-        None,
         "127.0.0.1",
         rx_port,
     );
@@ -200,7 +194,6 @@ async fn test_full_client_server_transfer_with_events_payload() {
         "req-1",
         "Sender-PC",
         "windows",
-        None,
         vec![file_to_send.to_metadata()],
     );
 
@@ -305,7 +298,6 @@ async fn test_connect_by_address_and_pin_matching() {
         "desktop",
         "windows",
         "2.0.0",
-        Some("Engineering".to_string()),
         0,
     );
     target_info.pairing_pin = Some("482910".to_string());

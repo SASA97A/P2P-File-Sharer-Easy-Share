@@ -78,7 +78,6 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
       <div class="device-name" title="${escapeHtml(peerName)}">${escapeHtml(peerName)}</div>
       <div class="device-meta">
         <span class="device-ip">${escapeHtml(peerIp)}:${peerPort}</span>
-        ${peer.room_id ? `<span class="room-badge">${escapeHtml(peer.room_id)}</span>` : ""}
         ${peer.os ? `<span class="os-badge">${escapeHtml(peer.os)}</span>` : ""}
       </div>
       <div class="checkmark">${getIconSvg("check", { size: 14 })}</div>
@@ -171,7 +170,7 @@ export function updateFilesTotalSize(files) {
 }
 
 /**
- * Updates local device identity badge and room tag
+ * Updates local device identity badge
  * @param {Object} deviceInfo
  */
 export function updateMyDeviceBadge(deviceInfo) {
@@ -179,11 +178,9 @@ export function updateMyDeviceBadge(deviceInfo) {
 
   const iconEl = document.getElementById("myDeviceIcon");
   const nameEl = document.getElementById("myDeviceName");
-  const roomEl = document.getElementById("myDeviceRoom");
-  const tagEl = document.getElementById("currentRoomTag");
+  const statusEl = document.getElementById("myDeviceStatus");
 
   const deviceName = deviceInfo.device_name || "Local Device";
-  const roomId = deviceInfo.room_id ? deviceInfo.room_id : "Public";
 
   if (iconEl) {
     iconEl.innerHTML = getDeviceIconSvg(deviceInfo.os, deviceInfo.device_type, { size: 20 });
@@ -191,11 +188,8 @@ export function updateMyDeviceBadge(deviceInfo) {
   if (nameEl) {
     nameEl.textContent = deviceName;
   }
-  if (roomEl) {
-    roomEl.textContent = `Room: ${roomId}`;
-  }
-  if (tagEl) {
-    tagEl.textContent = deviceInfo.room_id ? deviceInfo.room_id : "Public (Default)";
+  if (statusEl) {
+    statusEl.textContent = "Online";
   }
 }
 
@@ -249,7 +243,6 @@ export function showConsentModal(request) {
   const senderInfoEl = document.getElementById("consentSenderInfo");
   const countEl = document.getElementById("consentFileCount");
   const sizeEl = document.getElementById("consentTotalSize");
-  const roomBadgeEl = document.getElementById("consentRoomBadge");
   const fileListEl = document.getElementById("consentFileList");
   const acceptBtn = document.getElementById("consentAcceptBtn");
   const declineBtn = document.getElementById("consentDeclineBtn");
@@ -270,15 +263,6 @@ export function showConsentModal(request) {
   }
   if (sizeEl) {
     sizeEl.textContent = formatFileSize(totalBytes);
-  }
-
-  if (roomBadgeEl) {
-    if (request.room_id) {
-      roomBadgeEl.textContent = request.room_id;
-      roomBadgeEl.style.display = "inline-block";
-    } else {
-      roomBadgeEl.style.display = "none";
-    }
   }
 
   if (fileListEl) {

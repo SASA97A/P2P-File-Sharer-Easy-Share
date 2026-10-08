@@ -62,7 +62,7 @@ impl AppState {
         }
     }
 
-    /// Restarts discovery broadcast and listener with new DeviceInfo (e.g. after Room ID update).
+    /// Restarts discovery broadcast and listener with new DeviceInfo (e.g. after network or device info update).
     pub async fn restart_discovery(&self, app: AppHandle, new_info: DeviceInfo) -> Result<(), String> {
         let mut handle_lock = self.discovery_handle.write().await;
         if let Some(handle) = handle_lock.take() {

@@ -19,7 +19,6 @@ fn sample_device_info(name: &str, pin: &str) -> DeviceInfo {
         "desktop",
         "windows",
         "2.0.0",
-        Some("Engineering".to_string()),
         0,
     )
     .with_pairing_pin(pin)

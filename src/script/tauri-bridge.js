@@ -53,7 +53,6 @@ const mockState = {
     device_type: "desktop",
     os: "browser",
     version: "2.0.0",
-    room_id: null,
     port: 5050,
     pairing_pin: "839421",
   },
@@ -100,7 +99,6 @@ async function callInvoke(command, args = {}) {
         device_name: `Manual-${args.ip}`,
         device_type: "desktop",
         os: "unknown",
-        room_id: null,
         ip: args.ip,
         port: args.port || 5050,
       };
@@ -114,11 +112,6 @@ async function callInvoke(command, args = {}) {
       }
       emitMockEvent("peer-found", peer);
       return peer;
-    }
-
-    case "set_room_id": {
-      mockState.deviceInfo.room_id = args.room ? args.room.trim() : null;
-      return { ...mockState.deviceInfo };
     }
 
     case "respond_transfer_request": {
@@ -225,7 +218,6 @@ async function callInvoke(command, args = {}) {
         device_name: `Peer-${cleanPin.slice(0, 3)}`,
         device_type: "laptop",
         os: "mock",
-        room_id: null,
         ip: "192.168.1.99",
         port: 5050,
         pairing_pin: cleanPin,
@@ -251,7 +243,6 @@ async function callInvoke(command, args = {}) {
         device_name: `Peer-${addr.replace(/[^a-zA-Z0-9.-]/g, "_")}`,
         device_type: "desktop",
         os: "unknown",
-        room_id: null,
         ip: addr.includes("://") ? "192.168.1.88" : addr.split(":")[0],
         port: 5050,
       };
@@ -325,14 +316,6 @@ export async function addManualPeer(ip, port = null) {
     ip,
     port: port ? Number(port) : null,
   });
-}
-
-/**
- * Updates the local room ID filter tag and restarts discovery
- */
-export async function setRoomId(room) {
-  const normalized = room && room.trim().length > 0 ? room.trim() : null;
-  return await callInvoke("set_room_id", { room: normalized });
 }
 
 /**

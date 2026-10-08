@@ -38,9 +38,6 @@ impl MdnsDiscovery {
         properties.insert("os".to_string(), self.device_info.os.clone());
         properties.insert("type".to_string(), self.device_info.device_type.clone());
         properties.insert("v".to_string(), self.device_info.version.clone());
-        if let Some(room) = &self.device_info.room_id {
-            properties.insert("room".to_string(), room.clone());
-        }
         if let Some(pin) = &self.device_info.pairing_pin {
             properties.insert("pin".to_string(), pin.clone());
         }
@@ -89,9 +86,6 @@ impl MdnsDiscovery {
                             .get_property_val_str("type")
                             .unwrap_or("desktop")
                             .to_string();
-                        let room_id = properties
-                            .get_property_val_str("room")
-                            .map(|s| s.to_string());
                         let pairing_pin = properties
                             .get_property_val_str("pin")
                             .map(|s| s.to_string());
@@ -113,7 +107,6 @@ impl MdnsDiscovery {
                             device_name: dev_name,
                             device_type: dev_type,
                             os,
-                            room_id,
                             ip: ip_str,
                             port,
                             pairing_pin,

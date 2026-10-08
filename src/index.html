@@ -31,29 +31,11 @@
             </span>
             <div class="identity-text">
               <span class="identity-name" id="myDeviceName">Detecting device...</span>
-              <span class="identity-room" id="myDeviceRoom">Room: Public</span>
+              <span class="identity-status" id="myDeviceStatus">Ready to share</span>
             </div>
           </div>
         </div>
       </header>
-
-      <!-- Room Configuration Bar -->
-      <div class="room-bar">
-        <div class="room-status">
-          <span class="room-label">Active Room:</span>
-          <span class="room-tag active-room-tag" id="currentRoomTag">Public (Default)</span>
-        </div>
-        <div class="room-input-group">
-          <input
-            type="text"
-            id="roomIdInput"
-            placeholder="Set Room (e.g. Design, Office, Home)"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button id="setRoomBtn" class="action-btn">Set Room</button>
-        </div>
-      </div>
 
       <!-- File Staging Area -->
       <div class="file-section">
@@ -123,7 +105,6 @@
               <span class="summary-dot">&bull;</span>
               <span class="summary-size" id="consentTotalSize">0 MB</span>
             </div>
-            <span class="room-badge" id="consentRoomBadge" style="display: none;">Public</span>
           </div>
           <div class="modal-file-list" id="consentFileList">
             <!-- Dynamically populated files -->

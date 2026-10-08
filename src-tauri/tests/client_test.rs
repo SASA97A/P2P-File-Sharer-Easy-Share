@@ -21,7 +21,6 @@ fn sample_device_info(port: u16) -> DeviceInfo {
         "desktop",
         "windows",
         "2.0.0",
-        Some("Room123".to_string()),
         port,
     )
 }
@@ -45,13 +44,12 @@ async fn test_probe_peer_success() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::new();
-    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", Some("Room123".to_string()), "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
 
     let info = client.probe_peer(&peer).await.expect("failed to probe peer");
     assert_eq!(info.device_name, "Receiver-Device");
     assert_eq!(info.os, "windows");
     assert_eq!(info.port, port);
-    assert_eq!(info.room_id, Some("Room123".to_string()));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -66,10 +64,10 @@ async fn test_request_transfer_accepted() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::new();
-    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
 
     let files = vec![FileMetadata::new("f-1", "test.bin", 1024, None)];
-    let req = TransferRequest::new("req-123", "Sender-Device", "windows", None, files);
+    let req = TransferRequest::new("req-123", "Sender-Device", "windows", files);
 
     let resp = client.request_transfer(&peer, &req).await.expect("request failed");
     assert_eq!(resp.status, TransferStatus::Accepted);
@@ -89,10 +87,10 @@ async fn test_request_transfer_declined() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::new();
-    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
 
     let files = vec![FileMetadata::new("f-1", "test.bin", 1024, None)];
-    let req = TransferRequest::new("req-123", "Sender-Device", "windows", None, files);
+    let req = TransferRequest::new("req-123", "Sender-Device", "windows", files);
 
     let resp = client.request_transfer(&peer, &req).await.expect("request should return declined response");
     assert_eq!(resp.status, TransferStatus::Declined);
@@ -122,10 +120,10 @@ async fn test_send_file_resumable_and_finish_full_flow() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024); // 512 KB chunks
-    let peer = PeerInfo::new("Receiver", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
     // Handshake
-    let req = TransferRequest::new("req-full", "Sender", "windows", None, vec![file_to_send.to_metadata()]);
+    let req = TransferRequest::new("req-full", "Sender", "windows", vec![file_to_send.to_metadata()]);
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     let token = resp.session_token.expect("expected session token");
 
@@ -186,10 +184,10 @@ async fn test_resumption_after_partial_transfer() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024); // 512 KB chunks
-    let peer = PeerInfo::new("Receiver", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
     // Handshake
-    let req = TransferRequest::new("req-resume", "Sender", "windows", None, vec![file_to_send.to_metadata()]);
+    let req = TransferRequest::new("req-resume", "Sender", "windows", vec![file_to_send.to_metadata()]);
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     let token = resp.session_token.expect("expected session token");
 
@@ -258,9 +256,9 @@ async fn test_progress_reporting_monotonically_increasing() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024);
-    let peer = PeerInfo::new("Receiver", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
-    let req = TransferRequest::new("req-prog", "Sender", "windows", None, vec![file_to_send.to_metadata()]);
+    let req = TransferRequest::new("req-prog", "Sender", "windows", vec![file_to_send.to_metadata()]);
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     let token = resp.session_token.expect("expected session token");
 
@@ -307,9 +305,9 @@ async fn test_cancel_transfer() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024);
-    let peer = PeerInfo::new("Receiver", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
-    let req = TransferRequest::new("req-cancel", "Sender", "windows", None, vec![file_to_send.to_metadata()]);
+    let req = TransferRequest::new("req-cancel", "Sender", "windows", vec![file_to_send.to_metadata()]);
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     let token = resp.session_token.expect("expected session token");
 
@@ -355,9 +353,9 @@ async fn test_finish_hash_mismatch_fails() {
 
     let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
     let client = TransferClient::new();
-    let peer = PeerInfo::new("Receiver", "desktop", "windows", None, "127.0.0.1", port);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
-    let req = TransferRequest::new("req-mismatch", "Sender", "windows", None, vec![file_to_send.to_metadata()]);
+    let req = TransferRequest::new("req-mismatch", "Sender", "windows", vec![file_to_send.to_metadata()]);
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     let token = resp.session_token.expect("expected session token");
 
@@ -378,7 +376,7 @@ async fn test_finish_hash_mismatch_fails() {
 #[tokio::test]
 async fn test_send_file_non_existent() {
     let client = TransferClient::new();
-    let peer = PeerInfo::new("Receiver", "desktop", "windows", None, "127.0.0.1", 5050);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", 5050);
     let non_existent = FileToSend::new("f-none", "non_existent_file_path_123.bin", "none.bin", 100, None);
 
     let res = client.send_file_resumable(&peer, "fake-token", &non_existent, |_, _| {}).await;

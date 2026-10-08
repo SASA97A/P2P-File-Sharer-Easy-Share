@@ -100,7 +100,6 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
         device_type: "desktop".to_string(),
         os: "windows".to_string(),
         version: "2.0.0".to_string(),
-        room_id: Some("Office-Room".to_string()),
         port: 5050,
         ip: Some("127.0.0.1".to_string()),
         pairing_pin: Some("123456".to_string()),
@@ -121,7 +120,6 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
     assert_eq!(received_heartbeat.device_type, "desktop");
     assert_eq!(received_heartbeat.os, "windows");
     assert_eq!(received_heartbeat.version, "2.0.0");
-    assert_eq!(received_heartbeat.room_id, Some("Office-Room".to_string()));
     assert_eq!(received_heartbeat.port, 5050);
     assert_eq!(received_heartbeat.pairing_pin, Some("123456".to_string()));
 
@@ -140,7 +138,6 @@ async fn test_peer_tracker_deduplication_and_expiration() {
         device_name: "Peer-A".to_string(),
         device_type: "desktop".to_string(),
         os: "windows".to_string(),
-        room_id: Some("Room-1".to_string()),
         ip: "192.168.1.10".to_string(),
         port: 5050,
         pairing_pin: None,
@@ -150,7 +147,6 @@ async fn test_peer_tracker_deduplication_and_expiration() {
         device_name: "Peer-B".to_string(),
         device_type: "mobile".to_string(),
         os: "android".to_string(),
-        room_id: None,
         ip: "192.168.1.11".to_string(),
         port: 5050,
         pairing_pin: None,
@@ -193,8 +189,8 @@ async fn test_peer_tracker_deduplication_and_expiration() {
 
 #[tokio::test]
 async fn test_discovery_service_udp_end_to_end() {
-    let dev_a = DeviceInfo::new("Node-A", "desktop", "windows", "2.0.0", Some("Lab".into()), 5051);
-    let dev_b = DeviceInfo::new("Node-B", "mobile", "android", "2.0.0", Some("Lab".into()), 5052);
+    let dev_a = DeviceInfo::new("Node-A", "desktop", "windows", "2.0.0", 5051);
+    let dev_b = DeviceInfo::new("Node-B", "mobile", "android", "2.0.0", 5052);
 
     let config_a = DiscoveryConfig {
         broadcast_interval: Duration::from_millis(100),
@@ -271,7 +267,7 @@ async fn test_discovery_service_udp_end_to_end() {
 
 #[tokio::test]
 async fn test_manual_peer_addition_and_query() {
-    let dev = DeviceInfo::new("Self-Node", "desktop", "windows", "2.0.0", None, 5050);
+    let dev = DeviceInfo::new("Self-Node", "desktop", "windows", "2.0.0", 5050);
     let config = DiscoveryConfig {
         broadcast_interval: Duration::from_secs(10),
         peer_ttl: Duration::from_secs(30),

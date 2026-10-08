@@ -1,6 +1,6 @@
 /**
  * Easy Share - Main Application Renderer Entry Point
- * Orchestrates event wiring, drag-and-drop, room controls, and discovery feeds.
+ * Orchestrates event wiring, drag-and-drop, pairing controls, and discovery feeds.
  */
 
 import { addFiles } from "./files.js";
@@ -11,11 +11,10 @@ import {
 } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
 import { setupPairing } from "./pairing.js";
-import { updateMyDeviceBadge, showToast } from "./ui.js";
+import { updateMyDeviceBadge } from "./ui.js";
 import {
   getMyDeviceInfo,
   getDiscoveredPeers,
-  setRoomId,
   onPeerFound,
   onPeerLost,
   onPeerUpdated,
@@ -24,8 +23,6 @@ import {
 document.addEventListener("DOMContentLoaded", async () => {
   const dropArea = document.getElementById("drop-area");
   const fileInput = document.getElementById("fileInput");
-  const roomIdInput = document.getElementById("roomIdInput");
-  const setRoomBtn = document.getElementById("setRoomBtn");
 
   // -------------------------------------------------------------
   // 1. Initial Device & Discovery Bootstrap
@@ -33,9 +30,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const myDevice = await getMyDeviceInfo();
     updateMyDeviceBadge(myDevice);
-    if (myDevice.room_id && roomIdInput) {
-      roomIdInput.value = myDevice.room_id;
-    }
   } catch (err) {
     console.error("Failed to fetch local device info:", err);
   }
@@ -127,45 +121,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("drop", (e) => e.preventDefault(), false);
 
   // -------------------------------------------------------------
-  // 4. Room Configuration Actions
-  // -------------------------------------------------------------
-  async function applyRoomSetting() {
-    if (!roomIdInput) return;
-    const roomVal = roomIdInput.value.trim();
-    try {
-      const updatedInfo = await setRoomId(roomVal || null);
-      updateMyDeviceBadge(updatedInfo);
-      showToast(
-        roomVal
-          ? `Room updated to "${roomVal}"`
-          : "Switched to Public room mode",
-        "success"
-      );
-    } catch (err) {
-      showToast(`Failed to set room: ${err}`, "error");
-    }
-  }
-
-  if (setRoomBtn) {
-    setRoomBtn.addEventListener("click", applyRoomSetting);
-  }
-
-  if (roomIdInput) {
-    roomIdInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        applyRoomSetting();
-      }
-    });
-  }
-
-  // -------------------------------------------------------------
-  // 5. Transfer Logic & Consent Setup
+  // 4. Transfer Logic & Consent Setup
   // -------------------------------------------------------------
   setupTransfer();
 
   // -------------------------------------------------------------
-  // 6. Device Pairing Setup (PIN, QR Code, Direct IP)
+  // 5. Device Pairing Setup (PIN, QR Code, Direct IP)
   // -------------------------------------------------------------
   setupPairing();
 });

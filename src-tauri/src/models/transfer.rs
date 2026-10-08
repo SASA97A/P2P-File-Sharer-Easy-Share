@@ -47,8 +47,6 @@ pub struct TransferRequest {
     pub request_id: String,
     pub sender_name: String,
     pub sender_os: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub room_id: Option<String>,
     pub total_bytes: u64,
     pub files: Vec<FileMetadata>,
 }
@@ -58,7 +56,6 @@ impl TransferRequest {
         request_id: impl Into<String>,
         sender_name: impl Into<String>,
         sender_os: impl Into<String>,
-        room_id: Option<String>,
         files: Vec<FileMetadata>,
     ) -> Self {
         let total_bytes = files.iter().map(|f| f.size).sum();
@@ -66,7 +63,6 @@ impl TransferRequest {
             request_id: request_id.into(),
             sender_name: sender_name.into(),
             sender_os: sender_os.into(),
-            room_id,
             total_bytes,
             files,
         }

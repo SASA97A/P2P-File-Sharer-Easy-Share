@@ -7,8 +7,6 @@ pub struct DeviceInfo {
     pub device_type: String,
     pub os: String,
     pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub room_id: Option<String>,
     pub port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pairing_pin: Option<String>,
@@ -20,7 +18,6 @@ impl DeviceInfo {
         device_type: impl Into<String>,
         os: impl Into<String>,
         version: impl Into<String>,
-        room_id: Option<String>,
         port: u16,
     ) -> Self {
         Self {
@@ -28,7 +25,6 @@ impl DeviceInfo {
             device_type: device_type.into(),
             os: os.into(),
             version: version.into(),
-            room_id,
             port,
             pairing_pin: None,
         }
@@ -46,8 +42,6 @@ pub struct PeerInfo {
     pub device_name: String,
     pub device_type: String,
     pub os: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub room_id: Option<String>,
     pub ip: String,
     pub port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -59,7 +53,6 @@ impl PeerInfo {
         device_name: impl Into<String>,
         device_type: impl Into<String>,
         os: impl Into<String>,
-        room_id: Option<String>,
         ip: impl Into<String>,
         port: u16,
     ) -> Self {
@@ -67,7 +60,6 @@ impl PeerInfo {
             device_name: device_name.into(),
             device_type: device_type.into(),
             os: os.into(),
-            room_id,
             ip: ip.into(),
             port,
             pairing_pin: None,

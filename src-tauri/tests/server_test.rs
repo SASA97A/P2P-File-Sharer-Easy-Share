@@ -24,7 +24,6 @@ fn sample_device_info() -> DeviceInfo {
         "desktop",
         "windows",
         "2.0.0",
-        Some("Engineering".to_string()),
         0,
     )
 }
@@ -55,7 +54,6 @@ async fn test_server_startup_dynamic_port_and_device_info() {
     assert_eq!(info.device_type, "desktop");
     assert_eq!(info.os, "windows");
     assert_eq!(info.version, "2.0.0");
-    assert_eq!(info.room_id, Some("Engineering".to_string()));
     assert_eq!(info.port, port);
     assert!(info.pairing_pin.is_some());
     let pin = info.pairing_pin.as_ref().unwrap();
@@ -116,7 +114,6 @@ async fn test_transfer_request_accepted_and_declined() {
         "req-001",
         "Sender-Device",
         "linux",
-        Some("Engineering".to_string()),
         vec![FileMetadata::new("f1", "doc.pdf", 1024, None)],
     );
 
@@ -187,7 +184,6 @@ async fn test_transfer_consent_interactive_channel() {
         "req-interactive",
         "Sender-Alice",
         "macos",
-        None,
         vec![FileMetadata::new("file-1", "photo.jpg", 5000, None)],
     );
 
@@ -239,7 +235,6 @@ async fn test_chunk_upload_status_and_streaming() {
         "req-chunk",
         "Sender",
         "windows",
-        None,
         vec![FileMetadata::new("f-test", "test.bin", 100, None)],
     );
 
@@ -338,7 +333,6 @@ async fn test_resumed_chunk_upload_seekable() {
         "req-resume",
         "Sender",
         "windows",
-        None,
         vec![FileMetadata::new("f-resume", "data.iso", 1000, None)],
     );
 
@@ -414,7 +408,6 @@ async fn test_transfer_finish_checksum_validation_and_commit() {
         "req-finish",
         "Sender",
         "windows",
-        None,
         vec![FileMetadata::new(
             "f-final",
             "greeting.txt",
@@ -488,7 +481,6 @@ async fn test_transfer_finish_blake3_hash_mismatch_rejected() {
         "req-corrupt",
         "Sender",
         "windows",
-        None,
         vec![FileMetadata::new(
             "f-corrupt",
             "corrupt.txt",
@@ -549,7 +541,6 @@ async fn test_transfer_finish_size_mismatch_rejected() {
         "req-size-mismatch",
         "Sender",
         "windows",
-        None,
         vec![FileMetadata::new("f-size", "big.bin", 1000, None)],
     );
 
@@ -646,7 +637,6 @@ async fn test_transfer_cancel() {
         "req-cancel",
         "Sender",
         "windows",
-        None,
         vec![FileMetadata::new("f-cancel", "cancel.bin", 1000, None)],
     );
 

@@ -184,7 +184,6 @@ pub async fn add_manual_peer(
             info.device_name,
             info.device_type,
             info.os,
-            info.room_id,
             ip,
             port,
         ),
@@ -192,7 +191,6 @@ pub async fn add_manual_peer(
             format!("Manual-{}", ip),
             "unknown",
             "unknown",
-            None,
             ip,
             port,
         ),
@@ -201,32 +199,6 @@ pub async fn add_manual_peer(
     state.add_manual_peer(peer.clone()).await;
     let _ = app.emit("peer-found", &peer);
     Ok(peer)
-}
-
-/// Updates the local room ID filter tag and restarts discovery services.
-#[tauri::command]
-pub async fn set_room_id(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    room: Option<String>,
-) -> Result<DeviceInfo, String> {
-    let normalized = room.and_then(|r| {
-        let trimmed = r.trim().to_string();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    });
-
-    {
-        let mut info = state.server_state.device_info.write().await;
-        info.room_id = normalized;
-    }
-
-    let updated = state.server_state.get_device_info().await;
-    state.restart_discovery(app, updated.clone()).await?;
-    Ok(updated)
 }
 
 /// Responds to an interactive transfer consent prompt (Accept/Decline).
@@ -284,7 +256,6 @@ pub async fn start_transfer(
         request_id,
         my_info.device_name,
         my_info.os,
-        my_info.room_id,
         metadata_vec,
     );
 

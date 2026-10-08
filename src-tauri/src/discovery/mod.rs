@@ -69,7 +69,6 @@ impl DiscoveryHandle {
             device_name: format!("Manual-{}", ip),
             device_type: "unknown".to_string(),
             os: "unknown".to_string(),
-            room_id: None,
             ip: ip.to_string(),
             port,
             pairing_pin: None,

@@ -35,7 +35,6 @@ pub async fn setup_services(
         "desktop",
         os,
         version,
-        None,
         initial_port,
     );
 
@@ -152,7 +151,6 @@ pub fn run() {
             commands::connect_by_address,
             commands::get_discovered_peers,
             commands::add_manual_peer,
-            commands::set_room_id,
             commands::respond_transfer_request,
             commands::start_transfer,
             commands::cancel_transfer,

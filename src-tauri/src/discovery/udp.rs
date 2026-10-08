@@ -22,8 +22,6 @@ pub struct HeartbeatMessage {
     pub device_type: String,
     pub os: String,
     pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub room_id: Option<String>,
     pub port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ip: Option<String>,
@@ -39,7 +37,6 @@ impl HeartbeatMessage {
             device_type: info.device_type.clone(),
             os: info.os.clone(),
             version: info.version.clone(),
-            room_id: info.room_id.clone(),
             port: info.port,
             ip,
             pairing_pin: info.pairing_pin.clone(),
@@ -56,7 +53,6 @@ impl HeartbeatMessage {
             device_name: self.device_name.clone(),
             device_type: self.device_type.clone(),
             os: self.os.clone(),
-            room_id: self.room_id.clone(),
             ip: resolved_ip,
             port: self.port,
             pairing_pin: self.pairing_pin.clone(),

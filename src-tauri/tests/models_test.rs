@@ -1,7 +1,7 @@
 use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
 use easy_share_lib::models::transfer::{
-    ChunkHeader, FileMetadata, FinishRequest, FinishResponse, TransferRequest, TransferResponse,
-    TransferStatus, TransferStatusQueryResponse,
+    CancelRequest, ChunkHeader, ChunkResponse, FileMetadata, FinishRequest, FinishResponse,
+    TransferRequest, TransferResponse, TransferStatus, TransferStatusQueryResponse,
 };
 use std::collections::HashMap;
 
@@ -11,7 +11,6 @@ fn test_peer_info_serialization_roundtrip() {
         device_name: "Alice-PC".to_string(),
         device_type: "desktop".to_string(),
         os: "windows".to_string(),
-        room_id: Some("Engineering".to_string()),
         ip: "192.168.1.50".to_string(),
         port: 5050,
         pairing_pin: None,
@@ -19,7 +18,6 @@ fn test_peer_info_serialization_roundtrip() {
 
     let json_str = serde_json::to_string(&peer).expect("failed to serialize PeerInfo");
     assert!(json_str.contains("\"device_name\":\"Alice-PC\""));
-    assert!(json_str.contains("\"room_id\":\"Engineering\""));
     assert!(json_str.contains("\"port\":5050"));
     assert!(!json_str.contains("pairing_pin"));
 
@@ -27,26 +25,11 @@ fn test_peer_info_serialization_roundtrip() {
         serde_json::from_str(&json_str).expect("failed to deserialize PeerInfo");
     assert_eq!(peer, deserialized);
 
-    // Test with room_id = None
-    let peer_no_room = PeerInfo {
-        device_name: "Bob-Phone".to_string(),
-        device_type: "mobile".to_string(),
-        os: "android".to_string(),
-        room_id: None,
-        ip: "192.168.1.51".to_string(),
-        port: 5050,
-        pairing_pin: None,
-    };
-    let json_no_room =
-        serde_json::to_string(&peer_no_room).expect("failed to serialize PeerInfo without room");
-    assert_eq!(peer_no_room, serde_json::from_str::<PeerInfo>(&json_no_room).unwrap());
-
     // Test with pairing_pin
     let peer_with_pin = PeerInfo::new(
         "Charlie-Laptop",
         "desktop",
         "linux",
-        None,
         "192.168.1.52",
         5050,
     )
@@ -67,7 +50,6 @@ fn test_device_info_serialization_roundtrip() {
         device_type: "desktop".to_string(),
         os: "windows".to_string(),
         version: "2.0.0".to_string(),
-        room_id: Some("Engineering".to_string()),
         port: 5050,
         pairing_pin: None,
     };
@@ -85,7 +67,6 @@ fn test_device_info_serialization_roundtrip() {
         "desktop",
         "windows",
         "2.0.0",
-        Some("Engineering".to_string()),
         5050,
     )
     .with_pairing_pin("654321");
@@ -120,7 +101,6 @@ fn test_transfer_request_with_multiple_files_roundtrip() {
         request_id: "req-12345".to_string(),
         sender_name: "Alice-PC".to_string(),
         sender_os: "windows".to_string(),
-        room_id: Some("Engineering".to_string()),
         total_bytes: 1075790400,
         files,
     };
@@ -148,45 +128,56 @@ fn test_transfer_response_accepted_and_declined() {
 
     let des_accepted: TransferResponse =
         serde_json::from_str(&json_accepted).expect("failed to deserialize accepted TransferResponse");
-    assert_eq!(des_accepted.status, TransferStatus::Accepted);
-    assert_eq!(des_accepted.session_token.as_deref(), Some("sess-99887766"));
-    assert_eq!(des_accepted.existing_offsets.get("f1-abc"), Some(&524288000));
+    assert_eq!(accepted, des_accepted);
 
-    let declined = TransferResponse::declined("User rejected the transfer request.");
+    let declined = TransferResponse::declined("User rejected the transfer request");
     let json_declined =
         serde_json::to_string(&declined).expect("failed to serialize declined TransferResponse");
     assert!(json_declined.contains("\"status\":\"declined\""));
-    assert!(json_declined.contains("\"reason\":\"User rejected the transfer request.\""));
+    assert!(json_declined.contains("User rejected"));
 
     let des_declined: TransferResponse =
         serde_json::from_str(&json_declined).expect("failed to deserialize declined TransferResponse");
-    assert_eq!(des_declined.status, TransferStatus::Declined);
-    assert_eq!(
-        des_declined.reason.as_deref(),
-        Some("User rejected the transfer request.")
-    );
+    assert_eq!(declined, des_declined);
+}
+
+#[test]
+fn test_chunk_header_and_response_roundtrip() {
+    let header = ChunkHeader::new("sess-123", "file-456", 1048576);
+    let json_header = serde_json::to_string(&header).unwrap();
+    assert!(json_header.contains("\"session_token\":\"sess-123\""));
+    assert!(json_header.contains("\"offset\":1048576"));
+    let des_header: ChunkHeader = serde_json::from_str(&json_header).unwrap();
+    assert_eq!(header, des_header);
+
+    let chunk_res = ChunkResponse {
+        file_id: "file-456".to_string(),
+        bytes_written: 524288,
+        current_total: 1572864,
+    };
+    let json_res = serde_json::to_string(&chunk_res).unwrap();
+    assert!(json_res.contains("\"bytes_written\":524288"));
+    let des_res: ChunkResponse = serde_json::from_str(&json_res).unwrap();
+    assert_eq!(chunk_res, des_res);
 }
 
 #[test]
 fn test_finish_request_and_response_roundtrip() {
-    let finish_req = FinishRequest {
-        session_token: "sess-99887766-5544-3322".to_string(),
-        file_id: "f1-abc".to_string(),
-    };
+    let finish_req = FinishRequest::new("sess-finish-abc", "f-final");
+    let json_req =
+        serde_json::to_string(&finish_req).expect("failed to serialize FinishRequest");
+    assert!(json_req.contains("\"session_token\":\"sess-finish-abc\""));
+    assert!(json_req.contains("\"file_id\":\"f-final\""));
 
-    let json_req = serde_json::to_string(&finish_req).expect("failed to serialize FinishRequest");
     let des_req: FinishRequest =
         serde_json::from_str(&json_req).expect("failed to deserialize FinishRequest");
     assert_eq!(finish_req, des_req);
 
-    let finish_res = FinishResponse {
-        status: TransferStatus::Completed,
-        file_id: "f1-abc".to_string(),
-        saved_path: "C:\\Users\\User\\Downloads\\archive.zip".to_string(),
-    };
-
-    let json_res = serde_json::to_string(&finish_res).expect("failed to serialize FinishResponse");
+    let finish_res = FinishResponse::completed("f-final", "C:\\Downloads\\greeting.txt");
+    let json_res =
+        serde_json::to_string(&finish_res).expect("failed to serialize FinishResponse");
     assert!(json_res.contains("\"status\":\"completed\""));
+    assert!(json_res.contains("\"file_id\":\"f-final\""));
     let des_res: FinishResponse =
         serde_json::from_str(&json_res).expect("failed to deserialize FinishResponse");
     assert_eq!(finish_res, des_res);
@@ -194,30 +185,30 @@ fn test_finish_request_and_response_roundtrip() {
 
 #[test]
 fn test_transfer_status_query_response() {
-    let status_resp = TransferStatusQueryResponse {
-        file_id: "f1-abc".to_string(),
-        bytes_received: 524288000,
-        status: TransferStatus::Partial,
+    let query_res = TransferStatusQueryResponse {
+        file_id: "f-123".to_string(),
+        bytes_received: 1536,
+        status: TransferStatus::InProgress,
     };
 
-    let json_str = serde_json::to_string(&status_resp)
-        .expect("failed to serialize TransferStatusQueryResponse");
-    assert!(json_str.contains("\"status\":\"partial\""));
-    let des_resp: TransferStatusQueryResponse =
-        serde_json::from_str(&json_str).expect("failed to deserialize TransferStatusQueryResponse");
-    assert_eq!(status_resp, des_resp);
+    let json_str =
+        serde_json::to_string(&query_res).expect("failed to serialize query response");
+    assert!(json_str.contains("\"status\":\"in_progress\""));
+    assert!(json_str.contains("\"bytes_received\":1536"));
+    assert!(json_str.contains("\"file_id\":\"f-123\""));
+
+    let des: TransferStatusQueryResponse =
+        serde_json::from_str(&json_str).expect("failed to deserialize query response");
+    assert_eq!(query_res, des);
 }
 
 #[test]
-fn test_chunk_header_roundtrip() {
-    let chunk = ChunkHeader {
-        session_token: "sess-12345".to_string(),
-        file_id: "f1-abc".to_string(),
-        offset: 1048576,
-    };
+fn test_cancel_request_roundtrip() {
+    let cancel_req = CancelRequest::new("sess-cancel-123", Some("Transfer timed out".to_string()));
+    let json_str = serde_json::to_string(&cancel_req).unwrap();
+    assert!(json_str.contains("\"session_token\":\"sess-cancel-123\""));
+    assert!(json_str.contains("Transfer timed out"));
 
-    let json_str = serde_json::to_string(&chunk).expect("failed to serialize ChunkHeader");
-    let des_chunk: ChunkHeader =
-        serde_json::from_str(&json_str).expect("failed to deserialize ChunkHeader");
-    assert_eq!(chunk, des_chunk);
+    let des: CancelRequest = serde_json::from_str(&json_str).unwrap();
+    assert_eq!(cancel_req, des);
 }

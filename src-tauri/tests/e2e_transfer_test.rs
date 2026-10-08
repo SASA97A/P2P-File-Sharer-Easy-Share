@@ -26,13 +26,12 @@ fn create_deterministic_test_file(path: &PathBuf, size_bytes: usize, seed: u8) -
     FileManager::calculate_blake3_file(path).expect("failed to calculate blake3")
 }
 
-fn create_node_device(name: &str, room: Option<&str>, port: u16) -> DeviceInfo {
+fn create_node_device(name: &str, port: u16) -> DeviceInfo {
     DeviceInfo::new(
         name,
         "desktop",
         "windows",
         "2.0.0",
-        room.map(|s| s.to_string()),
         port,
     )
 }
@@ -51,11 +50,10 @@ struct RunningNode {
 impl RunningNode {
     pub async fn start_with_consent_channel(
         name: &str,
-        room: Option<&str>,
         dir_prefix: &str,
     ) -> Self {
         let download_dir = setup_e2e_dir(dir_prefix);
-        let device_info = create_node_device(name, room, 0);
+        let device_info = create_node_device(name, 0);
 
         let (consent_tx, consent_rx) = mpsc::channel::<ConsentRequest>(32);
         let consent_policy = ConsentPolicy::Channel(consent_tx);
@@ -81,9 +79,9 @@ impl RunningNode {
         }
     }
 
-    pub async fn start_auto_accept(name: &str, room: Option<&str>, dir_prefix: &str) -> Self {
+    pub async fn start_auto_accept(name: &str, dir_prefix: &str) -> Self {
         let download_dir = setup_e2e_dir(dir_prefix);
-        let device_info = create_node_device(name, room, 0);
+        let device_info = create_node_device(name, 0);
 
         let server_state = Arc::new(ServerState::new(device_info.clone(), download_dir.clone()));
 
@@ -107,7 +105,6 @@ impl RunningNode {
             &self.name,
             "desktop",
             "windows",
-            self.device_info.room_id.clone(),
             "127.0.0.1",
             self.port,
         )
@@ -125,7 +122,6 @@ async fn test_e2e_multi_file_transfer_with_interactive_consent() {
     let node_a_sender_dir = setup_e2e_dir("sender_node_a");
     let mut node_b_receiver = RunningNode::start_with_consent_channel(
         "Receiver-Node-B",
-        Some("Engineering-Lab"),
         "receiver_node_b",
     )
     .await;
@@ -139,7 +135,6 @@ async fn test_e2e_multi_file_transfer_with_interactive_consent() {
         .await
         .expect("Node A failed to probe Node B");
     assert_eq!(probed_info.device_name, "Receiver-Node-B");
-    assert_eq!(probed_info.room_id, Some("Engineering-Lab".to_string()));
     assert_eq!(probed_info.port, node_b_receiver.port);
 
     // 2. Prepare 3 distinct files of varying sizes on Node A
@@ -170,7 +165,6 @@ async fn test_e2e_multi_file_transfer_with_interactive_consent() {
         "req-e2e-001",
         "Sender-Node-A",
         "windows",
-        Some("Engineering-Lab".to_string()),
         metadata_list,
     );
 
@@ -277,7 +271,7 @@ async fn test_e2e_multi_file_transfer_with_interactive_consent() {
 async fn test_e2e_transfer_interruption_and_resumption() {
     let node_a_sender_dir = setup_e2e_dir("resume_sender");
     let node_b_receiver =
-        RunningNode::start_auto_accept("Receiver-Node-B", None, "resume_receiver").await;
+        RunningNode::start_auto_accept("Receiver-Node-B", "resume_receiver").await;
 
     let client_a = TransferClient::with_chunk_size(512 * 1024); // 512 KB chunk size
     let peer_b = node_b_receiver.to_peer_info();
@@ -293,7 +287,6 @@ async fn test_e2e_transfer_interruption_and_resumption() {
         "req-resume",
         "Sender-Node-A",
         "windows",
-        None,
         vec![file_to_send.to_metadata()],
     );
 
@@ -382,7 +375,6 @@ async fn test_e2e_transfer_consent_rejection() {
     let node_a_sender_dir = setup_e2e_dir("decline_sender");
     let mut node_b_receiver = RunningNode::start_with_consent_channel(
         "Receiver-Node-B",
-        None,
         "decline_receiver",
     )
     .await;
@@ -398,7 +390,6 @@ async fn test_e2e_transfer_consent_rejection() {
         "req-decline-01",
         "Sender-Node-A",
         "windows",
-        None,
         vec![file_to_send.to_metadata()],
     );
 
@@ -450,7 +441,7 @@ async fn test_e2e_transfer_consent_rejection() {
 async fn test_e2e_transfer_cancel_mid_stream_cleanup() {
     let node_a_sender_dir = setup_e2e_dir("cancel_sender");
     let node_b_receiver =
-        RunningNode::start_auto_accept("Receiver-Node-B", None, "cancel_receiver").await;
+        RunningNode::start_auto_accept("Receiver-Node-B", "cancel_receiver").await;
 
     let client_a = TransferClient::with_chunk_size(512 * 1024);
     let peer_b = node_b_receiver.to_peer_info();
@@ -464,7 +455,6 @@ async fn test_e2e_transfer_cancel_mid_stream_cleanup() {
         "req-cancel-01",
         "Sender-Node-A",
         "windows",
-        None,
         vec![file_to_send.to_metadata()],
     );
 
@@ -514,15 +504,15 @@ async fn test_e2e_transfer_cancel_mid_stream_cleanup() {
     node_b_receiver.cleanup();
 }
 
-/// E2E Test 5: Peer discovery, room filtering, and multi-node communication
+/// E2E Test 5: Peer discovery and multi-node communication
 #[tokio::test]
-async fn test_e2e_peer_info_and_room_filtering() {
+async fn test_e2e_multi_node_peer_discovery() {
     let node_alpha1 =
-        RunningNode::start_auto_accept("Alpha-1", Some("DesignTeam"), "alpha1").await;
+        RunningNode::start_auto_accept("Alpha-1", "alpha1").await;
     let node_alpha2 =
-        RunningNode::start_auto_accept("Alpha-2", Some("DesignTeam"), "alpha2").await;
+        RunningNode::start_auto_accept("Alpha-2", "alpha2").await;
     let node_beta =
-        RunningNode::start_auto_accept("Beta-1", Some("FinanceTeam"), "beta1").await;
+        RunningNode::start_auto_accept("Beta-1", "beta1").await;
 
     let client = TransferClient::new();
 
@@ -534,27 +524,12 @@ async fn test_e2e_peer_info_and_room_filtering() {
     let info_a2 = client.probe_peer(&peer_a2).await.unwrap();
     let info_b = client.probe_peer(&peer_b).await.unwrap();
 
-    assert_eq!(info_a1.room_id, Some("DesignTeam".to_string()));
-    assert_eq!(info_a2.room_id, Some("DesignTeam".to_string()));
-    assert_eq!(info_b.room_id, Some("FinanceTeam".to_string()));
+    assert_eq!(info_a1.device_name, "Alpha-1");
+    assert_eq!(info_a2.device_name, "Alpha-2");
+    assert_eq!(info_b.device_name, "Beta-1");
 
-    // Verify room filtering logic (peers in same room vs different room)
-    let my_room = Some("DesignTeam".to_string());
     let all_peers = vec![info_a1, info_a2, info_b];
-
-    let filtered_peers: Vec<_> = all_peers
-        .into_iter()
-        .filter(|p| match (&my_room, &p.room_id) {
-            (Some(my_r), Some(peer_r)) => my_r == peer_r,
-            (None, None) => true,
-            _ => false,
-        })
-        .collect();
-
-    assert_eq!(filtered_peers.len(), 2);
-    assert!(filtered_peers.iter().any(|p| p.device_name == "Alpha-1"));
-    assert!(filtered_peers.iter().any(|p| p.device_name == "Alpha-2"));
-    assert!(!filtered_peers.iter().any(|p| p.device_name == "Beta-1"));
+    assert_eq!(all_peers.len(), 3);
 
     node_alpha1.cleanup();
     node_alpha2.cleanup();

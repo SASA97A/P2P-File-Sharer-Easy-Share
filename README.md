@@ -16,7 +16,6 @@ A high-performance, lightweight, and secure **local P2P file sharing desktop app
 - **Resumable Chunk Streaming**: 1 MB chunk streaming with seekable byte offsets. Interrupted transfers automatically resume from where they left off.
 - **BLAKE3 Cryptographic Integrity**: Fast streaming BLAKE3 hashing verifies every file before committing to the download directory.
 - **Interactive Consent Handshake**: Receivers inspect sender device name, operating system, and file list before accepting or declining incoming transfers.
-- **Rooms / Group Isolation**: Optional Room ID to partition peer visibility on busy networks.
 - **Atomic Storage & Safe Naming**: Safe path sanitization prevents directory traversal attacks; incoming files write to `.part` buffers and rename atomically with collision handling.
 - **Modern Responsive Dark UI**: Clean interface built with glassmorphism aesthetics, Lucide SVG icons, real-time transfer telemetry, and paired peer badges.
 
