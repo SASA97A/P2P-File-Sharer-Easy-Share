@@ -41,6 +41,9 @@ impl MdnsDiscovery {
         if let Some(room) = &self.device_info.room_id {
             properties.insert("room".to_string(), room.clone());
         }
+        if let Some(pin) = &self.device_info.pairing_pin {
+            properties.insert("pin".to_string(), pin.clone());
+        }
 
         let best_ip = crate::discovery::nic::get_best_physical_ip()
             .map(|ip| ip.to_string())
@@ -89,6 +92,9 @@ impl MdnsDiscovery {
                         let room_id = properties
                             .get_property_val_str("room")
                             .map(|s| s.to_string());
+                        let pairing_pin = properties
+                            .get_property_val_str("pin")
+                            .map(|s| s.to_string());
                         let port = info.get_port();
 
                         // Avoid discovering ourselves
@@ -110,6 +116,7 @@ impl MdnsDiscovery {
                             room_id,
                             ip: ip_str,
                             port,
+                            pairing_pin,
                         };
 
                         let _ = event_tx_clone.send(PeerEvent::Discovered(peer)).await;

@@ -72,6 +72,7 @@ impl DiscoveryHandle {
             room_id: None,
             ip: ip.to_string(),
             port,
+            pairing_pin: None,
         };
 
         let mut tracker = self.tracker.write().await;

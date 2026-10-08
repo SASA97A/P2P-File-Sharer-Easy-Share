@@ -27,6 +27,8 @@ pub struct HeartbeatMessage {
     pub port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pairing_pin: Option<String>,
 }
 
 impl HeartbeatMessage {
@@ -40,6 +42,7 @@ impl HeartbeatMessage {
             room_id: info.room_id.clone(),
             port: info.port,
             ip,
+            pairing_pin: info.pairing_pin.clone(),
         }
     }
 
@@ -56,6 +59,7 @@ impl HeartbeatMessage {
             room_id: self.room_id.clone(),
             ip: resolved_ip,
             port: self.port,
+            pairing_pin: self.pairing_pin.clone(),
         }
     }
 }

@@ -14,12 +14,14 @@ fn test_peer_info_serialization_roundtrip() {
         room_id: Some("Engineering".to_string()),
         ip: "192.168.1.50".to_string(),
         port: 5050,
+        pairing_pin: None,
     };
 
     let json_str = serde_json::to_string(&peer).expect("failed to serialize PeerInfo");
     assert!(json_str.contains("\"device_name\":\"Alice-PC\""));
     assert!(json_str.contains("\"room_id\":\"Engineering\""));
     assert!(json_str.contains("\"port\":5050"));
+    assert!(!json_str.contains("pairing_pin"));
 
     let deserialized: PeerInfo =
         serde_json::from_str(&json_str).expect("failed to deserialize PeerInfo");
@@ -33,12 +35,29 @@ fn test_peer_info_serialization_roundtrip() {
         room_id: None,
         ip: "192.168.1.51".to_string(),
         port: 5050,
+        pairing_pin: None,
     };
     let json_no_room =
         serde_json::to_string(&peer_no_room).expect("failed to serialize PeerInfo without room");
-    let deserialized_no_room: PeerInfo =
-        serde_json::from_str(&json_no_room).expect("failed to deserialize PeerInfo without room");
-    assert_eq!(peer_no_room, deserialized_no_room);
+    assert_eq!(peer_no_room, serde_json::from_str::<PeerInfo>(&json_no_room).unwrap());
+
+    // Test with pairing_pin
+    let peer_with_pin = PeerInfo::new(
+        "Charlie-Laptop",
+        "desktop",
+        "linux",
+        None,
+        "192.168.1.52",
+        5050,
+    )
+    .with_pairing_pin("123456");
+
+    let json_pin = serde_json::to_string(&peer_with_pin).expect("failed to serialize PeerInfo with PIN");
+    assert!(json_pin.contains("\"pairing_pin\":\"123456\""));
+    let deserialized_pin: PeerInfo =
+        serde_json::from_str(&json_pin).expect("failed to deserialize PeerInfo with PIN");
+    assert_eq!(peer_with_pin, deserialized_pin);
+    assert_eq!(deserialized_pin.pairing_pin, Some("123456".to_string()));
 }
 
 #[test]
@@ -50,13 +69,34 @@ fn test_device_info_serialization_roundtrip() {
         version: "2.0.0".to_string(),
         room_id: Some("Engineering".to_string()),
         port: 5050,
+        pairing_pin: None,
     };
 
     let json_str = serde_json::to_string(&device).expect("failed to serialize DeviceInfo");
     assert!(json_str.contains("\"version\":\"2.0.0\""));
+    assert!(!json_str.contains("pairing_pin"));
     let deserialized: DeviceInfo =
         serde_json::from_str(&json_str).expect("failed to deserialize DeviceInfo");
     assert_eq!(device, deserialized);
+
+    // Test DeviceInfo with pairing_pin
+    let device_with_pin = DeviceInfo::new(
+        "Alice-PC",
+        "desktop",
+        "windows",
+        "2.0.0",
+        Some("Engineering".to_string()),
+        5050,
+    )
+    .with_pairing_pin("654321");
+
+    let json_device_pin =
+        serde_json::to_string(&device_with_pin).expect("failed to serialize DeviceInfo with PIN");
+    assert!(json_device_pin.contains("\"pairing_pin\":\"654321\""));
+    let deserialized_device_pin: DeviceInfo =
+        serde_json::from_str(&json_device_pin).expect("failed to deserialize DeviceInfo with PIN");
+    assert_eq!(device_with_pin, deserialized_device_pin);
+    assert_eq!(deserialized_device_pin.pairing_pin, Some("654321".to_string()));
 }
 
 #[test]

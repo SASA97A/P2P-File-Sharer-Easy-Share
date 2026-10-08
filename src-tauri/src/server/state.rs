@@ -56,10 +56,13 @@ impl ServerState {
 
     /// Creates a new `ServerState` with a specific consent policy.
     pub fn with_consent(
-        device_info: DeviceInfo,
+        mut device_info: DeviceInfo,
         download_dir: PathBuf,
         consent_policy: ConsentPolicy,
     ) -> Self {
+        if device_info.pairing_pin.is_none() {
+            device_info.pairing_pin = Some(crate::pairing::pin::generate_pin());
+        }
         Self {
             device_info: Arc::new(RwLock::new(device_info)),
             download_dir,
@@ -77,6 +80,20 @@ impl ServerState {
     pub async fn set_port(&self, port: u16) {
         let mut info = self.device_info.write().await;
         info.port = port;
+    }
+
+    /// Regenerates the 6-digit numeric pairing PIN, updates `device_info`, and returns the new PIN.
+    pub async fn regenerate_pairing_pin(&self) -> String {
+        let new_pin = crate::pairing::pin::generate_pin();
+        let mut info = self.device_info.write().await;
+        info.pairing_pin = Some(new_pin.clone());
+        new_pin
+    }
+
+    /// Sets a specific pairing PIN in `device_info`.
+    pub async fn set_pairing_pin(&self, pin: impl Into<String>) {
+        let mut info = self.device_info.write().await;
+        info.pairing_pin = Some(pin.into());
     }
 
     /// Returns the download directory reference.

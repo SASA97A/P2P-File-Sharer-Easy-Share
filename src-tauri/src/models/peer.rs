@@ -10,6 +10,8 @@ pub struct DeviceInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room_id: Option<String>,
     pub port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pairing_pin: Option<String>,
 }
 
 impl DeviceInfo {
@@ -28,7 +30,13 @@ impl DeviceInfo {
             version: version.into(),
             room_id,
             port,
+            pairing_pin: None,
         }
+    }
+
+    pub fn with_pairing_pin(mut self, pin: impl Into<String>) -> Self {
+        self.pairing_pin = Some(pin.into());
+        self
     }
 }
 
@@ -42,6 +50,8 @@ pub struct PeerInfo {
     pub room_id: Option<String>,
     pub ip: String,
     pub port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pairing_pin: Option<String>,
 }
 
 impl PeerInfo {
@@ -60,7 +70,13 @@ impl PeerInfo {
             room_id,
             ip: ip.into(),
             port,
+            pairing_pin: None,
         }
+    }
+
+    pub fn with_pairing_pin(mut self, pin: impl Into<String>) -> Self {
+        self.pairing_pin = Some(pin.into());
+        self
     }
 
     pub fn base_url(&self) -> String {

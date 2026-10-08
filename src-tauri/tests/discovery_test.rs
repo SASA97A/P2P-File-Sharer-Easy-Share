@@ -103,6 +103,7 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
         room_id: Some("Office-Room".to_string()),
         port: 5050,
         ip: Some("127.0.0.1".to_string()),
+        pairing_pin: Some("123456".to_string()),
     };
 
     let payload = serde_json::to_vec(&heartbeat).expect("failed to serialize heartbeat");
@@ -122,11 +123,13 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
     assert_eq!(received_heartbeat.version, "2.0.0");
     assert_eq!(received_heartbeat.room_id, Some("Office-Room".to_string()));
     assert_eq!(received_heartbeat.port, 5050);
+    assert_eq!(received_heartbeat.pairing_pin, Some("123456".to_string()));
 
     let peer_info = received_heartbeat.to_peer_info("127.0.0.1");
     assert_eq!(peer_info.device_name, "Alice-Laptop");
     assert_eq!(peer_info.ip, "127.0.0.1");
     assert_eq!(peer_info.port, 5050);
+    assert_eq!(peer_info.pairing_pin, Some("123456".to_string()));
 }
 
 #[tokio::test]
@@ -140,6 +143,7 @@ async fn test_peer_tracker_deduplication_and_expiration() {
         room_id: Some("Room-1".to_string()),
         ip: "192.168.1.10".to_string(),
         port: 5050,
+        pairing_pin: None,
     };
 
     let peer_b = PeerInfo {
@@ -149,6 +153,7 @@ async fn test_peer_tracker_deduplication_and_expiration() {
         room_id: None,
         ip: "192.168.1.11".to_string(),
         port: 5050,
+        pairing_pin: None,
     };
 
     // First time seeing peer A -> emit Discovered

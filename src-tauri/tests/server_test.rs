@@ -57,6 +57,46 @@ async fn test_server_startup_dynamic_port_and_device_info() {
     assert_eq!(info.version, "2.0.0");
     assert_eq!(info.room_id, Some("Engineering".to_string()));
     assert_eq!(info.port, port);
+    assert!(info.pairing_pin.is_some());
+    let pin = info.pairing_pin.as_ref().unwrap();
+    assert_eq!(pin.len(), 6);
+    assert!(pin.chars().all(|c| c.is_ascii_digit()));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_server_pairing_pin_regeneration_and_info_endpoint() {
+    let temp_dir = setup_test_dir("pin_regen");
+    let device_info = sample_device_info().with_pairing_pin("111222");
+    let state = Arc::new(ServerState::new(device_info, temp_dir.clone()));
+
+    let (port, _server_handle) = start_server(state.clone(), 0)
+        .await
+        .expect("server should start");
+
+    let client = Client::new();
+    let res = client
+        .get(format!("http://127.0.0.1:{}/api/v1/info", port))
+        .send()
+        .await
+        .expect("failed to request info");
+    assert_eq!(res.status(), 200);
+    let info: DeviceInfo = res.json().await.expect("json parse error");
+    assert_eq!(info.pairing_pin, Some("111222".to_string()));
+
+    // Regenerate PIN
+    let new_pin = state.regenerate_pairing_pin().await;
+    assert_eq!(new_pin.len(), 6);
+    assert!(new_pin.chars().all(|c| c.is_ascii_digit()));
+
+    let res_updated = client
+        .get(format!("http://127.0.0.1:{}/api/v1/info", port))
+        .send()
+        .await
+        .expect("failed to request info after regen");
+    let updated_info: DeviceInfo = res_updated.json().await.expect("json parse error");
+    assert_eq!(updated_info.pairing_pin, Some(new_pin));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

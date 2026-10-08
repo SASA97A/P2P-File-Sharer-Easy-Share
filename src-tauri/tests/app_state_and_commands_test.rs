@@ -48,6 +48,14 @@ async fn test_app_state_creation_and_device_info() {
     assert_eq!(dev_info.os, "windows");
     assert_eq!(dev_info.room_id, Some("Design".to_string()));
     assert_eq!(app_state.download_dir(), &temp_dir);
+    assert!(dev_info.pairing_pin.is_some());
+    let initial_pin = dev_info.pairing_pin.unwrap();
+    assert_eq!(initial_pin.len(), 6);
+
+    let new_pin = app_state.regenerate_pairing_pin().await;
+    assert_eq!(new_pin.len(), 6);
+    let updated_info = app_state.get_device_info().await;
+    assert_eq!(updated_info.pairing_pin, Some(new_pin));
 }
 
 #[tokio::test]

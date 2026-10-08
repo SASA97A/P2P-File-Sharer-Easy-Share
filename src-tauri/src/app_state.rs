@@ -41,6 +41,11 @@ impl AppState {
         self.server_state.get_device_info().await
     }
 
+    /// Regenerates the pairing PIN and returns the new PIN.
+    pub async fn regenerate_pairing_pin(&self) -> String {
+        self.server_state.regenerate_pairing_pin().await
+    }
+
     /// Returns the currently discovered peers.
     pub async fn get_peers(&self) -> Vec<PeerInfo> {
         if let Some(handle) = self.discovery_handle.read().await.as_ref() {
