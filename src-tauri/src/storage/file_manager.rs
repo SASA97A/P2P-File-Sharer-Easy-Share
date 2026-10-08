@@ -105,6 +105,14 @@ impl FileManager {
         })
     }
 
+    /// Ensures that the specified download directory exists, creating parent directories if needed.
+    pub fn ensure_download_dir(dir: &Path) -> Result<(), StorageError> {
+        if !dir.exists() {
+            fs::create_dir_all(dir)?;
+        }
+        Ok(())
+    }
+
     /// Derives the temporary `.part` file path for an active transfer session.
     pub fn get_part_path(downloads_dir: &Path, file_name: &str, session_token: &str) -> PathBuf {
         let sanitized = Self::sanitize_filename(file_name);
