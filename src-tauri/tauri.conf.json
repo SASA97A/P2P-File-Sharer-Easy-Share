@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/main/crates/tauri-cli/schema.json",
+  "productName": "Easy Share",
+  "version": "2.0.0",
+  "identifier": "com.easyshare.app",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Easy Share",
+        "width": 820,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

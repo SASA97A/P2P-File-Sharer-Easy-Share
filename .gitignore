@@ -141,3 +141,10 @@ vite.config.ts.timestamp-*
 # Bug Audit documentation
 found-bugs.md
 
+# Rust / Cargo
+/src-tauri/target/
+target/
+**/*.rs.bk
+Cargo.lock.tmp*
+
+

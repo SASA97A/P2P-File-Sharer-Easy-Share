@@ -1,0 +1,27 @@
+[package]
+name = "easy-share"
+version = "2.0.0"
+description = "High-performance P2P file sharing desktop application"
+authors = ["Easy Share Contributors"]
+edition = "2021"
+
+[lib]
+name = "easy_share_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["tokio"] }
+reqwest = { version = "0.12", features = ["stream", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+mdns-sd = "0.13"
+local-ip-address = "0.6"
+dirs = "6"
+tower-http = { version = "0.6", features = ["cors"] }
