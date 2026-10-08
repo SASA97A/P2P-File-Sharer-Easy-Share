@@ -6,6 +6,7 @@
       "name": "easy-share",
       "dependencies": {
         "@tauri-apps/api": "^2.0.0",
+        "lucide": "^1.53.0",
       },
       "devDependencies": {
         "@tauri-apps/cli": "^2.0.0",
@@ -38,5 +39,7 @@
     "@tauri-apps/cli-win32-ia32-msvc": ["@tauri-apps/cli-win32-ia32-msvc@2.12.1", "", { "os": "win32", "cpu": "ia32" }, "sha512-baNZRBfepAJ5qNFRMwzgBk94xQmkcmTZrNDjZjnzrq2vAaTC3NAhallb/zo3hyoCGQlMS13sdovktrg46NZz6Q=="],
 
     "@tauri-apps/cli-win32-x64-msvc": ["@tauri-apps/cli-win32-x64-msvc@2.12.1", "", { "os": "win32", "cpu": "x64" }, "sha512-dIFaKslrzcbesb+bBh+E1R9km241pHyj32w6D9FPtvQeYpRUFbiCLEa/2S+S0UnIytfxepp4P+X8IerGqnXeYg=="],
+
+    "lucide": ["lucide@1.53.0", "", {}, "sha512-5bBZofL4QmNhY6YIXe3sSJKvO2gMZ1fOMEcOyVsT5/7k6KR8IizWUhWVuQtVnrN/TRLKDKEr4Ln0a7CZ8dQMMA=="],
   }
 }

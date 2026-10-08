@@ -1,9 +1,11 @@
 /**
  * Easy Share - UI Rendering and View Components
+ * Powered by Lucide SVG Icons
  */
 
 import { formatFileSize } from "./files.js";
 import { getPeerKey } from "./peers.js";
+import { getDeviceIconSvg, getIconSvg } from "./icons.js";
 
 /**
  * Escapes unsafe characters for HTML rendering
@@ -21,26 +23,13 @@ export function escapeHtml(str) {
 }
 
 /**
- * Resolves appropriate device emoji icon based on OS and device type
+ * Resolves appropriate Lucide SVG icon for a device
  * @param {string} os
  * @param {string} deviceType
- * @returns {string}
+ * @returns {string} SVG HTML string
  */
 export function getDeviceIcon(os = "", deviceType = "") {
-  const osLower = (os || "").toLowerCase();
-  const typeLower = (deviceType || "").toLowerCase();
-
-  if (osLower.includes("darwin") || osLower.includes("mac") || osLower.includes("ios")) {
-    return "💻";
-  }
-  if (
-    typeLower.includes("mobile") ||
-    typeLower.includes("phone") ||
-    osLower.includes("android")
-  ) {
-    return "📱";
-  }
-  return "🖥️";
+  return getDeviceIconSvg(os, deviceType, { size: 32 });
 }
 
 /**
@@ -72,7 +61,7 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
 
   peers.forEach((peer) => {
     const isSelected = selectedKey === getPeerKey(peer);
-    const icon = getDeviceIcon(peer.os, peer.device_type);
+    const iconSvg = getDeviceIcon(peer.os, peer.device_type);
     const peerName = peer.device_name || peer.name || "Unknown Device";
     const peerIp = peer.ip || peer.host || "0.0.0.0";
     const peerPort = peer.port || 5050;
@@ -85,14 +74,14 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
     div.setAttribute("aria-label", `Select device ${peerName}`);
 
     div.innerHTML = `
-      <div class="device-icon">${icon}</div>
+      <div class="device-icon">${iconSvg}</div>
       <div class="device-name" title="${escapeHtml(peerName)}">${escapeHtml(peerName)}</div>
       <div class="device-meta">
         <span class="device-ip">${escapeHtml(peerIp)}:${peerPort}</span>
         ${peer.room_id ? `<span class="room-badge">${escapeHtml(peer.room_id)}</span>` : ""}
         ${peer.os ? `<span class="os-badge">${escapeHtml(peer.os)}</span>` : ""}
       </div>
-      <div class="checkmark">✔</div>
+      <div class="checkmark">${getIconSvg("check", { size: 14 })}</div>
     `;
 
     // Click & Keyboard Enter/Space selection
@@ -130,9 +119,12 @@ export function updateFileList(files, removeFileCb) {
 
     item.innerHTML = `
       <div class="file-info">
+        <div class="file-icon-box">${getIconSvg("fileText", { size: 18 })}</div>
         <span class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
         <span class="file-size">${formatFileSize(file.size)}</span>
-        <button class="remove-btn" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">✖</button>
+        <button class="remove-btn" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">
+          ${getIconSvg("x", { size: 14 })}
+        </button>
       </div>
     `;
 
@@ -143,7 +135,8 @@ export function updateFileList(files, removeFileCb) {
   fileList.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      removeFileCb(e.target.dataset.index);
+      const target = e.currentTarget;
+      removeFileCb(target.dataset.index);
     });
   });
 }
@@ -184,6 +177,7 @@ export function updateFilesTotalSize(files) {
 export function updateMyDeviceBadge(deviceInfo) {
   if (!deviceInfo) return;
 
+  const iconEl = document.getElementById("myDeviceIcon");
   const nameEl = document.getElementById("myDeviceName");
   const roomEl = document.getElementById("myDeviceRoom");
   const tagEl = document.getElementById("currentRoomTag");
@@ -191,6 +185,9 @@ export function updateMyDeviceBadge(deviceInfo) {
   const deviceName = deviceInfo.device_name || "Local Device";
   const roomId = deviceInfo.room_id ? deviceInfo.room_id : "Public";
 
+  if (iconEl) {
+    iconEl.innerHTML = getDeviceIconSvg(deviceInfo.os, deviceInfo.device_type, { size: 20 });
+  }
   if (nameEl) {
     nameEl.textContent = deviceName;
   }
@@ -203,7 +200,7 @@ export function updateMyDeviceBadge(deviceInfo) {
 }
 
 /**
- * Displays a non-blocking toast notification
+ * Displays a non-blocking toast notification with Lucide icon
  * @param {string} message
  * @param {"info"|"success"|"error"} type
  */
@@ -213,7 +210,16 @@ export function showToast(message, type = "info") {
 
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.textContent = message;
+
+  let iconName = "info";
+  if (type === "success") iconName = "checkCircle";
+  if (type === "error") iconName = "alertCircle";
+
+  toast.innerHTML = `
+    <span class="toast-icon">${getIconSvg(iconName, { size: 18 })}</span>
+    <span class="toast-text">${escapeHtml(message)}</span>
+  `;
+
   container.appendChild(toast);
 
   setTimeout(() => {
@@ -254,7 +260,7 @@ export function showConsentModal(request) {
   const totalBytes = Number(request.total_bytes) || 0;
 
   if (iconEl) {
-    iconEl.textContent = getDeviceIcon(request.sender_os, "");
+    iconEl.innerHTML = getDeviceIconSvg(request.sender_os, "", { size: 28 });
   }
   if (senderInfoEl) {
     senderInfoEl.textContent = `${senderName}${senderOs}`;
@@ -281,51 +287,50 @@ export function showConsentModal(request) {
       const row = document.createElement("div");
       row.className = "modal-file-row";
       row.innerHTML = `
-        <span class="modal-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        <div class="modal-file-left">
+          <span class="modal-file-icon">${getIconSvg("fileText", { size: 14 })}</span>
+          <span class="modal-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        </div>
         <span class="modal-file-size">${formatFileSize(file.size)}</span>
       `;
       fileListEl.appendChild(row);
     });
   }
 
-  // Reveal modal
+  // Show modal
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
-  acceptBtn?.focus();
 
   return new Promise((resolve) => {
     activeConsentResolver = resolve;
 
-    const cleanup = (accepted) => {
+    const cleanup = () => {
       modal.classList.add("hidden");
       modal.setAttribute("aria-hidden", "true");
-      acceptBtn?.removeEventListener("click", onAccept);
-      declineBtn?.removeEventListener("click", onDecline);
-      if (activeConsentResolver === resolve) {
-        activeConsentResolver = null;
-      }
-      resolve(accepted);
+      acceptBtn.removeEventListener("click", onAccept);
+      declineBtn.removeEventListener("click", onDecline);
+      window.removeEventListener("keydown", onKey);
+      activeConsentResolver = null;
     };
 
-    const onAccept = () => cleanup(true);
-    const onDecline = () => cleanup(false);
+    const onAccept = () => {
+      cleanup();
+      resolve(true);
+    };
 
-    acceptBtn?.addEventListener("click", onAccept, { once: true });
-    declineBtn?.addEventListener("click", onDecline, { once: true });
+    const onDecline = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        onDecline();
+      }
+    };
+
+    acceptBtn.addEventListener("click", onAccept);
+    declineBtn.addEventListener("click", onDecline);
+    window.addEventListener("keydown", onKey);
   });
-}
-
-/**
- * Hides the consent modal programmatically
- */
-export function hideConsentModal() {
-  const modal = document.getElementById("consent-modal");
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
-  }
-  if (activeConsentResolver) {
-    activeConsentResolver(false);
-    activeConsentResolver = null;
-  }
 }

@@ -19,7 +19,9 @@
           <span class="app-subtitle">High-speed P2P local file transfer</span>
         </div>
         <div class="device-identity-badge" id="myDeviceBadge" title="Your device identity on the network">
-          <span class="identity-icon">🖥️</span>
+          <span class="identity-icon" id="myDeviceIcon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-monitor"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+          </span>
           <div class="identity-text">
             <span class="identity-name" id="myDeviceName">Detecting device...</span>
             <span class="identity-room" id="myDeviceRoom">Room: Public</span>
@@ -110,7 +112,9 @@
     >
       <div class="modal-card">
         <div class="modal-header">
-          <div class="modal-icon" id="consentSenderIcon">💻</div>
+          <div class="modal-icon" id="consentSenderIcon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-laptop"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>
+          </div>
           <div class="modal-title-group">
             <h3 class="modal-title" id="consentModalTitle">Incoming File Transfer</h3>
             <span class="modal-subtitle" id="consentSenderInfo">Alice-PC (Windows)</span>
@@ -120,7 +124,7 @@
           <div class="transfer-summary">
             <div class="summary-left">
               <span class="summary-count" id="consentFileCount">0 files</span>
-              <span class="summary-dot">•</span>
+              <span class="summary-dot">&bull;</span>
               <span class="summary-size" id="consentTotalSize">0 MB</span>
             </div>
             <span class="room-badge" id="consentRoomBadge" style="display: none;">Public</span>

@@ -45,11 +45,11 @@ export function setupTransfer() {
       const files = getFiles();
 
       if (!peer) {
-        showToast("⚠️ Please select a target device first!", "error");
+        showToast("Please select a target device first.", "error");
         return;
       }
       if (!files || files.length === 0) {
-        showToast("⚠️ Please select at least one file to send!", "error");
+        showToast("Please select at least one file to send.", "error");
         return;
       }
 
@@ -60,7 +60,7 @@ export function setupTransfer() {
       try {
         const sessionToken = await startTransfer(peer, files);
         setSendBtnLabel("Sending...");
-        showToast(`Transfer started to ${peer.device_name || peer.ip}!`, "info");
+        showToast(`Transfer started to ${peer.device_name || peer.ip}.`, "info");
         console.log(`Transfer active with session token: ${sessionToken}`);
       } catch (err) {
         showToast(`Transfer failed: ${err}`, "error");
@@ -118,7 +118,7 @@ export function setupTransfer() {
   onTransferCompleted((payload) => {
     const { file_name, saved_path } = payload;
     const pathInfo = saved_path ? ` (Saved to: ${saved_path})` : "";
-    showToast(`✅ Transfer completed: ${file_name}${pathInfo}`, "success");
+    showToast(`Transfer completed: ${file_name}${pathInfo}`, "success");
 
     // Mark matching UI file item as 100% complete
     const fileItems = document.querySelectorAll(".file-item");
@@ -141,7 +141,7 @@ export function setupTransfer() {
   onTransferError((payload) => {
     const { error, file_name } = payload;
     const filePrefix = file_name ? `[${file_name}] ` : "";
-    showToast(`❌ Transfer failed: ${filePrefix}${error}`, "error");
+    showToast(`Transfer failed: ${filePrefix}${error}`, "error");
 
     isSending = false;
     if (sendBtn) sendBtn.disabled = false;
