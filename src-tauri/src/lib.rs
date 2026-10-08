@@ -1,4 +1,5 @@
 pub mod client;
+pub mod discovery;
 pub mod models;
 pub mod server;
 pub mod storage;
