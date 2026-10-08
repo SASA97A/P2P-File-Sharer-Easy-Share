@@ -8,7 +8,6 @@ import {
   setPeerList,
   upsertPeer,
   removePeer,
-  addManualPeerInput,
 } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
 import { setupPairing } from "./pairing.js";
@@ -25,8 +24,6 @@ import {
 document.addEventListener("DOMContentLoaded", async () => {
   const dropArea = document.getElementById("drop-area");
   const fileInput = document.getElementById("fileInput");
-  const manualIpInput = document.getElementById("manualIp");
-  const manualAddBtn = document.getElementById("manualAddBtn");
   const roomIdInput = document.getElementById("roomIdInput");
   const setRoomBtn = document.getElementById("setRoomBtn");
 
@@ -163,38 +160,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // -------------------------------------------------------------
-  // 5. Manual Peer Addition Actions
-  // -------------------------------------------------------------
-  async function triggerManualAdd() {
-    if (!manualIpInput) return;
-    const ipVal = manualIpInput.value.trim();
-    if (!ipVal) {
-      showToast("Please enter a device IP address", "error");
-      return;
-    }
-    await addManualPeerInput(ipVal);
-  }
-
-  if (manualAddBtn) {
-    manualAddBtn.addEventListener("click", triggerManualAdd);
-  }
-
-  if (manualIpInput) {
-    manualIpInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        triggerManualAdd();
-      }
-    });
-  }
-
-  // -------------------------------------------------------------
-  // 6. Transfer Logic & Consent Setup
+  // 5. Transfer Logic & Consent Setup
   // -------------------------------------------------------------
   setupTransfer();
 
   // -------------------------------------------------------------
-  // 7. Device Pairing Setup (PIN & QR Code)
+  // 6. Device Pairing Setup (PIN, QR Code, Direct IP)
   // -------------------------------------------------------------
   setupPairing();
 });

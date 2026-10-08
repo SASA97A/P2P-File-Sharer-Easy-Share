@@ -74,18 +74,6 @@
         </div>
       </div>
 
-      <!-- Manual Peer IP Input -->
-      <div class="manual-add">
-        <input
-          type="text"
-          id="manualIp"
-          placeholder="Enter IP address (e.g. 192.168.1.42)"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button id="manualAddBtn">Add Device</button>
-      </div>
-
       <!-- Discovered Devices Radar -->
       <div class="device-section">
         <div class="section-header">
@@ -174,71 +162,153 @@
         </div>
 
         <div class="modal-body pairing-modal-body">
-          <div class="pairing-grid">
-            <!-- Left Column: Share My Device -->
-            <div class="pairing-column share-column">
-              <div class="column-header">
-                <h4 class="column-title">Share My Device</h4>
-                <p class="column-desc">Scan QR code or enter this PIN on another device</p>
-              </div>
+          <!-- Segmented Tab Switcher (3 Modes) -->
+          <div class="pairing-tabs" role="tablist" aria-label="Pairing Options">
+            <button
+              class="pairing-tab active"
+              id="tabPinBtn"
+              role="tab"
+              aria-selected="true"
+              aria-controls="viewPin"
+              tabindex="0"
+            >
+              <span class="tab-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hash"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></svg>
+              </span>
+              <span>6-Digit PIN</span>
+            </button>
+            <button
+              class="pairing-tab"
+              id="tabQrBtn"
+              role="tab"
+              aria-selected="false"
+              aria-controls="viewQr"
+              tabindex="-1"
+            >
+              <span class="tab-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-qr-code"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+              </span>
+              <span>QR Code</span>
+            </button>
+            <button
+              class="pairing-tab"
+              id="tabAddressBtn"
+              role="tab"
+              aria-selected="false"
+              aria-controls="viewAddress"
+              tabindex="-1"
+            >
+              <span class="tab-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wifi"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg>
+              </span>
+              <span>Direct IP</span>
+            </button>
+          </div>
 
-              <div class="pairing-pin-box">
-                <span class="pin-box-label">6-Digit Pairing PIN</span>
-                <div class="pairing-pin-display" id="myPairingPin">839 - 421</div>
-              </div>
-
-              <div class="pairing-qr-wrapper">
-                <div class="pairing-qr-box" id="myPairingQrBox" aria-label="QR Code for direct device pairing">
-                  <!-- QR SVG dynamically injected -->
+          <!-- Tab 1: 6-Digit PIN Screen (Default) -->
+          <div class="pairing-tab-content" id="viewPin" role="tabpanel" aria-labelledby="tabPinBtn">
+            <div class="pairing-cards-split">
+              <!-- Share PIN Card -->
+              <div class="pairing-subcard">
+                <div class="column-header">
+                  <h4 class="column-title">Your Pairing PIN</h4>
+                  <p class="column-desc">Share this 6-digit PIN with a nearby device to connect</p>
                 </div>
-                <span class="pairing-address-hint" id="myPairingDirectInfo">IP: detecting...</span>
+                <div class="pairing-pin-box">
+                  <div class="pairing-pin-display" id="myPairingPin">839 - 421</div>
+                </div>
+                <div class="pairing-actions-row">
+                  <button class="action-pill-btn" id="copyPinBtn" title="Copy 6-digit PIN">
+                    <span class="btn-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    </span>
+                    <span>Copy PIN</span>
+                  </button>
+                  <button class="action-pill-btn" id="refreshPinBtn" title="Generate new PIN">
+                    <span class="btn-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                    </span>
+                    <span>New PIN</span>
+                  </button>
+                </div>
               </div>
 
-              <div class="pairing-actions-row">
-                <button class="action-pill-btn" id="copyPinBtn" title="Copy 6-digit PIN">
-                  <span class="btn-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  </span>
-                  <span>Copy PIN</span>
-                </button>
+              <!-- Connect by PIN Card -->
+              <div class="pairing-subcard">
+                <div class="column-header">
+                  <h4 class="column-title">Connect via PIN</h4>
+                  <p class="column-desc">Enter the 6-digit PIN shown on the other device</p>
+                </div>
+                <div class="pin-entry-section">
+                  <label for="peerPinInput" class="field-label">Target PIN</label>
+                  <div class="pin-entry-row">
+                    <input
+                      type="text"
+                      id="peerPinInput"
+                      class="pin-text-input"
+                      placeholder="123 - 456"
+                      maxlength="9"
+                      autocomplete="off"
+                      spellcheck="false"
+                      inputmode="numeric"
+                    />
+                    <button class="btn btn-primary connect-pin-btn" id="connectPinBtn">
+                      <span>Connect</span>
+                      <span class="btn-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <div class="pairing-status-message-box" id="pairingStatusBox" style="display: none;">
+                  <div class="pairing-status-spinner" id="pairingStatusSpinner"></div>
+                  <span class="pairing-status-text" id="pairingStatusMessage">Searching local subnet...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: QR Code Screen -->
+          <div class="pairing-tab-content hidden" id="viewQr" role="tabpanel" aria-labelledby="tabQrBtn">
+            <div class="qr-tab-layout">
+              <div class="pairing-qr-box large-qr" id="myPairingQrBox" aria-label="QR Code for direct device pairing">
+                <!-- QR SVG dynamically injected -->
+              </div>
+              <p class="qr-instructions">
+                Scan this QR Code with your mobile phone or tablet camera to pair and transfer files instantly.
+              </p>
+              <div class="qr-actions-row">
                 <button class="action-pill-btn" id="copyLinkBtn" title="Copy pairing link">
                   <span class="btn-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-link"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                   </span>
-                  <span>Copy Link</span>
+                  <span>Copy Pairing Link</span>
                 </button>
-                <button class="action-pill-btn" id="refreshPinBtn" title="Generate new PIN">
-                  <span class="btn-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-                  </span>
-                  <span>New PIN</span>
-                </button>
+                <span class="pairing-address-hint" id="myPairingDirectInfo">IP: detecting...</span>
               </div>
             </div>
+          </div>
 
-            <div class="pairing-divider" role="separator" aria-orientation="vertical"></div>
-
-            <!-- Right Column: Connect to Peer -->
-            <div class="pairing-column connect-column">
+          <!-- Tab 3: Direct IP / URL Screen -->
+          <div class="pairing-tab-content hidden" id="viewAddress" role="tabpanel" aria-labelledby="tabAddressBtn">
+            <div class="address-tab-layout">
               <div class="column-header">
-                <h4 class="column-title">Connect to Peer</h4>
-                <p class="column-desc">Enter the 6-digit PIN displayed on the other device</p>
+                <h4 class="column-title">Direct IP or Custom URL</h4>
+                <p class="column-desc">Connect directly across subnets, corporate VLANs, or custom network ports</p>
               </div>
 
-              <div class="pin-entry-section">
-                <label for="peerPinInput" class="field-label">Pairing PIN</label>
-                <div class="pin-entry-row">
+              <div class="direct-address-form">
+                <label for="peerAddressInput" class="field-label">Target Device Address</label>
+                <div class="direct-address-row">
                   <input
                     type="text"
-                    id="peerPinInput"
-                    class="pin-text-input"
-                    placeholder="123 - 456"
-                    maxlength="9"
+                    id="peerAddressInput"
+                    class="address-text-input"
+                    placeholder="e.g. 192.168.1.50:5050 or 10.20.4.55"
                     autocomplete="off"
                     spellcheck="false"
-                    inputmode="numeric"
                   />
-                  <button class="btn btn-primary connect-pin-btn" id="connectPinBtn">
+                  <button class="btn btn-primary connect-address-btn" id="connectAddressBtn">
                     <span>Connect</span>
                     <span class="btn-icon">
                       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
@@ -247,42 +317,22 @@
                 </div>
               </div>
 
-              <div class="pairing-status-message-box" id="pairingStatusBox" style="display: none;">
-                <div class="pairing-status-spinner" id="pairingStatusSpinner"></div>
-                <span class="pairing-status-text" id="pairingStatusMessage">Searching local subnet...</span>
+              <div class="my-address-card">
+                <div class="my-address-info">
+                  <span class="my-address-label">Your Local Address:</span>
+                  <span class="my-address-val" id="myLocalAddressDisplay">Detecting...</span>
+                </div>
+                <button class="action-pill-btn" id="copyMyAddressBtn" title="Copy your local address">
+                  <span class="btn-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  </span>
+                  <span>Copy</span>
+                </button>
               </div>
 
-              <!-- Direct Address Fallback Accordion -->
-              <div class="direct-address-accordion">
-                <div
-                  class="accordion-toggle"
-                  id="directAddressToggle"
-                  tabindex="0"
-                  role="button"
-                  aria-expanded="false"
-                  aria-controls="directAddressContent"
-                >
-                  <span class="accordion-toggle-title">Direct IP / URL Fallback</span>
-                  <span class="accordion-toggle-icon" id="accordionChevron">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                  </span>
-                </div>
-                <div class="accordion-content" id="directAddressContent" style="display: none;">
-                  <p class="direct-hint">Connect directly via IP:port or easyshare:// URL</p>
-                  <div class="direct-address-row">
-                    <input
-                      type="text"
-                      id="peerAddressInput"
-                      class="address-text-input"
-                      placeholder="192.168.1.50:5050 or easyshare://..."
-                      autocomplete="off"
-                      spellcheck="false"
-                    />
-                    <button class="btn btn-secondary connect-address-btn" id="connectAddressBtn">
-                      Connect Address
-                    </button>
-                  </div>
-                </div>
+              <div class="pairing-status-message-box" id="addressStatusBox" style="display: none;">
+                <div class="pairing-status-spinner" id="addressStatusSpinner"></div>
+                <span class="pairing-status-text" id="addressStatusMessage">Connecting to remote peer...</span>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 /**
  * Easy Share - Device Pairing Modal & IPC Integration
- * Handles PIN display, QR Code rendering, Subnet PIN sweep, and Direct IP pairing.
+ * Handles PIN display, QR Code rendering, Subnet PIN sweep, and Direct IP pairing
+ * with a 3-tab segmented interface (PIN, QR Code, Direct IP).
  */
 
 import {
@@ -40,6 +41,7 @@ function renderPairingInfo(info) {
   const pinDisplay = document.getElementById("myPairingPin");
   const qrBox = document.getElementById("myPairingQrBox");
   const directInfo = document.getElementById("myPairingDirectInfo");
+  const localAddressDisplay = document.getElementById("myLocalAddressDisplay");
 
   if (pinDisplay) {
     pinDisplay.textContent = info.formatted_pin || formatPinDisplay(info.pin);
@@ -60,14 +62,24 @@ function renderPairingInfo(info) {
       directInfo.textContent = "";
     }
   }
+
+  if (localAddressDisplay) {
+    if (info.ip && info.port) {
+      localAddressDisplay.textContent = `${info.ip}:${info.port}`;
+    } else if (info.ip) {
+      localAddressDisplay.textContent = `${info.ip}:5050`;
+    } else {
+      localAddressDisplay.textContent = "127.0.0.1:5050";
+    }
+  }
 }
 
 /**
- * Displays status message / indicator inside pairing dialog
+ * Displays status message / indicator inside PIN view
  * @param {string} message
  * @param {"loading"|"error"|"success"} type
  */
-function setPairingStatus(message, type = "loading") {
+function setPinStatus(message, type = "loading") {
   const statusBox = document.getElementById("pairingStatusBox");
   const statusMsg = document.getElementById("pairingStatusMessage");
 
@@ -79,9 +91,9 @@ function setPairingStatus(message, type = "loading") {
 }
 
 /**
- * Hides status box
+ * Clears PIN status box
  */
-function clearPairingStatus() {
+function clearPinStatus() {
   const statusBox = document.getElementById("pairingStatusBox");
   const statusMsg = document.getElementById("pairingStatusMessage");
 
@@ -95,6 +107,46 @@ function clearPairingStatus() {
 }
 
 /**
+ * Displays status message / indicator inside Direct IP view
+ * @param {string} message
+ * @param {"loading"|"error"|"success"} type
+ */
+function setAddressStatus(message, type = "loading") {
+  const statusBox = document.getElementById("addressStatusBox");
+  const statusMsg = document.getElementById("addressStatusMessage");
+
+  if (!statusBox || !statusMsg) return;
+
+  statusBox.className = `pairing-status-message-box ${type}`;
+  statusMsg.textContent = message;
+  statusBox.style.display = "flex";
+}
+
+/**
+ * Clears Address status box
+ */
+function clearAddressStatus() {
+  const statusBox = document.getElementById("addressStatusBox");
+  const statusMsg = document.getElementById("addressStatusMessage");
+
+  if (statusBox) {
+    statusBox.style.display = "none";
+    statusBox.className = "pairing-status-message-box";
+  }
+  if (statusMsg) {
+    statusMsg.textContent = "";
+  }
+}
+
+/**
+ * Clears all status indicators across tabs
+ */
+function clearAllStatus() {
+  clearPinStatus();
+  clearAddressStatus();
+}
+
+/**
  * Initializes pairing dialog event bindings and IPC commands
  */
 export function setupPairing() {
@@ -102,41 +154,104 @@ export function setupPairing() {
   const closeBtn = document.getElementById("closePairingBtn");
   const modal = document.getElementById("pairing-modal");
 
-  const copyPinBtn = document.getElementById("copyPinBtn");
-  const copyLinkBtn = document.getElementById("copyLinkBtn");
-  const refreshPinBtn = document.getElementById("refreshPinBtn");
+  // Tab buttons
+  const tabPinBtn = document.getElementById("tabPinBtn");
+  const tabQrBtn = document.getElementById("tabQrBtn");
+  const tabAddressBtn = document.getElementById("tabAddressBtn");
 
+  // Tab view panels
+  const viewPin = document.getElementById("viewPin");
+  const viewQr = document.getElementById("viewQr");
+  const viewAddress = document.getElementById("viewAddress");
+
+  const tabs = [
+    { btn: tabPinBtn, view: viewPin, id: "pin" },
+    { btn: tabQrBtn, view: viewQr, id: "qr" },
+    { btn: tabAddressBtn, view: viewAddress, id: "address" },
+  ];
+
+  // Actions in Pin View
+  const copyPinBtn = document.getElementById("copyPinBtn");
+  const refreshPinBtn = document.getElementById("refreshPinBtn");
   const peerPinInput = document.getElementById("peerPinInput");
   const connectPinBtn = document.getElementById("connectPinBtn");
 
-  const addressToggle = document.getElementById("directAddressToggle");
-  const addressContent = document.getElementById("directAddressContent");
+  // Actions in QR View
+  const copyLinkBtn = document.getElementById("copyLinkBtn");
+
+  // Actions in Address View
   const peerAddressInput = document.getElementById("peerAddressInput");
   const connectAddressBtn = document.getElementById("connectAddressBtn");
+  const copyMyAddressBtn = document.getElementById("copyMyAddressBtn");
+
+  // -------------------------------------------------------------
+  // Tab Switching Logic
+  // -------------------------------------------------------------
+  function switchTab(targetId) {
+    clearAllStatus();
+
+    tabs.forEach(({ btn, view, id }) => {
+      const isActive = id === targetId;
+      if (btn) {
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-selected", String(isActive));
+        btn.setAttribute("tabindex", isActive ? "0" : "-1");
+      }
+      if (view) {
+        view.classList.toggle("hidden", !isActive);
+      }
+    });
+
+    if (targetId === "pin" && peerPinInput) {
+      setTimeout(() => peerPinInput.focus(), 50);
+    } else if (targetId === "address" && peerAddressInput) {
+      setTimeout(() => peerAddressInput.focus(), 50);
+    }
+  }
+
+  tabs.forEach(({ btn, id }, index) => {
+    if (!btn) return;
+
+    btn.addEventListener("click", () => switchTab(id));
+
+    btn.addEventListener("keydown", (e) => {
+      let nextIndex = index;
+      if (e.key === "ArrowRight") {
+        nextIndex = (index + 1) % tabs.length;
+      } else if (e.key === "ArrowLeft") {
+        nextIndex = (index - 1 + tabs.length) % tabs.length;
+      }
+
+      if (nextIndex !== index) {
+        e.preventDefault();
+        tabs[nextIndex].btn?.focus();
+        switchTab(tabs[nextIndex].id);
+      }
+    });
+  });
 
   // -------------------------------------------------------------
   // Modal Open & Close Lifecycle
   // -------------------------------------------------------------
   async function openModal() {
     if (!modal) return;
-    clearPairingStatus();
+    clearAllStatus();
 
     if (peerPinInput) peerPinInput.value = "";
     if (peerAddressInput) peerAddressInput.value = "";
 
+    // Default to PIN tab on opening
+    switchTab("pin");
+
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
-
-    if (peerPinInput) {
-      setTimeout(() => peerPinInput.focus(), 80);
-    }
 
     try {
       const info = await getMyPairingInfo();
       renderPairingInfo(info);
     } catch (err) {
       console.error("Failed to load pairing info:", err);
-      setPairingStatus("Failed to retrieve local pairing information", "error");
+      setPinStatus("Failed to retrieve local pairing information", "error");
     }
   }
 
@@ -144,7 +259,7 @@ export function setupPairing() {
     if (!modal) return;
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
-    clearPairingStatus();
+    clearAllStatus();
   }
 
   if (openBtn) {
@@ -170,7 +285,7 @@ export function setupPairing() {
   });
 
   // -------------------------------------------------------------
-  // Copy Actions (PIN & Direct Link)
+  // Copy Actions (PIN, Direct Link, My Address)
   // -------------------------------------------------------------
   if (copyPinBtn) {
     copyPinBtn.addEventListener("click", async () => {
@@ -200,6 +315,20 @@ export function setupPairing() {
         showToast("Pairing link copied to clipboard", "success");
       } catch (_err) {
         showToast("Failed to copy link to clipboard", "error");
+      }
+    });
+  }
+
+  if (copyMyAddressBtn) {
+    copyMyAddressBtn.addEventListener("click", async () => {
+      const ip = activePairingInfo?.ip || "127.0.0.1";
+      const port = activePairingInfo?.port || 5050;
+      const addr = `${ip}:${port}`;
+      try {
+        await navigator.clipboard.writeText(addr);
+        showToast(`Address ${addr} copied to clipboard`, "success");
+      } catch (_err) {
+        showToast("Failed to copy address", "error");
       }
     });
   }
@@ -252,11 +381,11 @@ export function setupPairing() {
     const cleanPin = peerPinInput.value.replace(/\D/g, "");
 
     if (cleanPin.length !== 6) {
-      setPairingStatus("Please enter a valid 6-digit numeric PIN", "error");
+      setPinStatus("Please enter a valid 6-digit numeric PIN", "error");
       return;
     }
 
-    setPairingStatus("Scanning local subnet for device with matching PIN...", "loading");
+    setPinStatus("Scanning local subnet for device with matching PIN...", "loading");
     if (connectPinBtn) connectPinBtn.disabled = true;
 
     try {
@@ -268,7 +397,7 @@ export function setupPairing() {
     } catch (err) {
       console.error("Connect by PIN failed:", err);
       const msg = typeof err === "string" ? err : err.message || "Device not found on local network";
-      setPairingStatus(msg, "error");
+      setPinStatus(msg, "error");
       showToast(msg, "error");
     } finally {
       if (connectPinBtn) connectPinBtn.disabled = false;
@@ -280,33 +409,18 @@ export function setupPairing() {
   }
 
   // -------------------------------------------------------------
-  // Direct Address Accordion & Connect by Address
+  // Connect by Address Action
   // -------------------------------------------------------------
-  if (addressToggle && addressContent) {
-    addressToggle.addEventListener("click", () => {
-      const isExpanded = addressToggle.getAttribute("aria-expanded") === "true";
-      addressToggle.setAttribute("aria-expanded", String(!isExpanded));
-      addressContent.style.display = isExpanded ? "none" : "flex";
-    });
-
-    addressToggle.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        addressToggle.click();
-      }
-    });
-  }
-
   async function handleConnectByAddress() {
     if (!peerAddressInput) return;
     const address = peerAddressInput.value.trim();
 
     if (!address) {
-      setPairingStatus("Please enter an IP:port address or easyshare:// link", "error");
+      setAddressStatus("Please enter an IP:port address or easyshare:// link", "error");
       return;
     }
 
-    setPairingStatus("Connecting to remote peer address...", "loading");
+    setAddressStatus("Connecting to remote peer address...", "loading");
     if (connectAddressBtn) connectAddressBtn.disabled = true;
 
     try {
@@ -318,7 +432,7 @@ export function setupPairing() {
     } catch (err) {
       console.error("Connect by address failed:", err);
       const msg = typeof err === "string" ? err : err.message || "Failed to reach remote device";
-      setPairingStatus(msg, "error");
+      setAddressStatus(msg, "error");
       showToast(msg, "error");
     } finally {
       if (connectAddressBtn) connectAddressBtn.disabled = false;
