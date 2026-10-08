@@ -141,6 +141,9 @@ vite.config.ts.timestamp-*
 # Bug Audit documentation
 found-bugs.md
 
+# Documentation folder
+docs/
+
 # Rust / Cargo
 /src-tauri/target/
 target/
