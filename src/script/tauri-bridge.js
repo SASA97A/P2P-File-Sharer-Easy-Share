@@ -55,6 +55,7 @@ const mockState = {
     version: "2.0.0",
     room_id: null,
     port: 5050,
+    pairing_pin: "839421",
   },
   peers: [],
   listeners: new Map(),
@@ -180,6 +181,92 @@ async function callInvoke(command, args = {}) {
       console.log("[Mock] Opened download directory");
       return;
 
+    case "get_my_pairing_info": {
+      const pin = mockState.deviceInfo.pairing_pin || "839421";
+      const formatted_pin = `${pin.slice(0, 3)} - ${pin.slice(3, 6)}`;
+      const ip = "127.0.0.1";
+      const port = mockState.deviceInfo.port || 5050;
+      const direct_url = `easyshare://pair?ip=${ip}&port=${port}&pin=${pin}&name=${encodeURIComponent(mockState.deviceInfo.device_name)}`;
+      const qr_svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="160" height="160"><rect width="100" height="100" fill="#ffffff"/><rect x="10" y="10" width="25" height="25" fill="#222222"/><rect x="65" y="10" width="25" height="25" fill="#222222"/><rect x="10" y="65" width="25" height="25" fill="#222222"/><rect x="42" y="42" width="16" height="16" fill="#4caf50"/></svg>`;
+      return {
+        pin,
+        formatted_pin,
+        qr_svg,
+        direct_url,
+        ip,
+        port,
+      };
+    }
+
+    case "regenerate_pairing_pin": {
+      const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+      mockState.deviceInfo.pairing_pin = newPin;
+      const formatted_pin = `${newPin.slice(0, 3)} - ${newPin.slice(3, 6)}`;
+      const ip = "127.0.0.1";
+      const port = mockState.deviceInfo.port || 5050;
+      const direct_url = `easyshare://pair?ip=${ip}&port=${port}&pin=${newPin}&name=${encodeURIComponent(mockState.deviceInfo.device_name)}`;
+      const qr_svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="160" height="160"><rect width="100" height="100" fill="#ffffff"/><rect x="10" y="10" width="25" height="25" fill="#222222"/><rect x="65" y="10" width="25" height="25" fill="#222222"/><rect x="10" y="65" width="25" height="25" fill="#222222"/><rect x="42" y="42" width="16" height="16" fill="#4caf50"/></svg>`;
+      return {
+        pin: newPin,
+        formatted_pin,
+        qr_svg,
+        direct_url,
+        ip,
+        port,
+      };
+    }
+
+    case "connect_by_pin": {
+      const cleanPin = (args.pin || "").replace(/\D/g, "");
+      if (cleanPin.length !== 6) {
+        throw new Error(`Invalid 6-digit pairing PIN: '${args.pin}'`);
+      }
+      const peer = {
+        device_name: `Peer-${cleanPin.slice(0, 3)}`,
+        device_type: "laptop",
+        os: "mock",
+        room_id: null,
+        ip: "192.168.1.99",
+        port: 5050,
+        pairing_pin: cleanPin,
+      };
+      const existingIdx = mockState.peers.findIndex(
+        (p) => `${p.ip}:${p.port}` === `${peer.ip}:${peer.port}`
+      );
+      if (existingIdx !== -1) {
+        mockState.peers[existingIdx] = peer;
+      } else {
+        mockState.peers.push(peer);
+      }
+      emitMockEvent("peer-found", peer);
+      return peer;
+    }
+
+    case "connect_by_address": {
+      const addr = (args.address || "").trim();
+      if (!addr) {
+        throw new Error("Address cannot be empty");
+      }
+      const peer = {
+        device_name: `Peer-${addr.replace(/[^a-zA-Z0-9.-]/g, "_")}`,
+        device_type: "desktop",
+        os: "unknown",
+        room_id: null,
+        ip: addr.includes("://") ? "192.168.1.88" : addr.split(":")[0],
+        port: 5050,
+      };
+      const existingIdx = mockState.peers.findIndex(
+        (p) => `${p.ip}:${p.port}` === `${peer.ip}:${peer.port}`
+      );
+      if (existingIdx !== -1) {
+        mockState.peers[existingIdx] = peer;
+      } else {
+        mockState.peers.push(peer);
+      }
+      emitMockEvent("peer-found", peer);
+      return peer;
+    }
+
     default:
       console.warn(`[TauriBridge] Unhandled mock command: ${command}`);
       return null;
@@ -296,6 +383,34 @@ export async function getDownloadDir() {
  */
 export async function openDownloadDir() {
   return await callInvoke("open_download_dir");
+}
+
+/**
+ * Fetches the local pairing configuration (PIN, QR code SVG, direct URL)
+ */
+export async function getMyPairingInfo() {
+  return await callInvoke("get_my_pairing_info");
+}
+
+/**
+ * Regenerates the 6-digit numeric pairing PIN and returns the updated pairing payload
+ */
+export async function regeneratePairingPin() {
+  return await callInvoke("regenerate_pairing_pin");
+}
+
+/**
+ * Connects to a remote peer by scanning the local subnet with its 6-digit PIN
+ */
+export async function connectByPin(pin) {
+  return await callInvoke("connect_by_pin", { pin });
+}
+
+/**
+ * Connects to a remote peer directly by IP:port or easyshare:// URL
+ */
+export async function connectByAddress(address) {
+  return await callInvoke("connect_by_address", { address });
 }
 
 // -------------------------------------------------------------

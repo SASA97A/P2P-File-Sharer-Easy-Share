@@ -11,6 +11,7 @@ import {
   addManualPeerInput,
 } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
+import { setupPairing } from "./pairing.js";
 import { updateMyDeviceBadge, showToast } from "./ui.js";
 import {
   getMyDeviceInfo,
@@ -191,4 +192,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 6. Transfer Logic & Consent Setup
   // -------------------------------------------------------------
   setupTransfer();
+
+  // -------------------------------------------------------------
+  // 7. Device Pairing Setup (PIN & QR Code)
+  // -------------------------------------------------------------
+  setupPairing();
 });
