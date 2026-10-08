@@ -27,3 +27,6 @@ dirs = "6"
 tower-http = { version = "0.6", features = ["cors"] }
 futures-util = "0.3"
 socket2 = "0.5"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+rand = "0.8"
+url = "2"
