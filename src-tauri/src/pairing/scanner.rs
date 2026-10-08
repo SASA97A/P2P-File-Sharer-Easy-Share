@@ -68,8 +68,7 @@ pub fn parse_address_or_url(input: &str) -> Result<(String, u16), String> {
         if let Some(closing_bracket) = trimmed.rfind(']') {
             let host = &trimmed[1..closing_bracket];
             let remainder = &trimmed[closing_bracket + 1..];
-            if remainder.starts_with(':') {
-                let port_str = &remainder[1..];
+            if let Some(port_str) = remainder.strip_prefix(':') {
                 let port = port_str
                     .parse::<u16>()
                     .map_err(|_| format!("Invalid port number: {}", port_str))?;
