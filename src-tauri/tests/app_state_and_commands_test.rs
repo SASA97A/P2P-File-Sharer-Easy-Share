@@ -1,11 +1,8 @@
 use easy_share_lib::app_state::AppState;
 use easy_share_lib::client::{FileToSend, TransferClient};
 use easy_share_lib::commands::{
-    cancel_transfer, get_discovered_peers, get_download_dir, get_my_device_info,
-    respond_transfer_request, FileSelection, ProgressPayload, TransferCompletedPayload,
-    TransferErrorPayload,
+    build_pairing_payload, FileSelection, PairingInfoPayload, ProgressPayload,
 };
-use easy_share_lib::discovery::{DiscoveryConfig, DiscoveryService};
 use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
 use easy_share_lib::models::transfer::{FileMetadata, TransferRequest, TransferStatus};
 use easy_share_lib::server::{start_server, ConsentPolicy, ConsentRequest, ServerState};
@@ -62,7 +59,7 @@ async fn test_app_state_creation_and_device_info() {
 async fn test_pending_consent_workflow_accept_and_decline() {
     let temp_dir = setup_test_dir("consent");
     let info = sample_device_info();
-    let (tx, mut rx) = mpsc::channel::<ConsentRequest>(10);
+    let (tx, _rx) = mpsc::channel::<ConsentRequest>(10);
     let server_state = Arc::new(ServerState::with_consent(
         info.clone(),
         temp_dir.clone(),
@@ -79,7 +76,7 @@ async fn test_pending_consent_workflow_accept_and_decline() {
 
     // Test 1: User Accepts
     let (resp_tx1, resp_rx1) = oneshot::channel();
-    let req1 = TransferRequest::new(
+    let _req1 = TransferRequest::new(
         "req-test-1",
         "Sender-Alice",
         "windows",
@@ -254,4 +251,104 @@ async fn test_full_client_server_transfer_with_events_payload() {
         received_hash,
         file_to_send.blake3_hash.as_ref().unwrap().clone()
     );
+}
+
+#[tokio::test]
+async fn test_build_pairing_payload_and_regeneration() {
+    let temp_dir = setup_test_dir("pairing_payload");
+    let info = sample_device_info();
+    let server_state = Arc::new(ServerState::new(info.clone(), temp_dir.clone()));
+    let pending_consents = Arc::new(RwLock::new(HashMap::new()));
+
+    let app_state = AppState::new(server_state, None, temp_dir.clone(), pending_consents);
+
+    let payload = build_pairing_payload(&app_state)
+        .await
+        .expect("should build pairing payload");
+
+    assert_eq!(payload.pin.len(), 6);
+    assert_eq!(
+        payload.formatted_pin,
+        format!("{} - {}", &payload.pin[..3], &payload.pin[3..])
+    );
+    assert!(payload.qr_svg.contains("<svg"));
+    assert!(payload.qr_svg.contains("</svg>"));
+    assert!(payload.direct_url.starts_with("easyshare://pair?"));
+    assert!(payload.direct_url.contains(&format!("pin={}", payload.pin)));
+    assert!(payload.direct_url.contains("name=Test-Host"));
+    assert_eq!(payload.port, 5050);
+
+    // Test JSON Serialization / Deserialization
+    let json = serde_json::to_string(&payload).expect("serialization should succeed");
+    let deserialized: PairingInfoPayload =
+        serde_json::from_str(&json).expect("deserialization should succeed");
+    assert_eq!(payload, deserialized);
+
+    // Test Regeneration
+    let new_pin = app_state.regenerate_pairing_pin().await;
+    let payload2 = build_pairing_payload(&app_state)
+        .await
+        .expect("should build updated pairing payload");
+    assert_eq!(payload2.pin, new_pin);
+    assert_eq!(
+        payload2.formatted_pin,
+        format!("{} - {}", &new_pin[..3], &new_pin[3..])
+    );
+    assert!(payload2.direct_url.contains(&format!("pin={}", new_pin)));
+}
+
+#[tokio::test]
+async fn test_connect_by_address_and_pin_matching() {
+    let temp_dir = setup_test_dir("pairing_connect");
+    let mut target_info = DeviceInfo::new(
+        "Direct-Target",
+        "desktop",
+        "windows",
+        "2.0.0",
+        Some("Engineering".to_string()),
+        0,
+    );
+    target_info.pairing_pin = Some("482910".to_string());
+
+    let target_server_state = Arc::new(ServerState::new(target_info, temp_dir.clone()));
+    let (target_port, _target_task) = start_server(target_server_state, 0)
+        .await
+        .expect("target server must start");
+
+    let client = TransferClient::new();
+
+    // 1. Direct connect by raw IP:Port
+    let direct_addr = format!("127.0.0.1:{}", target_port);
+    let peer = easy_share_lib::pairing::resolve_peer_by_address(&client, &direct_addr)
+        .await
+        .expect("should resolve peer by address");
+    assert_eq!(peer.device_name, "Direct-Target");
+    assert_eq!(peer.port, target_port);
+    assert_eq!(peer.pairing_pin, Some("482910".to_string()));
+
+    // 2. Direct connect by EasyShare QR URL
+    let qr_url = format!(
+        "easyshare://pair?ip=127.0.0.1&port={}&pin=482910&name=Direct-Target",
+        target_port
+    );
+    let peer_qr = easy_share_lib::pairing::resolve_peer_by_address(&client, &qr_url)
+        .await
+        .expect("should resolve peer by QR URL");
+    assert_eq!(peer_qr.device_name, "Direct-Target");
+    assert_eq!(peer_qr.port, target_port);
+    assert_eq!(peer_qr.pairing_pin, Some("482910".to_string()));
+
+    // 3. Connect by PIN matching against cached peer
+    let cached_peers = vec![peer.clone()];
+    let normalized_input =
+        easy_share_lib::pairing::pin::normalize_pin("482 - 910").expect("should normalize");
+    let matched = cached_peers.into_iter().find(|p| {
+        p.pairing_pin
+            .as_deref()
+            .and_then(easy_share_lib::pairing::pin::normalize_pin)
+            .map(|p_pin| p_pin == normalized_input)
+            .unwrap_or(false)
+    });
+    assert!(matched.is_some());
+    assert_eq!(matched.unwrap().device_name, "Direct-Target");
 }

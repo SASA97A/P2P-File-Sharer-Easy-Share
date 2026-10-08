@@ -146,6 +146,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_my_device_info,
+            commands::get_my_pairing_info,
+            commands::regenerate_pairing_pin,
+            commands::connect_by_pin,
+            commands::connect_by_address,
             commands::get_discovered_peers,
             commands::add_manual_peer,
             commands::set_room_id,

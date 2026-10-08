@@ -46,10 +46,120 @@ pub struct TransferErrorPayload {
     pub error: String,
 }
 
+/// Payload containing local pairing credentials, formatted PIN, QR SVG, and direct URL.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PairingInfoPayload {
+    pub pin: String,
+    pub formatted_pin: String,
+    pub qr_svg: String,
+    pub direct_url: String,
+    pub ip: String,
+    pub port: u16,
+}
+
+/// Builds the pairing payload containing PIN, QR SVG, and direct pairing URL for the current device.
+pub async fn build_pairing_payload(state: &AppState) -> Result<PairingInfoPayload, String> {
+    let device_info = state.get_device_info().await;
+    let pin = match device_info.pairing_pin {
+        Some(p) => p,
+        None => state.regenerate_pairing_pin().await,
+    };
+    let ip = crate::discovery::nic::get_best_physical_ip()
+        .map(|ip| ip.to_string())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let port = device_info.port;
+    let direct_url =
+        crate::pairing::qr::build_pairing_url(&ip, port, &pin, &device_info.device_name);
+    let qr_svg = crate::pairing::qr::generate_qr_svg(&direct_url)?;
+    let formatted_pin = crate::pairing::pin::format_pin(&pin);
+
+    Ok(PairingInfoPayload {
+        pin,
+        formatted_pin,
+        qr_svg,
+        direct_url,
+        ip,
+        port,
+    })
+}
+
 /// Returns the current device identity and server metadata.
 #[tauri::command]
 pub async fn get_my_device_info(state: State<'_, AppState>) -> Result<DeviceInfo, String> {
     Ok(state.get_device_info().await)
+}
+
+/// Returns the local device's pairing info including 6-digit PIN, QR SVG, and direct URL.
+#[tauri::command]
+pub async fn get_my_pairing_info(
+    state: State<'_, AppState>,
+) -> Result<PairingInfoPayload, String> {
+    build_pairing_payload(&state).await
+}
+
+/// Regenerates the 6-digit pairing PIN and returns the updated pairing info payload.
+#[tauri::command]
+pub async fn regenerate_pairing_pin(
+    state: State<'_, AppState>,
+) -> Result<PairingInfoPayload, String> {
+    state.regenerate_pairing_pin().await;
+    build_pairing_payload(&state).await
+}
+
+/// Connects to a remote peer on the local network by scanning for a matching 6-digit PIN.
+#[tauri::command]
+pub async fn connect_by_pin(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    pin: String,
+) -> Result<PeerInfo, String> {
+    let normalized = crate::pairing::pin::normalize_pin(&pin)
+        .ok_or_else(|| format!("Invalid 6-digit pairing PIN: '{}'", pin))?;
+
+    let peers = state.get_peers().await;
+    let cached_peer = peers.into_iter().find(|p| {
+        p.pairing_pin
+            .as_deref()
+            .and_then(crate::pairing::pin::normalize_pin)
+            .map(|p_pin| p_pin == normalized)
+            .unwrap_or(false)
+    });
+
+    let peer = match cached_peer {
+        Some(p) => p,
+        None => {
+            let local_ip = crate::discovery::nic::get_best_physical_ip()
+                .map(|ip| ip.to_string())
+                .unwrap_or_else(|| "127.0.0.1".to_string());
+            crate::pairing::scanner::sweep_subnet_for_pin(
+                &state.transfer_client,
+                &local_ip,
+                &normalized,
+                5050,
+                50,
+                250,
+            )
+            .await?
+        }
+    };
+
+    state.add_manual_peer(peer.clone()).await;
+    let _ = app.emit("peer-found", &peer);
+    Ok(peer)
+}
+
+/// Connects to a remote peer directly using an IP address, IP:port, HTTP URL, or EasyShare QR URL.
+#[tauri::command]
+pub async fn connect_by_address(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    address: String,
+) -> Result<PeerInfo, String> {
+    let peer =
+        crate::pairing::scanner::resolve_peer_by_address(&state.transfer_client, &address).await?;
+    state.add_manual_peer(peer.clone()).await;
+    let _ = app.emit("peer-found", &peer);
+    Ok(peer)
 }
 
 /// Returns the currently discovered active peers on the network.
