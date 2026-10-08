@@ -37,7 +37,7 @@ A blazingly fast, lightweight, and secure **local P2P file sharing desktop appli
 
 Ensure you have the following installed:
 
-1. **Node.js**: (v18 or newer recommended) — [Download Node.js](https://nodejs.org/)
+1. **Bun**: (v1.0 or newer recommended) — [Install Bun](https://bun.sh/) *(or Node.js v18+)*
 2. **Rust & Cargo**: (stable channel) — [Install Rust](https://www.rust-lang.org/tools/install)
 3. **Platform Dependencies**:
    - **Windows**: Microsoft Visual Studio C++ Build Tools & WebView2 (pre-installed on Windows 10/11).
@@ -56,23 +56,23 @@ cd P2P-File-Sharer-Easy-Share
 
 ### 2. Install frontend dependencies
 ```bash
-npm install
+bun install
 ```
 
 ### 3. Run in Development Mode
-Starts the Vite/web development server and launches the native Tauri desktop window:
+Launches the native Tauri desktop window:
 ```bash
-npm run dev
+bun run dev
 # or
-npx tauri dev
+bun run tauri dev
 ```
 
 ### 4. Build Production Application
 Compiles the optimized Rust backend and packages the native executable/installer:
 ```bash
-npm run build
+bun run build
 # or
-npx tauri build
+bun run tauri build
 ```
 The compiled binaries and platform bundles (`.msi`, `.dmg`, `.deb`, `.AppImage`) will be available in `src-tauri/target/release/bundle/`.
 
