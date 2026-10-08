@@ -2,54 +2,93 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http: https:;"
+    />
     <title>Easy Share</title>
     <link rel="stylesheet" href="styles/styles.css" />
   </head>
   <body>
     <div class="container app-shell">
+      <!-- App Header & Local Device Identity -->
       <header class="app-header">
-        <h1 class="app-title">Easy Share</h1>
-        <span class="app-subtitle">Local P2P file transfer</span>
+        <div class="header-left">
+          <h1 class="app-title">Easy Share</h1>
+          <span class="app-subtitle">High-speed P2P local file transfer</span>
+        </div>
+        <div class="device-identity-badge" id="myDeviceBadge" title="Your device identity on the network">
+          <span class="identity-icon">🖥️</span>
+          <div class="identity-text">
+            <span class="identity-name" id="myDeviceName">Detecting device...</span>
+            <span class="identity-room" id="myDeviceRoom">Room: Public</span>
+          </div>
+        </div>
       </header>
-      <!-- File selection -->
-      <div class="file-list" id="fileList"></div>
-      <div class="drop-area compact" id="drop-area">
-        <img
-          src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
-          alt="add icon"
-        />
-        <span class="drop-text">Pick files To send</span>
-        <input type="file" id="fileInput" multiple hidden />
+
+      <!-- Room Configuration Bar -->
+      <div class="room-bar">
+        <div class="room-status">
+          <span class="room-label">Active Room:</span>
+          <span class="room-tag active-room-tag" id="currentRoomTag">Public (Default)</span>
+        </div>
+        <div class="room-input-group">
+          <input
+            type="text"
+            id="roomIdInput"
+            placeholder="Set Room (e.g. Design, Office, Home)"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="setRoomBtn" class="action-btn">Set Room</button>
+        </div>
       </div>
 
-      <!-- Manual peer add -->
+      <!-- File Staging Area -->
+      <div class="file-section">
+        <div class="file-list" id="fileList"></div>
+        <div
+          class="drop-area compact"
+          id="drop-area"
+          tabindex="0"
+          role="button"
+          aria-label="Pick files or drop them here"
+        >
+          <img
+            src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
+            alt="add icon"
+          />
+          <span class="drop-text">Drag & drop files here, or click to browse</span>
+          <input type="file" id="fileInput" multiple hidden />
+        </div>
+      </div>
+
+      <!-- Manual Peer IP Input -->
       <div class="manual-add">
         <input
           type="text"
           id="manualIp"
-          placeholder="Enter IP (e.g. 192.168.1.42)"
+          placeholder="Enter IP address (e.g. 192.168.1.42)"
+          autocomplete="off"
+          spellcheck="false"
         />
         <button id="manualAddBtn">Add Device</button>
       </div>
 
-      <!-- Devices -->
-      <div class="device-list" id="deviceList">
-        <!-- <div class="device">
-          <div class="device-icon">🖥️</div>
-          <div class="device-name">Device 1</div>
+      <!-- Discovered Devices Radar -->
+      <div class="device-section">
+        <div class="section-header">
+          <h2 class="section-title">Nearby Devices</h2>
+          <span class="device-count" id="deviceCount">0 found</span>
         </div>
-        <div class="device">
-          <div class="device-icon">🖥️</div>
-          <div class="device-name">Device 2</div>
+        <div class="device-list" id="deviceList">
+          <div class="loader">Searching for nearby devices...</div>
         </div>
-        <div class="device">
-          <div class="device-icon">📱</div>
-          <div class="device-name">Device 3</div>
-        </div>-->
       </div>
 
-      <!-- Send button -->
-      <button class="send-btn" disabled>
+      <!-- Send Action Button -->
+      <button class="send-btn" id="sendBtn" disabled>
         <div class="send-info">
           <span class="send-count">0 files</span>
           <span class="send-size">0 MB</span>
@@ -60,8 +99,45 @@
       </button>
     </div>
 
-    <!--toast-->
-    <div id="toast-container"></div>
+    <!-- Interactive Consent Modal for Incoming Transfers -->
+    <div
+      id="consent-modal"
+      class="modal-overlay hidden"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="consentModalTitle"
+    >
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-icon" id="consentSenderIcon">💻</div>
+          <div class="modal-title-group">
+            <h3 class="modal-title" id="consentModalTitle">Incoming File Transfer</h3>
+            <span class="modal-subtitle" id="consentSenderInfo">Alice-PC (Windows)</span>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="transfer-summary">
+            <div class="summary-left">
+              <span class="summary-count" id="consentFileCount">0 files</span>
+              <span class="summary-dot">•</span>
+              <span class="summary-size" id="consentTotalSize">0 MB</span>
+            </div>
+            <span class="room-badge" id="consentRoomBadge" style="display: none;">Public</span>
+          </div>
+          <div class="modal-file-list" id="consentFileList">
+            <!-- Dynamically populated files -->
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="consentDeclineBtn" class="modal-btn btn-decline">Decline</button>
+          <button id="consentAcceptBtn" class="modal-btn btn-accept">Accept & Download</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Non-blocking Toast Feedback -->
+    <div id="toast-container" aria-live="polite"></div>
 
     <script type="module" src="./script/renderer.js"></script>
   </body>

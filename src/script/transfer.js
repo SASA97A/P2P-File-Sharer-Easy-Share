@@ -1,83 +1,150 @@
-// transfer.js (Revised)
+/**
+ * Easy Share - Transfer Controller
+ * Handles outbound file transfer initiation, incoming consent requests,
+ * real-time progress tracking, and completion/error events.
+ */
 
 import { getFiles } from "./files.js";
 import { getSelectedPeer } from "./peers.js";
-import { showToast } from "./ui.js";
+import { showConsentModal, showToast } from "./ui.js";
+import {
+  startTransfer,
+  respondTransferRequest,
+  onTransferRequested,
+  onTransferProgress,
+  onTransferCompleted,
+  onTransferError,
+} from "./tauri-bridge.js";
 
 /**
- * Sets up the file transfer functionality
+ * Initializes transfer listeners and the Send button action handler
  */
 export function setupTransfer() {
-  const sendBtn = document.querySelector(".send-btn");
-  let isSending = false; // State guard to prevent multiple sends
+  const sendBtn = document.getElementById("sendBtn") || document.querySelector(".send-btn");
+  const sendActionLabel = document.querySelector(".send-action span");
+  let isSending = false;
 
-  sendBtn.addEventListener("click", async () => {
-    if (isSending) return;
-    isSending = true;
-
-    const peer = getSelectedPeer();
-    const files = getFiles();
-
-    if (!peer) {
-      showToast("⚠️ Please select a device first!", "error");
-      isSending = false;
-      return;
+  /**
+   * Updates send button text without destroying child DOM elements
+   * @param {string} text
+   */
+  function setSendBtnLabel(text) {
+    if (sendActionLabel) {
+      sendActionLabel.textContent = text;
     }
-    if (files.length === 0) {
-      showToast("⚠️ Please choose a file(s) to send!", "error");
-      isSending = false;
-      return;
-    }
+  }
 
-    try {
+  // -------------------------------------------------------------
+  // Outbound Transfer Initiation
+  // -------------------------------------------------------------
+  if (sendBtn) {
+    sendBtn.addEventListener("click", async () => {
+      if (isSending) return;
+
+      const peer = getSelectedPeer();
+      const files = getFiles();
+
+      if (!peer) {
+        showToast("⚠️ Please select a target device first!", "error");
+        return;
+      }
+      if (!files || files.length === 0) {
+        showToast("⚠️ Please select at least one file to send!", "error");
+        return;
+      }
+
+      isSending = true;
       sendBtn.disabled = true;
-      sendBtn.textContent = "Sending...";
+      setSendBtnLabel("Connecting...");
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      try {
+        const sessionToken = await startTransfer(peer, files);
+        setSendBtnLabel("Sending...");
+        showToast(`Transfer started to ${peer.device_name || peer.ip}!`, "info");
+        console.log(`Transfer active with session token: ${sessionToken}`);
+      } catch (err) {
+        showToast(`Transfer failed: ${err}`, "error");
+        isSending = false;
+        sendBtn.disabled = false;
+        setSendBtnLabel("Send");
+      }
+    });
+  }
 
-        // Reset progress bar for this file
-        const fileItem = document.getElementById(`file-${i}`); //if (bar) bar.style.width = "0%";
+  // -------------------------------------------------------------
+  // Incoming Transfer Consent Event
+  // -------------------------------------------------------------
+  onTransferRequested(async (request) => {
+    try {
+      const accepted = await showConsentModal(request);
+      await respondTransferRequest(request.request_id, accepted);
 
-        // Attach listener for this file's progress updates
-        window.api.onSendProgress?.((progress) => {
-          const percent = Math.round((progress.sent / progress.total) * 100);
-
-          if (fileItem) {
-            fileItem.style.setProperty("--progress", percent + "%");
-
-            // Optional: mark completed
-            if (percent === 100) {
-              fileItem.classList.add("completed");
-            }
-          }
-        });
-
-        // **KEY FIX:** Pass a stripped-down object containing the path, not the data
-        const fileToSend = {
-          name: file.name,
-          size: file.size,
-          // The fullPath must now be available on the file object
-          fullPath: file.fullPath,
-        };
-
-        // Send the file and wait for completion
-        await window.api.sendFile(peer, file);
-
-        showToast(`✅ ${file.name} sent successfully!`, "success");
+      if (accepted) {
+        showToast(`Receiving files from ${request.sender_name}...`, "info");
+      } else {
+        showToast(`Declined transfer from ${request.sender_name}.`, "info");
       }
     } catch (err) {
-      showToast("❌ Error sending files: " + err, "error");
-    } finally {
-      // Restore button state
-      isSending = false;
-      sendBtn.disabled = false;
-      sendBtn.textContent = "Send";
+      console.error("Error processing transfer consent:", err);
     }
   });
 
-  // Listen for file received events
-  window.api.onFileReceived((filePath) => {
-    showToast(`📥 File received: ${filePath}`, "success");
+  // -------------------------------------------------------------
+  // Real-time Transfer Progress Event
+  // -------------------------------------------------------------
+  onTransferProgress((progress) => {
+    const { file_name, percent } = progress;
+
+    if (isSending) {
+      setSendBtnLabel(`Sending (${percent}%)`);
+    }
+
+    // Locate matching file element in the UI staging area
+    const fileItems = document.querySelectorAll(".file-item");
+    fileItems.forEach((item) => {
+      const nameEl = item.querySelector(".file-name");
+      if (nameEl && nameEl.textContent.trim() === (file_name || "").trim()) {
+        item.style.setProperty("--progress", `${percent}%`);
+        if (percent >= 100) {
+          item.classList.add("completed");
+        }
+      }
+    });
+  });
+
+  // -------------------------------------------------------------
+  // Transfer Completed Event
+  // -------------------------------------------------------------
+  onTransferCompleted((payload) => {
+    const { file_name, saved_path } = payload;
+    const pathInfo = saved_path ? ` (Saved to: ${saved_path})` : "";
+    showToast(`✅ Transfer completed: ${file_name}${pathInfo}`, "success");
+
+    // Mark matching UI file item as 100% complete
+    const fileItems = document.querySelectorAll(".file-item");
+    fileItems.forEach((item) => {
+      const nameEl = item.querySelector(".file-name");
+      if (nameEl && nameEl.textContent.trim() === (file_name || "").trim()) {
+        item.style.setProperty("--progress", "100%");
+        item.classList.add("completed");
+      }
+    });
+
+    isSending = false;
+    if (sendBtn) sendBtn.disabled = false;
+    setSendBtnLabel("Send");
+  });
+
+  // -------------------------------------------------------------
+  // Transfer Error Event
+  // -------------------------------------------------------------
+  onTransferError((payload) => {
+    const { error, file_name } = payload;
+    const filePrefix = file_name ? `[${file_name}] ` : "";
+    showToast(`❌ Transfer failed: ${filePrefix}${error}`, "error");
+
+    isSending = false;
+    if (sendBtn) sendBtn.disabled = false;
+    setSendBtnLabel("Send");
   });
 }

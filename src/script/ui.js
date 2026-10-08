@@ -1,38 +1,110 @@
 /**
- * Renders the list of discovered peers in the UI
- * @param {Array} peers - Array of peer objects
- * @param {Function} onSelectPeer - Callback when a peer is selected
+ * Easy Share - UI Rendering and View Components
  */
-export function renderPeers(peers, onSelectPeer) {
+
+import { formatFileSize } from "./files.js";
+import { getPeerKey } from "./peers.js";
+
+/**
+ * Escapes unsafe characters for HTML rendering
+ * @param {string} str
+ * @returns {string}
+ */
+export function escapeHtml(str) {
+  if (typeof str !== "string") return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Resolves appropriate device emoji icon based on OS and device type
+ * @param {string} os
+ * @param {string} deviceType
+ * @returns {string}
+ */
+export function getDeviceIcon(os = "", deviceType = "") {
+  const osLower = (os || "").toLowerCase();
+  const typeLower = (deviceType || "").toLowerCase();
+
+  if (osLower.includes("darwin") || osLower.includes("mac") || osLower.includes("ios")) {
+    return "💻";
+  }
+  if (
+    typeLower.includes("mobile") ||
+    typeLower.includes("phone") ||
+    osLower.includes("android")
+  ) {
+    return "📱";
+  }
+  return "🖥️";
+}
+
+/**
+ * Renders the discovered peers radar grid
+ * @param {Array<Object>} peers
+ * @param {Function} onSelectPeer
+ * @param {Object|null} selectedPeer
+ */
+export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
   const deviceList = document.getElementById("deviceList");
+  const countEl = document.getElementById("deviceCount");
+
+  if (countEl) {
+    countEl.textContent = `${peers.length} ${peers.length === 1 ? "device" : "devices"} found`;
+  }
+
+  if (!deviceList) return;
   deviceList.innerHTML = "";
 
-  // Show loading indicator if no peers found
   if (peers.length === 0) {
     const loader = document.createElement("div");
     loader.className = "loader";
-    loader.textContent = "Searching for devices...";
+    loader.textContent = "Searching for nearby devices...";
     deviceList.appendChild(loader);
     return;
   }
 
-  // Create UI elements for each peer
+  const selectedKey = selectedPeer ? getPeerKey(selectedPeer) : null;
+
   peers.forEach((peer) => {
+    const isSelected = selectedKey === getPeerKey(peer);
+    const icon = getDeviceIcon(peer.os, peer.device_type);
+    const peerName = peer.device_name || peer.name || "Unknown Device";
+    const peerIp = peer.ip || peer.host || "0.0.0.0";
+    const peerPort = peer.port || 5050;
+
     const div = document.createElement("div");
-    div.className = "device";
+    div.className = `device${isSelected ? " selected" : ""}`;
+    div.setAttribute("tabindex", "0");
+    div.setAttribute("role", "button");
+    div.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    div.setAttribute("aria-label", `Select device ${peerName}`);
+
     div.innerHTML = `
-      <div class="device-icon">🖥️</div>
-      <div class="device-name">${peer.name}</div>
+      <div class="device-icon">${icon}</div>
+      <div class="device-name" title="${escapeHtml(peerName)}">${escapeHtml(peerName)}</div>
+      <div class="device-meta">
+        <span class="device-ip">${escapeHtml(peerIp)}:${peerPort}</span>
+        ${peer.room_id ? `<span class="room-badge">${escapeHtml(peer.room_id)}</span>` : ""}
+        ${peer.os ? `<span class="os-badge">${escapeHtml(peer.os)}</span>` : ""}
+      </div>
       <div class="checkmark">✔</div>
     `;
 
-    // Handle peer selection
+    // Click & Keyboard Enter/Space selection
     div.addEventListener("click", () => {
-      document
-        .querySelectorAll(".device")
-        .forEach((d) => d.classList.remove("selected"));
-      div.classList.add("selected");
       onSelectPeer(peer);
+    });
+
+    div.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onSelectPeer(peer);
+      }
     });
 
     deviceList.appendChild(div);
@@ -41,14 +113,15 @@ export function renderPeers(peers, onSelectPeer) {
 
 /**
  * Updates the file list in the UI
- * @param {Array} files - Array of File objects
- * @param {Function} removeFileCb - Callback to remove a file
+ * @param {Array<Object>} files
+ * @param {Function} removeFileCb
  */
 export function updateFileList(files, removeFileCb) {
   const fileList = document.getElementById("fileList");
+  if (!fileList) return;
+
   fileList.innerHTML = "";
 
-  // Create UI elements for each file
   files.forEach((file, index) => {
     const item = document.createElement("div");
     item.className = "file-item";
@@ -56,76 +129,203 @@ export function updateFileList(files, removeFileCb) {
     item.style.setProperty("--progress", "0%");
 
     item.innerHTML = `
-    <div class="file-info">
-      <span class="file-name" title="${file.name}">${file.name}</span>
-      <span class="file-size">${formatFileSize(file.size)}</span>
-      <button class="remove-btn" data-index="${index}">✖</button>
-    </div>
-  `;
+      <div class="file-info">
+        <span class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        <span class="file-size">${formatFileSize(file.size)}</span>
+        <button class="remove-btn" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">✖</button>
+      </div>
+    `;
 
     fileList.appendChild(item);
   });
 
-  // Add event listeners to remove buttons
+  // Attach remove handlers
   fileList.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       removeFileCb(e.target.dataset.index);
     });
   });
 }
 
 /**
- * Formats file size in human-readable format (KB, MB, GB)
- * @param {number} bytes - File size in bytes
- * @returns {string} Formatted file size
+ * Updates send button based on selected files count and total size
+ * @param {Array<Object>} files
  */
-function formatFileSize(bytes) {
-  if (bytes >= 1024 ** 3) {
-    return (bytes / 1024 ** 3).toFixed(2) + " GB";
-  } else if (bytes >= 1024 ** 2) {
-    return (bytes / 1024 ** 2).toFixed(2) + " MB";
-  } else {
-    return (bytes / 1024).toFixed(2) + " KB";
+export function updateFilesTotalSize(files) {
+  const btn = document.querySelector(".send-btn");
+  if (!btn) return;
+
+  const countEl = btn.querySelector(".send-count");
+  const sizeEl = btn.querySelector(".send-size");
+
+  if (!files || files.length === 0) {
+    btn.disabled = true;
+    if (countEl) countEl.textContent = "0 files";
+    if (sizeEl) sizeEl.textContent = "0 MB";
+    return;
+  }
+
+  const totalBytes = files.reduce((sum, f) => sum + (Number(f.size) || 0), 0);
+
+  btn.disabled = false;
+  if (countEl) {
+    countEl.textContent = `${files.length} ${files.length === 1 ? "file" : "files"}`;
+  }
+  if (sizeEl) {
+    sizeEl.textContent = formatFileSize(totalBytes);
   }
 }
 
 /**
- * Shows a toast notification
- * @param {string} message - Message to display
- * @param {string} type - Type of toast (info, success, error)
+ * Updates local device identity badge and room tag
+ * @param {Object} deviceInfo
+ */
+export function updateMyDeviceBadge(deviceInfo) {
+  if (!deviceInfo) return;
+
+  const nameEl = document.getElementById("myDeviceName");
+  const roomEl = document.getElementById("myDeviceRoom");
+  const tagEl = document.getElementById("currentRoomTag");
+
+  const deviceName = deviceInfo.device_name || "Local Device";
+  const roomId = deviceInfo.room_id ? deviceInfo.room_id : "Public";
+
+  if (nameEl) {
+    nameEl.textContent = deviceName;
+  }
+  if (roomEl) {
+    roomEl.textContent = `Room: ${roomId}`;
+  }
+  if (tagEl) {
+    tagEl.textContent = deviceInfo.room_id ? deviceInfo.room_id : "Public (Default)";
+  }
+}
+
+/**
+ * Displays a non-blocking toast notification
+ * @param {string} message
+ * @param {"info"|"success"|"error"} type
  */
 export function showToast(message, type = "info") {
   const container = document.getElementById("toast-container");
+  if (!container) return;
+
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   toast.textContent = message;
   container.appendChild(toast);
 
-  // Auto-remove toast after 3 seconds
   setTimeout(() => {
     toast.remove();
-  }, 3000);
+  }, 3500);
 }
 
-//update send button based on number of files selected and their size
-export function updateFilesTotalSize(files) {
-  const btn = document.querySelector(".send-btn");
-  const countEl = btn.querySelector(".send-count");
-  const sizeEl = btn.querySelector(".send-size");
+// Active Consent Modal Resolver reference
+let activeConsentResolver = null;
 
-  if (!files.length) {
-    btn.disabled = true;
-    countEl.textContent = "0 files";
-    sizeEl.textContent = "0 MB";
-    return;
+/**
+ * Shows interactive Consent Modal for incoming file transfer requests
+ * @param {Object} request - TransferRequest payload
+ * @returns {Promise<boolean>} Resolves to true if accepted, false if declined
+ */
+export function showConsentModal(request) {
+  const modal = document.getElementById("consent-modal");
+  if (!modal) return Promise.resolve(false);
+
+  // If a previous consent prompt is open, decline it
+  if (activeConsentResolver) {
+    activeConsentResolver(false);
+    activeConsentResolver = null;
   }
 
-  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
-  const totalGB = totalBytes / 1024 ** 3;
-  const totalMB = totalBytes / 1024 ** 2;
+  const iconEl = document.getElementById("consentSenderIcon");
+  const senderInfoEl = document.getElementById("consentSenderInfo");
+  const countEl = document.getElementById("consentFileCount");
+  const sizeEl = document.getElementById("consentTotalSize");
+  const roomBadgeEl = document.getElementById("consentRoomBadge");
+  const fileListEl = document.getElementById("consentFileList");
+  const acceptBtn = document.getElementById("consentAcceptBtn");
+  const declineBtn = document.getElementById("consentDeclineBtn");
 
-  btn.disabled = false;
-  countEl.textContent = `${files.length} file${files.length > 1 ? "s" : ""}`;
-  sizeEl.textContent =
-    totalGB >= 1 ? `${totalGB.toFixed(2)} GB` : `${totalMB.toFixed(1)} MB`;
+  const files = request.files || [];
+  const senderName = request.sender_name || "Remote Device";
+  const senderOs = request.sender_os ? ` (${request.sender_os})` : "";
+  const totalBytes = Number(request.total_bytes) || 0;
+
+  if (iconEl) {
+    iconEl.textContent = getDeviceIcon(request.sender_os, "");
+  }
+  if (senderInfoEl) {
+    senderInfoEl.textContent = `${senderName}${senderOs}`;
+  }
+  if (countEl) {
+    countEl.textContent = `${files.length} ${files.length === 1 ? "file" : "files"}`;
+  }
+  if (sizeEl) {
+    sizeEl.textContent = formatFileSize(totalBytes);
+  }
+
+  if (roomBadgeEl) {
+    if (request.room_id) {
+      roomBadgeEl.textContent = request.room_id;
+      roomBadgeEl.style.display = "inline-block";
+    } else {
+      roomBadgeEl.style.display = "none";
+    }
+  }
+
+  if (fileListEl) {
+    fileListEl.innerHTML = "";
+    files.forEach((file) => {
+      const row = document.createElement("div");
+      row.className = "modal-file-row";
+      row.innerHTML = `
+        <span class="modal-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        <span class="modal-file-size">${formatFileSize(file.size)}</span>
+      `;
+      fileListEl.appendChild(row);
+    });
+  }
+
+  // Reveal modal
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  acceptBtn?.focus();
+
+  return new Promise((resolve) => {
+    activeConsentResolver = resolve;
+
+    const cleanup = (accepted) => {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      acceptBtn?.removeEventListener("click", onAccept);
+      declineBtn?.removeEventListener("click", onDecline);
+      if (activeConsentResolver === resolve) {
+        activeConsentResolver = null;
+      }
+      resolve(accepted);
+    };
+
+    const onAccept = () => cleanup(true);
+    const onDecline = () => cleanup(false);
+
+    acceptBtn?.addEventListener("click", onAccept, { once: true });
+    declineBtn?.addEventListener("click", onDecline, { once: true });
+  });
+}
+
+/**
+ * Hides the consent modal programmatically
+ */
+export function hideConsentModal() {
+  const modal = document.getElementById("consent-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  }
+  if (activeConsentResolver) {
+    activeConsentResolver(false);
+    activeConsentResolver = null;
+  }
 }
