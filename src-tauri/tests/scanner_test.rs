@@ -91,14 +91,14 @@ async fn test_resolve_peer_by_address_formats() {
 
     let client = TransferClient::new();
 
-    // 1. IP:Port format
+    // 1. IP:Port format (PIN is not leaked on plain address resolution)
     let peer = resolve_peer_by_address(&client, &format!("127.0.0.1:{}", port))
         .await
         .expect("should resolve IP:port");
     assert_eq!(peer.device_name, "Resolve-Target");
     assert_eq!(peer.ip, "127.0.0.1");
     assert_eq!(peer.port, port);
-    assert_eq!(peer.pairing_pin, Some("123456".to_string()));
+    assert_eq!(peer.pairing_pin, None, "Plain IP resolution must not leak remote PIN");
 
     // 2. HTTP URL format
     let peer = resolve_peer_by_address(&client, &format!("http://127.0.0.1:{}/api/v1/info", port))

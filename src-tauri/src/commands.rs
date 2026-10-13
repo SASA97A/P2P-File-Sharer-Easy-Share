@@ -15,6 +15,53 @@ pub struct FileSelection {
     pub name: Option<String>,
 }
 
+/// Detailed representation of a selected file on the host machine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectedFile {
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+}
+
+/// Recursively resolves file metadata (name, size, absolute path) from a slice of path references.
+pub fn inspect_file_paths<P: AsRef<std::path::Path>>(paths: &[P]) -> Vec<SelectedFile> {
+    let mut results = Vec::new();
+    for p in paths {
+        let path_ref = p.as_ref();
+        if path_ref.is_file() {
+            let name = path_ref
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unnamed_file".to_string());
+            let size = std::fs::metadata(path_ref).map(|m| m.len()).unwrap_or(0);
+            results.push(SelectedFile {
+                name,
+                path: path_ref.to_string_lossy().to_string(),
+                size,
+            });
+        } else if path_ref.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(path_ref) {
+                for entry in entries.flatten() {
+                    let sub_path = entry.path();
+                    if sub_path.is_file() {
+                        let name = sub_path
+                            .file_name()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "unnamed_file".to_string());
+                        let size = std::fs::metadata(&sub_path).map(|m| m.len()).unwrap_or(0);
+                        results.push(SelectedFile {
+                            name,
+                            path: sub_path.to_string_lossy().to_string(),
+                            size,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    results
+}
+
 /// Progress event payload sent to frontend during transfer streaming.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProgressPayload {
@@ -117,15 +164,34 @@ pub async fn connect_by_pin(
         .ok_or_else(|| format!("Invalid 6-digit pairing PIN: '{}'", pin))?;
 
     let peers = state.get_peers().await;
-    let cached_peer = peers.into_iter().find(|p| {
-        p.pairing_pin
-            .as_deref()
-            .and_then(crate::pairing::pin::normalize_pin)
-            .map(|p_pin| p_pin == normalized)
-            .unwrap_or(false)
-    });
 
-    let peer = match cached_peer {
+    // 1. Check if any cached peer already has this PIN explicitly (e.g. from QR scan)
+    let mut matching_peer = peers
+        .iter()
+        .find(|p| {
+            p.pairing_pin
+                .as_deref()
+                .and_then(crate::pairing::pin::normalize_pin)
+                .map(|p_pin| p_pin == normalized)
+                .unwrap_or(false)
+        })
+        .cloned();
+
+    // 2. Try authenticating directly against discovered peers via /api/v1/pair
+    if matching_peer.is_none() {
+        for p in &peers {
+            if let Ok(info) = state.transfer_client.pair_peer(p, &normalized).await {
+                let mut paired = p.clone();
+                paired.device_name = info.device_name;
+                paired.pairing_pin = Some(normalized.clone());
+                matching_peer = Some(paired);
+                break;
+            }
+        }
+    }
+
+    // 3. Fall back to sweeping the local subnet for matching PIN
+    let peer = match matching_peer {
         Some(p) => p,
         None => {
             let local_ip = crate::discovery::nic::get_best_physical_ip()
@@ -441,4 +507,50 @@ pub async fn open_download_dir(state: State<'_, AppState>) -> Result<(), String>
             .map_err(|e| format!("Failed to open directory: {}", e))?;
     }
     Ok(())
+}
+
+/// Inspects an array of absolute filesystem paths (e.g. from native window drag-drop)
+/// and resolves their file metadata (name, size, full path).
+#[tauri::command]
+pub async fn inspect_paths(paths: Vec<String>) -> Result<Vec<SelectedFile>, String> {
+    Ok(inspect_file_paths(&paths))
+}
+
+/// Spawns a native OS file dialog allowing user to pick one or more files.
+/// Returns resolved file metadata for all selected items.
+#[tauri::command]
+pub async fn pick_files() -> Result<Vec<SelectedFile>, String> {
+    let files = rfd::AsyncFileDialog::new()
+        .set_title("Select files to send")
+        .pick_files()
+        .await;
+
+    match files {
+        Some(handles) => {
+            let paths: Vec<PathBuf> = handles
+                .into_iter()
+                .map(|h| h.path().to_path_buf())
+                .collect();
+            Ok(inspect_file_paths(&paths))
+        }
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Spawns a native OS folder dialog allowing user to pick a directory.
+/// Returns resolved file metadata for files within the directory.
+#[tauri::command]
+pub async fn pick_folder() -> Result<Vec<SelectedFile>, String> {
+    let folder = rfd::AsyncFileDialog::new()
+        .set_title("Select folder to send")
+        .pick_folder()
+        .await;
+
+    match folder {
+        Some(handle) => {
+            let paths = vec![handle.path().to_path_buf()];
+            Ok(inspect_file_paths(&paths))
+        }
+        None => Ok(Vec::new()),
+    }
 }

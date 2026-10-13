@@ -1,7 +1,8 @@
 use easy_share_lib::app_state::AppState;
 use easy_share_lib::client::{FileToSend, TransferClient};
 use easy_share_lib::commands::{
-    build_pairing_payload, FileSelection, PairingInfoPayload, ProgressPayload,
+    build_pairing_payload, inspect_file_paths, FileSelection, PairingInfoPayload, ProgressPayload,
+    SelectedFile,
 };
 use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
 use easy_share_lib::models::transfer::{FileMetadata, TransferRequest, TransferStatus};
@@ -309,14 +310,14 @@ async fn test_connect_by_address_and_pin_matching() {
 
     let client = TransferClient::new();
 
-    // 1. Direct connect by raw IP:Port
+    // 1. Direct connect by raw IP:Port (does not leak secret PIN)
     let direct_addr = format!("127.0.0.1:{}", target_port);
     let peer = easy_share_lib::pairing::resolve_peer_by_address(&client, &direct_addr)
         .await
         .expect("should resolve peer by address");
     assert_eq!(peer.device_name, "Direct-Target");
     assert_eq!(peer.port, target_port);
-    assert_eq!(peer.pairing_pin, Some("482910".to_string()));
+    assert_eq!(peer.pairing_pin, None, "Plain IP resolution must not leak remote PIN");
 
     // 2. Direct connect by EasyShare QR URL
     let qr_url = format!(
@@ -330,8 +331,8 @@ async fn test_connect_by_address_and_pin_matching() {
     assert_eq!(peer_qr.port, target_port);
     assert_eq!(peer_qr.pairing_pin, Some("482910".to_string()));
 
-    // 3. Connect by PIN matching against cached peer
-    let cached_peers = vec![peer.clone()];
+    // 3. Connect by PIN matching against QR-paired peer
+    let cached_peers = vec![peer_qr.clone()];
     let normalized_input =
         easy_share_lib::pairing::pin::normalize_pin("482 - 910").expect("should normalize");
     let matched = cached_peers.into_iter().find(|p| {
@@ -343,4 +344,46 @@ async fn test_connect_by_address_and_pin_matching() {
     });
     assert!(matched.is_some());
     assert_eq!(matched.unwrap().device_name, "Direct-Target");
+
+    // 4. Authenticate directly via pairing endpoint using the PIN
+    let authenticated = client
+        .pair_peer(&peer, "482910")
+        .await
+        .expect("pair_peer should succeed with correct PIN");
+    assert_eq!(authenticated.device_name, "Direct-Target");
+}
+
+#[tokio::test]
+async fn test_inspect_file_paths_resolution() {
+    let temp_dir = setup_test_dir("inspect_files");
+    let file1_path = temp_dir.join("doc1.txt");
+    let file2_path = temp_dir.join("data.bin");
+    let sub_dir = temp_dir.join("subfolder");
+    let file3_path = sub_dir.join("doc3.txt");
+
+    fs::create_dir_all(&sub_dir).unwrap();
+    fs::write(&file1_path, b"Hello World").unwrap(); // 11 bytes
+    fs::write(&file2_path, vec![0u8; 1024]).unwrap(); // 1024 bytes
+    fs::write(&file3_path, b"Nested file content").unwrap(); // 19 bytes
+
+    // 1. Inspect single files
+    let paths = vec![
+        file1_path.to_string_lossy().to_string(),
+        file2_path.to_string_lossy().to_string(),
+    ];
+    let selected: Vec<SelectedFile> = inspect_file_paths(&paths);
+    assert_eq!(selected.len(), 2);
+    assert_eq!(selected[0].name, "doc1.txt");
+    assert_eq!(selected[0].size, 11);
+    assert_eq!(selected[1].name, "data.bin");
+    assert_eq!(selected[1].size, 1024);
+
+    // 2. Inspect folder (recurses entries)
+    let folder_paths = vec![sub_dir.to_string_lossy().to_string()];
+    let folder_selected = inspect_file_paths(&folder_paths);
+    assert_eq!(folder_selected.len(), 1);
+    assert_eq!(folder_selected[0].name, "doc3.txt");
+    assert_eq!(folder_selected[0].size, 19);
+
+    let _ = fs::remove_dir_all(&temp_dir);
 }

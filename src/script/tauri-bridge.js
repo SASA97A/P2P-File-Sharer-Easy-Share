@@ -174,6 +174,31 @@ async function callInvoke(command, args = {}) {
       console.log("[Mock] Opened download directory");
       return;
 
+    case "inspect_paths": {
+      const paths = args.paths || [];
+      return paths.map((p) => {
+        const name = p.split(/[\\/]/).pop() || p;
+        return {
+          name,
+          path: p,
+          size: 1024,
+        };
+      });
+    }
+
+    case "pick_files": {
+      // In mock mode, if standard file input exists in DOM, click it
+      const input = document.getElementById("fileInput");
+      if (input) {
+        input.click();
+      }
+      return [];
+    }
+
+    case "pick_folder": {
+      return [];
+    }
+
     case "get_my_pairing_info": {
       const pin = mockState.deviceInfo.pairing_pin || "839421";
       const formatted_pin = `${pin.slice(0, 3)} - ${pin.slice(3, 6)}`;
@@ -396,9 +421,44 @@ export async function connectByAddress(address) {
   return await callInvoke("connect_by_address", { address });
 }
 
+/**
+ * Opens the native OS file picker to select one or more files.
+ * Returns array of { name, path, size }.
+ */
+export async function pickFiles() {
+  return await callInvoke("pick_files");
+}
+
+/**
+ * Opens the native OS folder picker to select a directory.
+ * Returns array of { name, path, size }.
+ */
+export async function pickFolder() {
+  return await callInvoke("pick_folder");
+}
+
+/**
+ * Resolves absolute filesystem paths into full file metadata { name, path, size }.
+ */
+export async function inspectPaths(paths) {
+  return await callInvoke("inspect_paths", { paths });
+}
+
 // -------------------------------------------------------------
 // Event Subscription Helpers
 // -------------------------------------------------------------
+
+export async function onDragDrop(cb) {
+  return await subscribeEvent("tauri://drag-drop", cb);
+}
+
+export async function onDragHover(cb) {
+  return await subscribeEvent("tauri://drag-over", cb);
+}
+
+export async function onDragLeave(cb) {
+  return await subscribeEvent("tauri://drag-leave", cb);
+}
 
 export async function onPeerFound(cb) {
   return await subscribeEvent("peer-found", cb);

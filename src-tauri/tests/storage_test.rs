@@ -58,6 +58,21 @@ fn test_sanitize_filename_edge_cases() {
 }
 
 #[test]
+fn test_sanitize_filename_unicode_bidi_and_hidden_chars() {
+    // Right-to-Left Override spoofing: "report\u{202E}cod.exe"
+    // Without sanitization, displayed as "reportexe.doc"
+    let sanitized_rlo = FileManager::sanitize_filename("report\u{202E}cod.exe");
+    assert!(!sanitized_rlo.contains('\u{202E}'), "Must strip RLO character");
+    assert_eq!(sanitized_rlo, "report_cod.exe");
+
+    // Zero-width space and BOM
+    let sanitized_zw = FileManager::sanitize_filename("hidden\u{200B}\u{FEFF}file.txt");
+    assert!(!sanitized_zw.contains('\u{200B}'));
+    assert!(!sanitized_zw.contains('\u{FEFF}'));
+    assert_eq!(sanitized_zw, "hidden__file.txt");
+}
+
+#[test]
 fn test_get_part_path_derivation() {
     let downloads_dir = PathBuf::from("C:\\Downloads");
     let part_path = FileManager::get_part_path(&downloads_dir, "sample.iso", "sess-12345");

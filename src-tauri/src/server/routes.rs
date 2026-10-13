@@ -11,12 +11,11 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
-use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Debug)]
 pub enum ServerError {
@@ -43,7 +42,56 @@ impl From<std::io::Error> for ServerError {
 
 /// GET /api/v1/info
 pub async fn handle_info(State(state): State<Arc<ServerState>>) -> Json<DeviceInfo> {
-    Json(state.get_device_info().await)
+    Json(state.get_public_device_info().await)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairRequest {
+    pub pin: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairResponse {
+    pub success: bool,
+    pub device_info: DeviceInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// POST /api/v1/pair
+pub async fn handle_pair(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<PairRequest>,
+) -> Result<Json<PairResponse>, (StatusCode, Json<PairResponse>)> {
+    let host_pin = state.get_pairing_pin().await;
+    let normalized_input = crate::pairing::pin::normalize_pin(&payload.pin);
+    let normalized_host = host_pin
+        .as_deref()
+        .and_then(crate::pairing::pin::normalize_pin);
+
+    let matches = match (normalized_input, normalized_host) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    };
+
+    let pub_info = state.get_public_device_info().await;
+
+    if matches {
+        Ok(Json(PairResponse {
+            success: true,
+            device_info: pub_info,
+            message: None,
+        }))
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(PairResponse {
+                success: false,
+                device_info: pub_info,
+                message: Some("Invalid pairing PIN".to_string()),
+            }),
+        ))
+    }
 }
 
 /// POST /api/v1/transfer/request
@@ -133,7 +181,7 @@ pub async fn handle_transfer_chunk(
     Query(query): Query<ChunkQuery>,
     body: Body,
 ) -> Result<Json<ChunkResponse>, (StatusCode, String)> {
-    let file_name = {
+    let (file_name, file_size) = {
         let sessions = state.sessions.read().await;
         let session = sessions.get(&query.session_token).ok_or((
             StatusCode::UNAUTHORIZED,
@@ -157,8 +205,18 @@ pub async fn handle_transfer_chunk(
                 "File ID not found in session".to_string(),
             ))?;
 
-        file.name.clone()
+        (file.name.clone(), file.size)
     };
+
+    if query.offset > file_size {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Chunk offset ({}) exceeds declared file size ({})",
+                query.offset, file_size
+            ),
+        ));
+    }
 
     let part_path =
         FileManager::get_part_path(state.download_dir(), &file_name, &query.session_token);
@@ -206,6 +264,17 @@ pub async fn handle_transfer_chunk(
                 format!("Error reading body stream: {}", e),
             )
         })?;
+
+        let chunk_len = chunk.len() as u64;
+        if query.offset + bytes_written + chunk_len > file_size {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Chunk data exceeds declared file size (offset={}, written={}, chunk_len={}, file_size={})",
+                    query.offset, bytes_written, chunk_len, file_size
+                ),
+            ));
+        }
 
         file.write_all(&chunk).await.map_err(|e| {
             (
@@ -357,21 +426,17 @@ pub async fn handle_transfer_cancel(
     Ok(StatusCode::OK)
 }
 
-/// Builds the Axum application router with all routes and CORS.
+/// Builds the Axum application router with all routes.
+/// Wildcard CORS is omitted to prevent cross-origin drive-by browser exploitation.
 pub fn create_router(state: Arc<ServerState>) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
     Router::new()
         .route("/api/v1/info", get(handle_info))
+        .route("/api/v1/pair", post(handle_pair))
         .route("/api/v1/transfer/request", post(handle_transfer_request))
         .route("/api/v1/transfer/status", get(handle_transfer_status))
         .route("/api/v1/transfer/chunk", post(handle_transfer_chunk))
         .route("/api/v1/transfer/finish", post(handle_transfer_finish))
         .route("/api/v1/transfer/cancel", post(handle_transfer_cancel))
-        .layer(cors)
         .with_state(state)
 }
 

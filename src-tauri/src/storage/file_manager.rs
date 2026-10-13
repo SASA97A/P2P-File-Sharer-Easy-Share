@@ -62,12 +62,14 @@ impl FileManager {
             .last()
             .unwrap_or("unnamed_file");
 
-        // Step 2: Replace invalid filesystem characters and ASCII control characters
+        // Step 2: Replace invalid filesystem characters, control characters, and Unicode bidi/hidden formatting chars
         let mut sanitized: String = raw_filename
             .chars()
             .map(|c| match c {
                 '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
-                c if (c as u32) <= 0x1f => '_',
+                c if c.is_control() => '_',
+                // Unicode Directional Formatting & Zero-Width characters (anti-spoofing)
+                '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}' => '_',
                 c => c,
             })
             .collect();

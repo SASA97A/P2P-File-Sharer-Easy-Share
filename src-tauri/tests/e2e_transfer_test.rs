@@ -1,14 +1,13 @@
-use easy_share_lib::client::{ClientError, FileToSend, TransferClient};
+use easy_share_lib::client::{FileToSend, TransferClient};
 use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
 use easy_share_lib::models::transfer::{FileMetadata, TransferRequest, TransferStatus};
 use easy_share_lib::server::{start_server, ConsentPolicy, ConsentRequest, ServerState};
 use easy_share_lib::storage::file_manager::FileManager;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 fn setup_e2e_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("easy_share_e2e_{}", name));
@@ -37,6 +36,7 @@ fn create_node_device(name: &str, port: u16) -> DeviceInfo {
 }
 
 /// Helper struct representing an in-process running node
+#[allow(dead_code)]
 struct RunningNode {
     pub name: String,
     pub device_info: DeviceInfo,
@@ -383,7 +383,7 @@ async fn test_e2e_transfer_consent_rejection() {
     let peer_b = node_b_receiver.to_peer_info();
 
     let f_path = node_a_sender_dir.join("confidential.docx");
-    let f_hash = create_deterministic_test_file(&f_path, 64 * 1024, 0x99);
+    let _f_hash = create_deterministic_test_file(&f_path, 64 * 1024, 0x99);
     let file_to_send = FileToSend::from_path("f-decline", &f_path).unwrap();
 
     let req = TransferRequest::new(

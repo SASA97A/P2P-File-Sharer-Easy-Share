@@ -38,9 +38,7 @@ impl MdnsDiscovery {
         properties.insert("os".to_string(), self.device_info.os.clone());
         properties.insert("type".to_string(), self.device_info.device_type.clone());
         properties.insert("v".to_string(), self.device_info.version.clone());
-        if let Some(pin) = &self.device_info.pairing_pin {
-            properties.insert("pin".to_string(), pin.clone());
-        }
+        // Note: PIN is intentionally NOT published in mDNS TXT records for privacy and security.
 
         let best_ip = crate::discovery::nic::get_best_physical_ip()
             .map(|ip| ip.to_string())

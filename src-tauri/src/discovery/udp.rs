@@ -39,7 +39,7 @@ impl HeartbeatMessage {
             version: info.version.clone(),
             port: info.port,
             ip,
-            pairing_pin: info.pairing_pin.clone(),
+            pairing_pin: None, // Protected: secret pairing PIN is never broadcast over UDP
         }
     }
 

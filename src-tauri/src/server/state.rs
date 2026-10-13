@@ -76,6 +76,14 @@ impl ServerState {
         self.device_info.read().await.clone()
     }
 
+    /// Returns a sanitized public clone of device info with the pairing PIN stripped
+    /// to prevent network enumeration or unauthorized secret harvesting.
+    pub async fn get_public_device_info(&self) -> DeviceInfo {
+        let mut info = self.device_info.read().await.clone();
+        info.pairing_pin = None;
+        info
+    }
+
     /// Updates the port in `device_info`.
     pub async fn set_port(&self, port: u16) {
         let mut info = self.device_info.write().await;
@@ -94,6 +102,12 @@ impl ServerState {
     pub async fn set_pairing_pin(&self, pin: impl Into<String>) {
         let mut info = self.device_info.write().await;
         info.pairing_pin = Some(pin.into());
+    }
+
+    /// Returns the active pairing PIN if set.
+    pub async fn get_pairing_pin(&self) -> Option<String> {
+        let info = self.device_info.read().await;
+        info.pairing_pin.clone()
     }
 
     /// Returns the download directory reference.

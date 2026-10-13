@@ -93,6 +93,18 @@ pub fn parse_address_or_url(input: &str) -> Result<(String, u16), String> {
     Ok((trimmed.to_string(), DEFAULT_PEER_PORT))
 }
 
+/// Extracts an optional 6-digit pairing PIN parameter from an EasyShare or HTTP URL if present.
+pub fn extract_pin_from_url(input: &str) -> Option<String> {
+    if let Ok(parsed) = Url::parse(input) {
+        for (key, val) in parsed.query_pairs() {
+            if key == "pin" {
+                return normalize_pin(&val);
+            }
+        }
+    }
+    None
+}
+
 /// Resolves a remote peer given a raw address, URL, or EasyShare QR pairing URL.
 /// Probes the peer's `/api/v1/info` endpoint and returns `PeerInfo` on success.
 pub async fn resolve_peer_by_address(
@@ -101,6 +113,7 @@ pub async fn resolve_peer_by_address(
 ) -> Result<PeerInfo, String> {
     let (ip, port) = parse_address_or_url(addr_or_url)?;
     let base_url = format!("http://{}:{}", ip, port);
+    let embedded_pin = extract_pin_from_url(addr_or_url);
 
     let probe_fut = client.probe_peer_url(&base_url);
     let device_info = timeout(Duration::from_secs(5), probe_fut)
@@ -120,7 +133,7 @@ pub async fn resolve_peer_by_address(
         os: device_info.os,
         ip,
         port: resolved_port,
-        pairing_pin: device_info.pairing_pin,
+        pairing_pin: embedded_pin,
     })
 }
 
@@ -167,35 +180,24 @@ pub async fn sweep_subnet_for_pin(
         join_set.spawn(async move {
             let _permit = sem.acquire().await.ok()?;
             let base_url = format!("http://{}:{}", target_ip, default_port);
-            let probe_fut = client.probe_peer_url(&base_url);
+            let pair_fut = client.pair_peer_url(&base_url, &pin);
 
-            match timeout(probe_timeout, probe_fut).await {
+            match timeout(probe_timeout, pair_fut).await {
                 Ok(Ok(device_info)) => {
-                    let pin_matches = device_info
-                        .pairing_pin
-                        .as_deref()
-                        .and_then(normalize_pin)
-                        .map(|p| p == pin)
-                        .unwrap_or(false);
-
-                    if pin_matches {
-                        let resolved_port = if device_info.port > 0 {
-                            device_info.port
-                        } else {
-                            default_port
-                        };
-
-                        Some(PeerInfo {
-                            device_name: device_info.device_name,
-                            device_type: device_info.device_type,
-                            os: device_info.os,
-                            ip: target_ip,
-                            port: resolved_port,
-                            pairing_pin: device_info.pairing_pin,
-                        })
+                    let resolved_port = if device_info.port > 0 {
+                        device_info.port
                     } else {
-                        None
-                    }
+                        default_port
+                    };
+
+                    Some(PeerInfo {
+                        device_name: device_info.device_name,
+                        device_type: device_info.device_type,
+                        os: device_info.os,
+                        ip: target_ip,
+                        port: resolved_port,
+                        pairing_pin: Some(pin),
+                    })
                 }
                 _ => None,
             }

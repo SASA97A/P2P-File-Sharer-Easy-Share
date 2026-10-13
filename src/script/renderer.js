@@ -18,6 +18,11 @@ import {
   onPeerFound,
   onPeerLost,
   onPeerUpdated,
+  pickFiles,
+  inspectPaths,
+  onDragDrop,
+  onDragHover,
+  onDragLeave,
 } from "./tauri-bridge.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -63,29 +68,36 @@ document.addEventListener("DOMContentLoaded", async () => {
   // -------------------------------------------------------------
   // 3. File Selection & Drag-and-Drop Handlers
   // -------------------------------------------------------------
-  if (dropArea && fileInput) {
-    // Click on drop area triggers hidden file input
+  const handleFilePick = async () => {
+    try {
+      const picked = await pickFiles();
+      if (picked && picked.length > 0) {
+        addFiles(picked);
+        return;
+      }
+    } catch (err) {
+      console.warn("Native file picker unavailable, falling back to input:", err);
+      if (fileInput) {
+        fileInput.click();
+      }
+    }
+  };
+
+  if (dropArea) {
+    // Click on drop area triggers native file dialog (or fileInput fallback)
     dropArea.addEventListener("click", () => {
-      fileInput.click();
+      handleFilePick();
     });
 
     // Keyboard trigger on drop area (Enter / Space)
     dropArea.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        fileInput.click();
+        handleFilePick();
       }
     });
 
-    // File input change
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files && fileInput.files.length > 0) {
-        addFiles(fileInput.files);
-        fileInput.value = ""; // Reset to allow re-selection of same file
-      }
-    });
-
-    // Drag-and-drop events on target drop zone
+    // Drag-and-drop events on target drop zone (DOM fallback)
     dropArea.addEventListener("dragenter", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -115,6 +127,45 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
   }
+
+  if (fileInput) {
+    // DOM file input change fallback
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files.length > 0) {
+        addFiles(fileInput.files);
+        fileInput.value = ""; // Reset to allow re-selection of same file
+      }
+    });
+  }
+
+  // Native Tauri window drag-and-drop integration
+  onDragHover(() => {
+    if (dropArea) dropArea.classList.add("drag-over");
+  });
+
+  onDragLeave(() => {
+    if (dropArea) dropArea.classList.remove("drag-over");
+  });
+
+  onDragDrop(async (payload) => {
+    if (dropArea) dropArea.classList.remove("drag-over");
+    const rawPaths =
+      payload?.paths ||
+      (Array.isArray(payload) ? payload : typeof payload === "string" ? [payload] : []);
+    if (rawPaths && rawPaths.length > 0) {
+      try {
+        const inspected = await inspectPaths(rawPaths);
+        if (inspected && inspected.length > 0) {
+          addFiles(inspected);
+        } else {
+          addFiles(rawPaths);
+        }
+      } catch (err) {
+        console.error("Failed to inspect native dropped paths:", err);
+        addFiles(rawPaths);
+      }
+    }
+  });
 
   // Prevent default window-level drag/drop navigation
   window.addEventListener("dragover", (e) => e.preventDefault(), false);

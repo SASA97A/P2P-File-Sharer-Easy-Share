@@ -55,10 +55,50 @@ async fn test_server_startup_dynamic_port_and_device_info() {
     assert_eq!(info.os, "windows");
     assert_eq!(info.version, "2.0.0");
     assert_eq!(info.port, port);
-    assert!(info.pairing_pin.is_some());
-    let pin = info.pairing_pin.as_ref().unwrap();
-    assert_eq!(pin.len(), 6);
-    assert!(pin.chars().all(|c| c.is_ascii_digit()));
+    // Security verification: Public /api/v1/info endpoint must NEVER leak the secret pairing PIN
+    assert!(info.pairing_pin.is_none(), "Public info endpoint must not leak pairing PIN");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_server_secure_pair_endpoint() {
+    let temp_dir = setup_test_dir("secure_pair");
+    let device_info = sample_device_info().with_pairing_pin("839421");
+    let state = Arc::new(ServerState::new(device_info, temp_dir.clone()));
+
+    let (port, _server_handle) = start_server(state.clone(), 0)
+        .await
+        .expect("server should start");
+
+    let client = Client::new();
+
+    // 1. Verify /api/v1/info does not expose the PIN
+    let info_res = client
+        .get(format!("http://127.0.0.1:{}/api/v1/info", port))
+        .send()
+        .await
+        .unwrap();
+    let info: DeviceInfo = info_res.json().await.unwrap();
+    assert!(info.pairing_pin.is_none(), "PIN must not be exposed in public info");
+
+    // 2. Attempt pairing with incorrect PIN -> 403 Forbidden
+    let wrong_pair_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/pair", port))
+        .json(&serde_json::json!({ "pin": "000000" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(wrong_pair_res.status(), 403);
+
+    // 3. Attempt pairing with correct PIN -> 200 OK
+    let correct_pair_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/pair", port))
+        .json(&serde_json::json!({ "pin": "839421" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(correct_pair_res.status(), 200);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -81,20 +121,32 @@ async fn test_server_pairing_pin_regeneration_and_info_endpoint() {
         .expect("failed to request info");
     assert_eq!(res.status(), 200);
     let info: DeviceInfo = res.json().await.expect("json parse error");
-    assert_eq!(info.pairing_pin, Some("111222".to_string()));
+    assert_eq!(info.pairing_pin, None, "Public info endpoint must not leak PIN");
+    assert_eq!(state.get_pairing_pin().await.as_deref(), Some("111222"));
 
     // Regenerate PIN
     let new_pin = state.regenerate_pairing_pin().await;
     assert_eq!(new_pin.len(), 6);
     assert!(new_pin.chars().all(|c| c.is_ascii_digit()));
+    assert_eq!(state.get_pairing_pin().await, Some(new_pin.clone()));
 
+    // Verify info endpoint still keeps it private
     let res_updated = client
         .get(format!("http://127.0.0.1:{}/api/v1/info", port))
         .send()
         .await
         .expect("failed to request info after regen");
     let updated_info: DeviceInfo = res_updated.json().await.expect("json parse error");
-    assert_eq!(updated_info.pairing_pin, Some(new_pin));
+    assert_eq!(updated_info.pairing_pin, None);
+
+    // Verify pairing endpoint accepts the newly regenerated PIN
+    let pair_check = client
+        .post(format!("http://127.0.0.1:{}/api/v1/pair", port))
+        .json(&serde_json::json!({ "pin": new_pin }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(pair_check.status(), 200);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -315,6 +367,61 @@ async fn test_chunk_upload_status_and_streaming() {
     assert_eq!(file_bytes.len(), 100);
     assert_eq!(&file_bytes[0..50], &vec![0xAA; 50][..]);
     assert_eq!(&file_bytes[50..100], &vec![0xBB; 50][..]);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_chunk_offset_out_of_bounds_rejected() {
+    let temp_dir = setup_test_dir("chunk_bounds");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+    let (port, _handle) = start_server(state, 0)
+        .await
+        .expect("failed to start server");
+
+    let client = Client::new();
+
+    let request_payload = TransferRequest::new(
+        "req-bounds",
+        "Sender",
+        "windows",
+        vec![FileMetadata::new("f-bounds", "test_bounds.bin", 100, None)],
+    );
+
+    let handshake_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/request", port))
+        .json(&request_payload)
+        .send()
+        .await
+        .expect("handshake failed");
+    let handshake: TransferResponse = handshake_res.json().await.unwrap();
+    let token = handshake.session_token.unwrap();
+
+    // 1. Offset beyond declared size (offset=150, size=100) -> 400 Bad Request
+    let bad_offset_res = client
+        .post(format!(
+            "http://127.0.0.1:{}/api/v1/transfer/chunk?session_token={}&file_id=f-bounds&offset=150",
+            port, token
+        ))
+        .header("Content-Type", "application/octet-stream")
+        .body(vec![0xAA; 10])
+        .send()
+        .await
+        .expect("chunk request should complete");
+    assert_eq!(bad_offset_res.status(), 400);
+
+    // 2. Chunk length overflows declared size (offset=80, length=50, total=130 > 100) -> 400 Bad Request
+    let overflow_chunk_res = client
+        .post(format!(
+            "http://127.0.0.1:{}/api/v1/transfer/chunk?session_token={}&file_id=f-bounds&offset=80",
+            port, token
+        ))
+        .header("Content-Type", "application/octet-stream")
+        .body(vec![0xAA; 50])
+        .send()
+        .await
+        .expect("chunk request should complete");
+    assert_eq!(overflow_chunk_res.status(), 400);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

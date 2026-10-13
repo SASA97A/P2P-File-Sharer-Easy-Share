@@ -214,6 +214,11 @@ impl TransferClient {
         self.probe_peer_url(&peer.base_url()).await
     }
 
+    /// Verifies and pairs with a peer using a 6-digit PIN (`POST /api/v1/pair`).
+    pub async fn pair_peer(&self, peer: &PeerInfo, pin: &str) -> Result<DeviceInfo, ClientError> {
+        self.pair_peer_url(&peer.base_url(), pin).await
+    }
+
     /// Sends a transfer handshake request (`/api/v1/transfer/request`).
     pub async fn request_transfer(
         &self,
@@ -302,6 +307,22 @@ impl TransferClient {
 
         let info = resp.json::<DeviceInfo>().await?;
         Ok(info)
+    }
+
+    /// Authenticates and pairs with a peer using its 6-digit PIN (`POST /api/v1/pair`).
+    pub async fn pair_peer_url(&self, base_url: &str, pin: &str) -> Result<DeviceInfo, ClientError> {
+        let url = format!("{}/api/v1/pair", base_url.trim_end_matches('/'));
+        let payload = serde_json::json!({ "pin": pin });
+        let resp = self.client.post(&url).json(&payload).send().await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let message = resp.text().await.unwrap_or_default();
+            return Err(ClientError::StatusError { status, message });
+        }
+
+        let body = resp.json::<crate::server::routes::PairResponse>().await?;
+        Ok(body.device_info)
     }
 
     /// Sends a transfer handshake request using explicit base URL.
