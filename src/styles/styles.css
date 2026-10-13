@@ -61,7 +61,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 860px;
+  max-width: 980px;
   margin: auto;
   padding: 24px;
   background: var(--color-card-bg);
@@ -72,6 +72,121 @@ body {
 
 .app-shell {
   border-radius: 24px;
+}
+
+/* ============================================================
+   MAIN TWO-COLUMN LAYOUT & WORKSPACE
+   ============================================================ */
+
+.main-layout {
+  display: grid;
+  grid-template-columns: 1fr 310px;
+  gap: 20px;
+  align-items: start;
+}
+
+.transfer-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.devices-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #fbfbf7;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+
+/* Local Device Section in Sidebar */
+.local-device-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.sidebar-section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.local-device-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.local-device-card:hover {
+  background: #fcfcfb;
+  border-color: #d8d8ce;
+}
+
+.local-device-card .identity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #f0f4f0;
+  color: #2e7d32;
+  flex-shrink: 0;
+}
+
+.local-device-card .identity-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.local-device-card .identity-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.local-device-card .identity-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.local-device-card .identity-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4caf50;
+  display: inline-block;
 }
 
 /* ============================================================
@@ -390,15 +505,14 @@ body {
 
 .device-list {
   display: flex;
-  gap: 14px;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  padding: 16px;
-  background: #fafaf6;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #f8f8f3;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  min-height: 120px;
-  max-height: 220px;
+  border-radius: 14px;
+  min-height: 180px;
+  max-height: 380px;
   overflow-y: auto;
 }
 
@@ -429,27 +543,29 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-/* Device Card with position: relative */
+/* Device Row Card */
 .device {
-  position: relative; /* CRITICAL FIX: anchors absolute checkmark inside card */
+  position: relative;
   background: #ffffff;
-  border-radius: 14px;
-  padding: 12px 16px;
-  min-width: 140px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  width: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
+  gap: 10px;
+  text-align: left;
   cursor: pointer;
-  border: 1px solid var(--color-border);
+  border: 1.5px solid var(--color-border);
   box-shadow: var(--shadow-sm);
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
 }
 
 .device:hover {
-  background: #f5f5ee;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  background: #fdfdfb;
+  border-color: #d0d0c4;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .device.selected {
@@ -462,12 +578,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   background: #f0f0ea;
   color: #333333;
-  margin-bottom: 2px;
+  flex-shrink: 0;
+  margin-bottom: 0;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -476,23 +593,32 @@ body {
   color: #2e7d32;
 }
 
+.device-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
 .device-name {
-  margin-top: 6px;
+  margin: 0;
   font-size: 13px;
   font-weight: 700;
   color: #111;
   white-space: nowrap;
-  max-width: 130px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .device-meta {
-  margin-top: 4px;
+  margin: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .device-ip {
@@ -502,9 +628,9 @@ body {
 
 .os-badge {
   display: inline-block;
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: var(--radius-pill);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -515,9 +641,7 @@ body {
 
 .checkmark {
   display: none;
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  position: static;
   color: #2e7d32;
   background: #e8f5e9;
   border: 1px solid #c8e6c9;
@@ -526,6 +650,8 @@ body {
   height: 20px;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .device.selected .checkmark {
@@ -539,13 +665,13 @@ body {
 .send-btn {
   position: sticky;
   bottom: 8px;
-  margin: 8px auto 0;
+  margin-top: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   width: 100%;
-  max-width: 480px;
+  max-width: 100%;
   padding: 12px 24px;
   background: #222222;
   color: #ffffff;
@@ -1424,3 +1550,19 @@ body {
     transform: translateY(-8px);
   }
 }
+
+/* ============================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .devices-sidebar {
+    width: 100%;
+  }
+}
+

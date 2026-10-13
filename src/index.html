@@ -25,58 +25,74 @@
             </span>
             <span>Pair Device</span>
           </button>
-          <div class="device-identity-badge" id="myDeviceBadge" title="Your device identity on the network">
-            <span class="identity-icon" id="myDeviceIcon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-monitor"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-            </span>
-            <div class="identity-text">
-              <span class="identity-name" id="myDeviceName">Detecting device...</span>
-              <span class="identity-status" id="myDeviceStatus">Ready to share</span>
-            </div>
-          </div>
         </div>
       </header>
 
-      <!-- File Staging Area -->
-      <div class="file-section">
-        <div class="file-list" id="fileList"></div>
-        <div
-          class="drop-area compact"
-          id="drop-area"
-          tabindex="0"
-          role="button"
-          aria-label="Pick files or drop them here"
-        >
-          <img
-            src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
-            alt="add icon"
-          />
-          <span class="drop-text">Drag & drop files here, or click to browse</span>
-          <input type="file" id="fileInput" multiple hidden />
-        </div>
-      </div>
+      <!-- Main Two-Column Layout -->
+      <main class="main-layout">
+        <!-- Left Panel: Transfer Workspace -->
+        <section class="transfer-workspace" aria-label="Transfer Workspace">
+          <!-- File Staging Area -->
+          <div class="file-section">
+            <div class="file-list" id="fileList"></div>
+            <div
+              class="drop-area compact"
+              id="drop-area"
+              tabindex="0"
+              role="button"
+              aria-label="Pick files or drop them here"
+            >
+              <img
+                src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
+                alt="add icon"
+              />
+              <span class="drop-text">Drag & drop files here, or click to browse</span>
+              <input type="file" id="fileInput" multiple hidden />
+            </div>
+          </div>
 
-      <!-- Discovered Devices Radar -->
-      <div class="device-section">
-        <div class="section-header">
-          <h2 class="section-title">Nearby Devices</h2>
-          <span class="device-count" id="deviceCount">0 found</span>
-        </div>
-        <div class="device-list" id="deviceList">
-          <div class="loader">Searching for nearby devices...</div>
-        </div>
-      </div>
+          <!-- Send Action Button -->
+          <button class="send-btn" id="sendBtn" disabled>
+            <div class="send-info">
+              <span class="send-count">0 files</span>
+              <span class="send-size">0 MB</span>
+            </div>
+            <div class="send-action">
+              <span>Send</span>
+            </div>
+          </button>
+        </section>
 
-      <!-- Send Action Button -->
-      <button class="send-btn" id="sendBtn" disabled>
-        <div class="send-info">
-          <span class="send-count">0 files</span>
-          <span class="send-size">0 MB</span>
-        </div>
-        <div class="send-action">
-          <span>Send</span>
-        </div>
-      </button>
+        <!-- Right Panel: Devices Sidebar -->
+        <aside class="devices-sidebar" aria-label="Devices Sidebar">
+          <!-- Local Device Identity -->
+          <div class="local-device-section">
+            <div class="sidebar-section-header">
+              <span class="sidebar-section-title">This Device</span>
+            </div>
+            <div class="device-identity-badge local-device-card" id="myDeviceBadge" title="Your device identity on the network">
+              <span class="identity-icon" id="myDeviceIcon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-monitor"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+              </span>
+              <div class="identity-text">
+                <span class="identity-name" id="myDeviceName">Detecting device...</span>
+                <span class="identity-status" id="myDeviceStatus">Ready to share</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Discovered Devices Radar -->
+          <div class="device-section">
+            <div class="section-header">
+              <span class="section-title">Nearby Devices</span>
+              <span class="device-count" id="deviceCount">0 found</span>
+            </div>
+            <div class="device-list" id="deviceList">
+              <div class="loader">Searching for nearby devices...</div>
+            </div>
+          </div>
+        </aside>
+      </main>
     </div>
 
     <!-- Interactive Consent Modal for Incoming Transfers -->

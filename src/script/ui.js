@@ -75,10 +75,12 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
 
     div.innerHTML = `
       <div class="device-icon">${iconSvg}</div>
-      <div class="device-name" title="${escapeHtml(peerName)}">${escapeHtml(peerName)}</div>
-      <div class="device-meta">
-        <span class="device-ip">${escapeHtml(peerIp)}:${peerPort}</span>
-        ${peer.os ? `<span class="os-badge">${escapeHtml(peer.os)}</span>` : ""}
+      <div class="device-details">
+        <div class="device-name" title="${escapeHtml(peerName)}">${escapeHtml(peerName)}</div>
+        <div class="device-meta">
+          <span class="device-ip">${escapeHtml(peerIp)}:${peerPort}</span>
+          ${peer.os ? `<span class="os-badge">${escapeHtml(peer.os)}</span>` : ""}
+        </div>
       </div>
       <div class="checkmark">${getIconSvg("check", { size: 14 })}</div>
     `;
