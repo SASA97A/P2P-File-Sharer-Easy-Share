@@ -81,7 +81,7 @@ export function setupTransfer() {
 
       isSending = true;
       sendBtn.disabled = true;
-      setSendBtnLabel("Connecting...");
+      setSendBtnLabel("Connecting…");
 
       try {
         const sessionToken = await startTransfer(peer, files);
@@ -90,7 +90,7 @@ export function setupTransfer() {
           totalFiles: files.length,
           completedFiles: 0,
         };
-        setSendBtnLabel("Sending...");
+        setSendBtnLabel("Sending…");
         showToast(`Transfer started to ${peer.device_name || peer.ip}.`, "info");
         console.log(`Transfer active with session token: ${sessionToken}`);
       } catch (err) {
@@ -112,7 +112,7 @@ export function setupTransfer() {
       await respondTransferRequest(request.request_id, accepted);
 
       if (accepted) {
-        showToast(`Receiving files from ${request.sender_name}...`, "info");
+        showToast(`Receiving files from ${request.sender_name}…`, "info");
       } else {
         showToast(`Declined transfer from ${request.sender_name}.`, "info");
       }

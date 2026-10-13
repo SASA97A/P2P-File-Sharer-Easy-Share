@@ -150,4 +150,11 @@ target/
 **/*.rs.bk
 Cargo.lock.tmp*
 
+# Agent skills local metadata
+.agents/
+.claude/
+.codex/
+skills-lock.json
+
+
 

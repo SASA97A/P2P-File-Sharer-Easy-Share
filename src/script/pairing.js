@@ -385,7 +385,7 @@ export function setupPairing() {
       return;
     }
 
-    setPinStatus("Scanning local subnet for device with matching PIN...", "loading");
+    setPinStatus("Scanning local subnet for device with matching PIN…", "loading");
     if (connectPinBtn) connectPinBtn.disabled = true;
 
     try {
@@ -420,7 +420,7 @@ export function setupPairing() {
       return;
     }
 
-    setAddressStatus("Connecting to remote peer address...", "loading");
+    setAddressStatus("Connecting to remote peer address…", "loading");
     if (connectAddressBtn) connectAddressBtn.disabled = true;
 
     try {

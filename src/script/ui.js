@@ -52,7 +52,7 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
   if (peers.length === 0) {
     const loader = document.createElement("div");
     loader.className = "loader";
-    loader.textContent = "Searching for nearby devices...";
+    loader.textContent = "Searching for nearby devices…";
     deviceList.appendChild(loader);
     return;
   }
