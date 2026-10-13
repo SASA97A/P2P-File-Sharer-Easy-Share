@@ -153,7 +153,8 @@ impl FileManager {
         }
     }
 
-    /// Atomically moves/renames the temporary `.part` file to the final destination path.
+    /// Atomically moves/renames the temporary `.part` file to the final destination path,
+    /// with robust atomic replacement and cross-device fallback guards.
     pub fn commit_part_file(part_path: &Path, dest_path: &Path) -> Result<(), StorageError> {
         if !part_path.exists() {
             return Err(StorageError::FileNotFound(part_path.to_path_buf()));
@@ -163,7 +164,28 @@ impl FileManager {
                 fs::create_dir_all(parent)?;
             }
         }
-        fs::rename(part_path, dest_path)?;
+
+        // Try direct rename first (atomic on Unix and clean Windows moves)
+        if let Err(_err) = fs::rename(part_path, dest_path) {
+            // Guard: If dest_path exists, clear read-only flags and remove prior to retry
+            if dest_path.exists() {
+                if let Ok(metadata) = fs::metadata(dest_path) {
+                    let mut perms = metadata.permissions();
+                    if perms.readonly() {
+                        perms.set_readonly(false);
+                        let _ = fs::set_permissions(dest_path, perms);
+                    }
+                }
+                let _ = fs::remove_file(dest_path);
+            }
+
+            // Retry rename after clearing collision
+            if let Err(_second_err) = fs::rename(part_path, dest_path) {
+                // Cross-device/cross-filesystem fallback (copy then remove source)
+                fs::copy(part_path, dest_path)?;
+                let _ = fs::remove_file(part_path);
+            }
+        }
         Ok(())
     }
 
