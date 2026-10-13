@@ -6,13 +6,22 @@
 
 import { getFiles } from "./files.js";
 import { getSelectedPeer } from "./peers.js";
-import { showConsentModal, showToast } from "./ui.js";
+import {
+  showConsentModal,
+  showToast,
+  updateReceiveProgress,
+  hideReceiveProgress,
+} from "./ui.js";
 import {
   startTransfer,
   respondTransferRequest,
   onTransferRequested,
   onTransferProgress,
   onTransferCompleted,
+  onTransferBatchCompleted,
+  onReceiveProgress,
+  onReceiveCompleted,
+  onReceiveCancelled,
   onTransferError,
 } from "./tauri-bridge.js";
 
@@ -23,6 +32,7 @@ export function setupTransfer() {
   const sendBtn = document.getElementById("sendBtn") || document.querySelector(".send-btn");
   const sendActionLabel = document.querySelector(".send-action span");
   let isSending = false;
+  let activeBatch = null;
 
   /**
    * Updates send button text without destroying child DOM elements
@@ -32,6 +42,22 @@ export function setupTransfer() {
     if (sendActionLabel) {
       sendActionLabel.textContent = text;
     }
+  }
+
+  /**
+   * Finalizes the active outbound transfer batch and resets UI controls
+   * @param {number|null} totalFiles
+   */
+  function finishActiveBatch(totalFiles = null) {
+    if (!isSending && !activeBatch) return;
+    const count = totalFiles || (activeBatch ? activeBatch.totalFiles : 1);
+    if (count > 1) {
+      showToast(`All ${count} files transferred successfully!`, "success");
+    }
+    isSending = false;
+    activeBatch = null;
+    if (sendBtn) sendBtn.disabled = false;
+    setSendBtnLabel("Send");
   }
 
   // -------------------------------------------------------------
@@ -59,13 +85,19 @@ export function setupTransfer() {
 
       try {
         const sessionToken = await startTransfer(peer, files);
+        activeBatch = {
+          sessionToken,
+          totalFiles: files.length,
+          completedFiles: 0,
+        };
         setSendBtnLabel("Sending...");
         showToast(`Transfer started to ${peer.device_name || peer.ip}.`, "info");
         console.log(`Transfer active with session token: ${sessionToken}`);
       } catch (err) {
         showToast(`Transfer failed: ${err}`, "error");
         isSending = false;
-        sendBtn.disabled = false;
+        activeBatch = null;
+        if (sendBtn) sendBtn.disabled = false;
         setSendBtnLabel("Send");
       }
     });
@@ -90,7 +122,7 @@ export function setupTransfer() {
   });
 
   // -------------------------------------------------------------
-  // Real-time Transfer Progress Event
+  // Real-time Outbound Transfer Progress Event
   // -------------------------------------------------------------
   onTransferProgress((progress) => {
     const { file_name, percent } = progress;
@@ -113,12 +145,12 @@ export function setupTransfer() {
   });
 
   // -------------------------------------------------------------
-  // Transfer Completed Event
+  // Individual File Transfer Completed Event
   // -------------------------------------------------------------
   onTransferCompleted((payload) => {
     const { file_name, saved_path } = payload;
     const pathInfo = saved_path ? ` (Saved to: ${saved_path})` : "";
-    showToast(`Transfer completed: ${file_name}${pathInfo}`, "success");
+    showToast(`Transferred: ${file_name}${pathInfo}`, "success");
 
     // Mark matching UI file item as 100% complete
     const fileItems = document.querySelectorAll(".file-item");
@@ -130,13 +162,48 @@ export function setupTransfer() {
       }
     });
 
-    isSending = false;
-    if (sendBtn) sendBtn.disabled = false;
-    setSendBtnLabel("Send");
+    if (activeBatch) {
+      activeBatch.completedFiles++;
+      if (activeBatch.completedFiles >= activeBatch.totalFiles) {
+        finishActiveBatch(activeBatch.totalFiles);
+      }
+    }
   });
 
   // -------------------------------------------------------------
-  // Transfer Error Event
+  // Full Batch Transfer Completed Event
+  // -------------------------------------------------------------
+  onTransferBatchCompleted((payload) => {
+    finishActiveBatch(payload.total_files);
+  });
+
+  // -------------------------------------------------------------
+  // Real-time Incoming (Receiver) Progress Event
+  // -------------------------------------------------------------
+  onReceiveProgress((progress) => {
+    updateReceiveProgress(progress);
+  });
+
+  // -------------------------------------------------------------
+  // Incoming (Receiver) File Completed Event
+  // -------------------------------------------------------------
+  onReceiveCompleted((payload) => {
+    hideReceiveProgress();
+    const { file_name, saved_path } = payload;
+    const pathInfo = saved_path ? ` (Saved to: ${saved_path})` : "";
+    showToast(`Received ${file_name}${pathInfo}`, "success");
+  });
+
+  // -------------------------------------------------------------
+  // Incoming (Receiver) Session Cancelled Event
+  // -------------------------------------------------------------
+  onReceiveCancelled((_payload) => {
+    hideReceiveProgress();
+    showToast("Incoming transfer was cancelled by remote peer.", "info");
+  });
+
+  // -------------------------------------------------------------
+  // Outbound Transfer Error Event
   // -------------------------------------------------------------
   onTransferError((payload) => {
     const { error, file_name } = payload;
@@ -144,6 +211,7 @@ export function setupTransfer() {
     showToast(`Transfer failed: ${filePrefix}${error}`, "error");
 
     isSending = false;
+    activeBatch = null;
     if (sendBtn) sendBtn.disabled = false;
     setSendBtnLabel("Send");
   });

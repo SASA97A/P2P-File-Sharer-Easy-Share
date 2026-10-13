@@ -221,6 +221,56 @@ export function showToast(message, type = "info") {
   }, 3500);
 }
 
+// Active Receiving Progress Toast Element reference
+let receiveToastEl = null;
+
+/**
+ * Updates or displays the real-time progress notification for an incoming transfer
+ * @param {Object} progress - { file_name, percent, received_bytes, total_bytes }
+ */
+export function updateReceiveProgress(progress) {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const { file_name, percent } = progress;
+  const statusEl = document.getElementById("myDeviceStatus");
+  if (statusEl) {
+    statusEl.textContent = `Receiving (${percent}%)`;
+  }
+
+  if (!receiveToastEl || !receiveToastEl.isConnected) {
+    receiveToastEl = document.createElement("div");
+    receiveToastEl.id = "receive-progress-toast";
+    receiveToastEl.className = "toast receive-progress";
+    container.appendChild(receiveToastEl);
+  }
+
+  const safeName = escapeHtml(file_name || "file");
+  receiveToastEl.innerHTML = `
+    <div class="receive-progress-header">
+      <span class="receive-progress-title" title="${safeName}">Receiving: ${safeName}</span>
+      <span class="receive-progress-percent">${percent}%</span>
+    </div>
+    <div class="receive-progress-bar-bg">
+      <div class="receive-progress-bar-fill" style="width: ${percent}%;"></div>
+    </div>
+  `;
+}
+
+/**
+ * Hides and cleans up the active receiving progress notification
+ */
+export function hideReceiveProgress() {
+  if (receiveToastEl && receiveToastEl.parentNode) {
+    receiveToastEl.remove();
+    receiveToastEl = null;
+  }
+  const statusEl = document.getElementById("myDeviceStatus");
+  if (statusEl) {
+    statusEl.textContent = "Online";
+  }
+}
+
 // Active Consent Modal Resolver reference
 let activeConsentResolver = null;
 

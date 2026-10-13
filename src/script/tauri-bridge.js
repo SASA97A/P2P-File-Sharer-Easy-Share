@@ -127,6 +127,7 @@ async function callInvoke(command, args = {}) {
       const token = `sess-mock-${Date.now()}`;
       if (args.files && args.files.length > 0) {
         setTimeout(() => {
+          let completedCount = 0;
           for (let i = 0; i < args.files.length; i++) {
             const f = args.files[i];
             const fname = f.name || f.path || `file_${i}`;
@@ -153,7 +154,15 @@ async function callInvoke(command, args = {}) {
                 file_name: fname,
                 saved_path: `Downloads/${fname}`,
               });
-            }, 600);
+              completedCount++;
+              if (completedCount === args.files.length) {
+                emitMockEvent("transfer-batch-completed", {
+                  session_token: token,
+                  total_files: args.files.length,
+                  total_bytes: args.files.length * 1000000,
+                });
+              }
+            }, 600 * (i + 1));
           }
         }, 300);
       }
@@ -482,6 +491,22 @@ export async function onTransferProgress(cb) {
 
 export async function onTransferCompleted(cb) {
   return await subscribeEvent("transfer-completed", cb);
+}
+
+export async function onTransferBatchCompleted(cb) {
+  return await subscribeEvent("transfer-batch-completed", cb);
+}
+
+export async function onReceiveProgress(cb) {
+  return await subscribeEvent("receive-progress", cb);
+}
+
+export async function onReceiveCompleted(cb) {
+  return await subscribeEvent("receive-completed", cb);
+}
+
+export async function onReceiveCancelled(cb) {
+  return await subscribeEvent("receive-cancelled", cb);
 }
 
 export async function onTransferError(cb) {

@@ -1,7 +1,9 @@
 use easy_share_lib::client::{FileToSend, TransferClient};
 use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
 use easy_share_lib::models::transfer::{FileMetadata, TransferRequest, TransferStatus};
-use easy_share_lib::server::{start_server, ConsentPolicy, ConsentRequest, ServerState};
+use easy_share_lib::server::{
+    start_server, ConsentPolicy, ConsentRequest, ServerState, ServerTransferEvent,
+};
 use easy_share_lib::storage::file_manager::FileManager;
 use std::fs;
 use std::path::PathBuf;
@@ -210,6 +212,7 @@ async fn test_e2e_multi_file_transfer_with_interactive_consent() {
     assert!(!session_token.is_empty());
 
     // 5. Node A transmits all chunks for each file and finishes each
+    let mut rx_event_sub = node_b_receiver.server_state.subscribe_events();
     let total_progress_reports = Arc::new(AtomicU64::new(0));
 
     for file in &files_to_send {
@@ -231,6 +234,25 @@ async fn test_e2e_multi_file_transfer_with_interactive_consent() {
     }
 
     assert!(total_progress_reports.load(Ordering::SeqCst) >= 8);
+
+    // Verify receiver Node B received Progress and Completed events
+    let mut rx_progress_count = 0;
+    let mut rx_completed_count = 0;
+    while let Ok(event) = rx_event_sub.try_recv() {
+        match event {
+            ServerTransferEvent::Progress(p) => {
+                assert_eq!(p.session_token, session_token);
+                rx_progress_count += 1;
+            }
+            ServerTransferEvent::Completed(c) => {
+                assert_eq!(c.session_token, session_token);
+                rx_completed_count += 1;
+            }
+            ServerTransferEvent::Cancelled(_) => {}
+        }
+    }
+    assert!(rx_progress_count >= 8, "Expected at least 8 receiver progress events, got {}", rx_progress_count);
+    assert_eq!(rx_completed_count, 3, "Expected 3 receiver completed events");
 
     // 6. Verify Node B's downloaded directory
     let b_f1 = node_b_receiver.download_dir.join("large_binary.bin");

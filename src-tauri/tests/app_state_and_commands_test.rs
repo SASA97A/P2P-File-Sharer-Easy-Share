@@ -247,6 +247,25 @@ async fn test_full_client_server_transfer_with_events_payload() {
     );
 }
 
+#[test]
+fn test_transfer_batch_completed_payload_serialization() {
+    use easy_share_lib::commands::TransferBatchCompletedPayload;
+
+    let payload = TransferBatchCompletedPayload {
+        session_token: "sess-12345".to_string(),
+        total_files: 5,
+        total_bytes: 10485760,
+    };
+
+    let serialized = serde_json::to_string(&payload).expect("should serialize batch payload");
+    let deserialized: TransferBatchCompletedPayload =
+        serde_json::from_str(&serialized).expect("should deserialize batch payload");
+
+    assert_eq!(deserialized, payload);
+    assert_eq!(deserialized.total_files, 5);
+    assert_eq!(deserialized.total_bytes, 10485760);
+}
+
 #[tokio::test]
 async fn test_build_pairing_payload_and_regeneration() {
     let temp_dir = setup_test_dir("pairing_payload");

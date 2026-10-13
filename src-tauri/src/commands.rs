@@ -82,6 +82,14 @@ pub struct TransferCompletedPayload {
     pub saved_path: String,
 }
 
+/// Event payload emitted when an entire batch of file transfers completes successfully.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransferBatchCompletedPayload {
+    pub session_token: String,
+    pub total_files: usize,
+    pub total_bytes: u64,
+}
+
 /// Event payload emitted when a transfer fails or is aborted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransferErrorPayload {
@@ -341,6 +349,8 @@ pub async fn start_transfer(
             let peer_clone = peer.clone();
             let token_clone = session_token.clone();
             let app_handle = app.clone();
+            let total_files = files_to_send.len();
+            let total_batch_bytes = files_to_send.iter().map(|f| f.size).sum::<u64>();
 
             tokio::spawn(async move {
                 for file in files_to_send {
@@ -435,6 +445,16 @@ pub async fn start_transfer(
                         }
                     }
                 }
+
+                // Emit batch completion when all files finish successfully
+                let _ = app_handle.emit(
+                    "transfer-batch-completed",
+                    &TransferBatchCompletedPayload {
+                        session_token: token_clone,
+                        total_files,
+                        total_bytes: total_batch_bytes,
+                    },
+                );
             });
 
             Ok(session_token)
