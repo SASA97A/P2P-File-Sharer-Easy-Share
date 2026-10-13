@@ -12,6 +12,9 @@ use url::Url;
 /// Default port for EasyShare peer HTTP service.
 pub const DEFAULT_PEER_PORT: u16 = 5050;
 
+/// Fallback port range probed if peer cannot be contacted on `DEFAULT_PEER_PORT`.
+pub const FALLBACK_PEER_PORTS: std::ops::RangeInclusive<u16> = 5051..=5055;
+
 /// Parses an address or URL string into an IP/host and port tuple.
 ///
 /// Supported formats:
@@ -137,15 +140,66 @@ pub async fn resolve_peer_by_address(
     })
 }
 
-/// Sweeps the local `/24` subnet in parallel to discover a peer with a matching pairing PIN.
-///
-/// Returns immediately with the matching `PeerInfo` as soon as any device responds with
-/// the target PIN.
-pub async fn sweep_subnet_for_pin(
+async fn sweep_ips_on_port(
+    client: &TransferClient,
+    candidate_ips: &[String],
+    port: u16,
+    normalized_pin: &str,
+    semaphore: Arc<Semaphore>,
+    probe_timeout: Duration,
+) -> Option<PeerInfo> {
+    let mut join_set = JoinSet::new();
+
+    for target_ip in candidate_ips {
+        let sem = semaphore.clone();
+        let client = client.clone();
+        let pin = normalized_pin.to_string();
+        let target_ip = target_ip.clone();
+
+        join_set.spawn(async move {
+            let _permit = sem.acquire().await.ok()?;
+            let base_url = format!("http://{}:{}", target_ip, port);
+            let pair_fut = client.pair_peer_url(&base_url, &pin);
+
+            match timeout(probe_timeout, pair_fut).await {
+                Ok(Ok(device_info)) => {
+                    let resolved_port = if device_info.port > 0 {
+                        device_info.port
+                    } else {
+                        port
+                    };
+
+                    Some(PeerInfo {
+                        device_name: device_info.device_name,
+                        device_type: device_info.device_type,
+                        os: device_info.os,
+                        ip: target_ip,
+                        port: resolved_port,
+                        pairing_pin: Some(pin),
+                    })
+                }
+                _ => None,
+            }
+        });
+    }
+
+    while let Some(res) = join_set.join_next().await {
+        if let Ok(Some(peer_info)) = res {
+            // Short-circuit: abort all remaining in-flight probes
+            join_set.abort_all();
+            return Some(peer_info);
+        }
+    }
+
+    None
+}
+
+/// Sweeps the local `/24` subnet across an ordered list of candidate ports to find a peer with matching PIN.
+pub async fn sweep_subnet_for_pin_ports(
     client: &TransferClient,
     local_ip: &str,
     target_pin: &str,
-    default_port: u16,
+    ports: &[u16],
     concurrency_limit: usize,
     timeout_ms: u64,
 ) -> Result<PeerInfo, String> {
@@ -170,45 +224,18 @@ pub async fn sweep_subnet_for_pin(
     let semaphore = Arc::new(Semaphore::new(concurrency));
     let probe_timeout = Duration::from_millis(timeout_ms.max(10));
 
-    let mut join_set = JoinSet::new();
-
-    for target_ip in candidate_ips {
-        let sem = semaphore.clone();
-        let client = client.clone();
-        let pin = normalized_pin.clone();
-
-        join_set.spawn(async move {
-            let _permit = sem.acquire().await.ok()?;
-            let base_url = format!("http://{}:{}", target_ip, default_port);
-            let pair_fut = client.pair_peer_url(&base_url, &pin);
-
-            match timeout(probe_timeout, pair_fut).await {
-                Ok(Ok(device_info)) => {
-                    let resolved_port = if device_info.port > 0 {
-                        device_info.port
-                    } else {
-                        default_port
-                    };
-
-                    Some(PeerInfo {
-                        device_name: device_info.device_name,
-                        device_type: device_info.device_type,
-                        os: device_info.os,
-                        ip: target_ip,
-                        port: resolved_port,
-                        pairing_pin: Some(pin),
-                    })
-                }
-                _ => None,
-            }
-        });
-    }
-
-    while let Some(res) = join_set.join_next().await {
-        if let Ok(Some(peer_info)) = res {
-            // Short-circuit: abort all remaining in-flight probes
-            join_set.abort_all();
-            return Ok(peer_info);
+    for &port in ports {
+        if let Some(peer) = sweep_ips_on_port(
+            client,
+            &candidate_ips,
+            port,
+            &normalized_pin,
+            semaphore.clone(),
+            probe_timeout,
+        )
+        .await
+        {
+            return Ok(peer);
         }
     }
 
@@ -216,4 +243,41 @@ pub async fn sweep_subnet_for_pin(
         "No device found with pairing PIN {} on local subnet",
         normalized_pin
     ))
+}
+
+/// Sweeps the local `/24` subnet in parallel to discover a peer with a matching pairing PIN.
+///
+/// If `default_port` matches `DEFAULT_PEER_PORT` (5050), it probes port 5050 first and
+/// automatically falls back to probing ports 5051..=5055 if no matching device was found.
+pub async fn sweep_subnet_for_pin(
+    client: &TransferClient,
+    local_ip: &str,
+    target_pin: &str,
+    default_port: u16,
+    concurrency_limit: usize,
+    timeout_ms: u64,
+) -> Result<PeerInfo, String> {
+    if default_port == DEFAULT_PEER_PORT {
+        let mut ports = vec![DEFAULT_PEER_PORT];
+        ports.extend(FALLBACK_PEER_PORTS);
+        sweep_subnet_for_pin_ports(
+            client,
+            local_ip,
+            target_pin,
+            &ports,
+            concurrency_limit,
+            timeout_ms,
+        )
+        .await
+    } else {
+        sweep_subnet_for_pin_ports(
+            client,
+            local_ip,
+            target_pin,
+            &[default_port],
+            concurrency_limit,
+            timeout_ms,
+        )
+        .await
+    }
 }

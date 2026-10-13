@@ -374,6 +374,27 @@ async fn test_finish_hash_mismatch_fails() {
 }
 
 #[tokio::test]
+async fn test_from_path_async_success_and_error() {
+    let client_dir = setup_test_dir("async_file_to_send");
+    let file_path = client_dir.join("async_payload.bin");
+    let file_size = 128 * 1024; // 128 KB
+    let expected_hash = create_test_file(&file_path, file_size);
+
+    let file_to_send = FileToSend::from_path_async("f-async-1", &file_path)
+        .await
+        .expect("from_path_async should succeed");
+    assert_eq!(file_to_send.file_id, "f-async-1");
+    assert_eq!(file_to_send.size, file_size as u64);
+    assert_eq!(file_to_send.blake3_hash.as_deref(), Some(expected_hash.as_str()));
+
+    let non_existent = client_dir.join("missing.bin");
+    let err = FileToSend::from_path_async("f-missing", &non_existent).await;
+    assert!(matches!(err, Err(ClientError::FileNotFound(_))));
+
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
 async fn test_send_file_non_existent() {
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", 5050);

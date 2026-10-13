@@ -253,6 +253,7 @@ pub async fn handle_transfer_chunk(
             )
         })?;
 
+    let mut writer = tokio::io::BufWriter::with_capacity(256 * 1024, file);
     let mut bytes_written: u64 = 0;
     let mut stream = body.into_data_stream();
 
@@ -275,7 +276,7 @@ pub async fn handle_transfer_chunk(
             ));
         }
 
-        file.write_all(&chunk).await.map_err(|e| {
+        writer.write_all(&chunk).await.map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to write chunk to disk: {}", e),
@@ -285,10 +286,10 @@ pub async fn handle_transfer_chunk(
         bytes_written += chunk.len() as u64;
     }
 
-    file.flush().await.map_err(|e| {
+    writer.flush().await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to flush .part file: {}", e),
+            format!("Failed to flush buffer: {}", e),
         )
     })?;
 
@@ -386,14 +387,17 @@ pub async fn handle_transfer_finish(
         ));
     }
 
-    // Verify BLAKE3 checksum if provided
+    // Verify BLAKE3 checksum asynchronously if provided
     if let Some(ref expected_hash) = file.blake3_hash {
-        let matches = FileManager::verify_blake3_file(&part_path, expected_hash).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to compute BLAKE3 hash: {}", e),
-            )
-        })?;
+        let matches =
+            FileManager::verify_blake3_file_async(part_path.clone(), expected_hash.clone())
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to compute BLAKE3 hash: {}", e),
+                    )
+                })?;
 
         if !matches {
             return Err((
@@ -404,7 +408,19 @@ pub async fn handle_transfer_finish(
     }
 
     let dest_path = FileManager::get_unique_dest_path(state.download_dir(), &file.name);
-    FileManager::commit_part_file(&part_path, &dest_path).map_err(|e| {
+    let part_path_clone = part_path.clone();
+    let dest_path_clone = dest_path.clone();
+    tokio::task::spawn_blocking(move || {
+        FileManager::commit_part_file(&part_path_clone, &dest_path_clone)
+    })
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to join commit task: {}", e),
+        )
+    })?
+    .map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Failed to commit .part file: {}", e),

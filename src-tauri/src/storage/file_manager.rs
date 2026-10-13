@@ -59,7 +59,7 @@ impl FileManager {
         let raw_filename = normalized
             .split('/')
             .filter(|segment| !segment.is_empty() && *segment != "." && *segment != "..")
-            .last()
+            .next_back()
             .unwrap_or("unnamed_file");
 
         // Step 2: Replace invalid filesystem characters, control characters, and Unicode bidi/hidden formatting chars
@@ -233,6 +233,23 @@ impl FileManager {
     pub fn verify_blake3_file(path: &Path, expected_hash: &str) -> Result<bool, StorageError> {
         let actual_hash = Self::calculate_blake3_file(path)?;
         Ok(actual_hash.eq_ignore_ascii_case(expected_hash))
+    }
+
+    /// Asynchronously calculates the BLAKE3 hash of a file offloaded to tokio's blocking threadpool.
+    pub async fn calculate_blake3_file_async(path: PathBuf) -> Result<String, StorageError> {
+        tokio::task::spawn_blocking(move || Self::calculate_blake3_file(&path))
+            .await
+            .map_err(|e| StorageError::Io(io::Error::other(e)))?
+    }
+
+    /// Asynchronously verifies a file's BLAKE3 hash offloaded to tokio's blocking threadpool.
+    pub async fn verify_blake3_file_async(
+        path: PathBuf,
+        expected_hash: String,
+    ) -> Result<bool, StorageError> {
+        tokio::task::spawn_blocking(move || Self::verify_blake3_file(&path, &expected_hash))
+            .await
+            .map_err(|e| StorageError::Io(io::Error::other(e)))?
     }
 
     /// Returns the size in bytes of a file on disk.

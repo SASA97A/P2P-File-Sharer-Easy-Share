@@ -9,8 +9,8 @@ use std::io::SeekFrom;
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-/// Default chunk buffer size: 1 MB (1,048,576 bytes).
-pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024;
+/// Default chunk buffer size: 4 MB (4,194,304 bytes).
+pub const DEFAULT_CHUNK_SIZE: usize = 4 * 1024 * 1024;
 
 /// Errors that may occur during client transfer operations.
 #[derive(Debug)]
@@ -128,6 +128,45 @@ impl FileToSend {
             crate::storage::file_manager::StorageError::FileNotFound(p) => ClientError::FileNotFound(p),
             _ => ClientError::Other(format!("{:?}", e)),
         })?;
+
+        Ok(Self {
+            file_id: file_id.into(),
+            path,
+            name,
+            size,
+            blake3_hash: Some(hash),
+        })
+    }
+
+    /// Creates a `FileToSend` instance asynchronously by inspecting the file metadata
+    /// and offloading BLAKE3 hash computation to `tokio::task::spawn_blocking`.
+    pub async fn from_path_async(
+        file_id: impl Into<String>,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, ClientError> {
+        let path = path.into();
+        if !path.exists() {
+            return Err(ClientError::FileNotFound(path));
+        }
+
+        let metadata = tokio::fs::metadata(&path).await.map_err(ClientError::Io)?;
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+        let size = metadata.len();
+
+        let path_clone = path.clone();
+        let hash = FileManager::calculate_blake3_file_async(path_clone)
+            .await
+            .map_err(|e| match e {
+                crate::storage::file_manager::StorageError::Io(io_err) => ClientError::Io(io_err),
+                crate::storage::file_manager::StorageError::FileNotFound(p) => {
+                    ClientError::FileNotFound(p)
+                }
+                _ => ClientError::Other(format!("{:?}", e)),
+            })?;
 
         Ok(Self {
             file_id: file_id.into(),

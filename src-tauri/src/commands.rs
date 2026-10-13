@@ -303,22 +303,40 @@ pub async fn start_transfer(
         return Err("No files selected for transfer".to_string());
     }
 
-    let mut files_to_send = Vec::new();
-    for (idx, sel) in files.into_iter().enumerate() {
+    // Verify file existence first
+    for sel in &files {
         let path = PathBuf::from(&sel.path);
         if !path.exists() {
             return Err(format!("File does not exist: {}", sel.path));
         }
+    }
 
+    // Offload BLAKE3 hash calculation concurrently to Tokio blocking threadpool
+    let mut tasks = Vec::with_capacity(files.len());
+    for (idx, sel) in files.into_iter().enumerate() {
+        let path = PathBuf::from(&sel.path);
         let file_id = format!("f_{}_{}", idx, uuid::Uuid::new_v4());
-        let mut file_obj = FileToSend::from_path(file_id, path)
-            .map_err(|e| format!("Failed to read file {}: {}", sel.path, e))?;
+        let raw_path = sel.path.clone();
+        let custom_name = sel.name;
+        tasks.push(tokio::spawn(async move {
+            let mut file_obj = FileToSend::from_path_async(file_id, path)
+                .await
+                .map_err(|e| format!("Failed to read file {}: {}", raw_path, e))?;
 
-        if let Some(custom_name) = sel.name {
-            if !custom_name.trim().is_empty() {
-                file_obj.name = custom_name;
+            if let Some(custom_name) = custom_name {
+                if !custom_name.trim().is_empty() {
+                    file_obj.name = custom_name;
+                }
             }
-        }
+            Ok::<FileToSend, String>(file_obj)
+        }));
+    }
+
+    let mut files_to_send = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        let file_obj = task
+            .await
+            .map_err(|e| format!("File preparation task failed: {}", e))??;
         files_to_send.push(file_obj);
     }
 

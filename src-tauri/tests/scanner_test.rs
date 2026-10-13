@@ -1,6 +1,9 @@
 use easy_share_lib::client::TransferClient;
 use easy_share_lib::models::peer::DeviceInfo;
-use easy_share_lib::pairing::scanner::{parse_address_or_url, resolve_peer_by_address, sweep_subnet_for_pin};
+use easy_share_lib::pairing::scanner::{
+    parse_address_or_url, resolve_peer_by_address, sweep_subnet_for_pin,
+    sweep_subnet_for_pin_ports,
+};
 use easy_share_lib::server::{start_server, ServerState};
 use std::fs;
 use std::path::PathBuf;
@@ -176,6 +179,55 @@ async fn test_sweep_subnet_for_pin_rejections() {
     let not_found_err = sweep_subnet_for_pin(&client, "127.0.0.2", "999999", port, 50, 100).await;
     assert!(not_found_err.is_err());
     assert!(not_found_err.unwrap_err().contains("No device found"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_sweep_subnet_for_pin_ports_fallback() {
+    let temp_dir = setup_test_dir("sweep_fallback");
+    let target_pin = "334455";
+    let device = sample_device_info("Fallback-Target", target_pin);
+    let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+
+    // Server listens on ephemeral port (not 5050)
+    let (port, _server_handle) = start_server(state.clone(), 0)
+        .await
+        .expect("server should start");
+
+    let client = TransferClient::new();
+
+    // Probing [5050, port]: port 5050 is not this device, so it falls back to port
+    let peer = sweep_subnet_for_pin_ports(&client, "127.0.0.2", target_pin, &[5050, port], 50, 500)
+        .await
+        .expect("should discover device on fallback port");
+
+    assert_eq!(peer.device_name, "Fallback-Target");
+    assert_eq!(peer.ip, "127.0.0.1");
+    assert_eq!(peer.port, port);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_sweep_subnet_for_pin_fallback_range_discovery() {
+    let temp_dir = setup_test_dir("sweep_fallback_range");
+    let target_pin = "778899";
+    let device = sample_device_info("Fallback-Range-Target", target_pin);
+    let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+
+    // Try binding to 5051 (one of the fallback ports in 5051..=5055)
+    if let Ok((port, _server_handle)) = start_server(state.clone(), 5051).await {
+        let client = TransferClient::new();
+        // Probe with default port 5050; it should automatically fall back and find it on 5051!
+        let peer = sweep_subnet_for_pin(&client, "127.0.0.2", target_pin, 5050, 50, 500)
+            .await
+            .expect("should discover device on fallback port 5051");
+
+        assert_eq!(peer.device_name, "Fallback-Range-Target");
+        assert_eq!(peer.ip, "127.0.0.1");
+        assert_eq!(peer.port, port);
+    }
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

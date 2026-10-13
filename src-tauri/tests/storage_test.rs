@@ -229,6 +229,37 @@ fn test_calculate_and_verify_blake3_hash() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+#[tokio::test]
+async fn test_calculate_and_verify_blake3_hash_async() {
+    let temp_dir = std::env::temp_dir().join("easy_share_test_blake3_async");
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("failed to create temp dir");
+
+    let payload = b"Async cryptographic verification with BLAKE3 in Easy Share.";
+    let expected_hash = blake3::hash(payload).to_hex().to_string();
+
+    let file_path = temp_dir.join("blake3_async_sample.bin");
+    fs::write(&file_path, payload).expect("failed to write payload");
+
+    let file_hash = FileManager::calculate_blake3_file_async(file_path.clone())
+        .await
+        .expect("failed to calculate async file hash");
+    assert_eq!(file_hash, expected_hash);
+
+    let verified = FileManager::verify_blake3_file_async(file_path.clone(), expected_hash)
+        .await
+        .expect("failed to verify async file hash");
+    assert!(verified);
+
+    let bad_hash = "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+    let bad_verified = FileManager::verify_blake3_file_async(file_path.clone(), bad_hash)
+        .await
+        .expect("failed to verify bad async file hash");
+    assert!(!bad_verified);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
 #[test]
 fn test_get_downloads_dir() {
     let downloads_dir = FileManager::get_downloads_dir();
