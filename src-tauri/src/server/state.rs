@@ -1,13 +1,48 @@
 use crate::models::peer::DeviceInfo;
 use crate::models::transfer::{TransferRequest, TransferStatus};
 use crate::storage::file_manager::FileManager;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{broadcast, mpsc, oneshot, RwLock};
+
+/// Payload emitted for receiver-side real-time progress events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReceiveProgressPayload {
+    pub session_token: String,
+    pub file_id: String,
+    pub file_name: String,
+    pub received_bytes: u64,
+    pub total_bytes: u64,
+    pub percent: u32,
+}
+
+/// Payload emitted for receiver-side completion notification events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReceiveCompletedPayload {
+    pub session_token: String,
+    pub file_id: String,
+    pub file_name: String,
+    pub saved_path: String,
+}
+
+/// Payload emitted when a transfer session is cancelled on the receiver side.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReceiveCancelledPayload {
+    pub session_token: String,
+}
+
+/// High-level receiver-side transfer events emitted by the Axum server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ServerTransferEvent {
+    Progress(ReceiveProgressPayload),
+    Completed(ReceiveCompletedPayload),
+    Cancelled(ReceiveCancelledPayload),
+}
 
 /// Consent request sent to UI / controller for user decision.
 #[derive(Debug)]
@@ -46,6 +81,7 @@ pub struct ServerState {
     pub download_dir: PathBuf,
     pub consent_policy: ConsentPolicy,
     pub sessions: Arc<RwLock<HashMap<String, SessionState>>>,
+    pub event_tx: broadcast::Sender<ServerTransferEvent>,
 }
 
 impl ServerState {
@@ -63,12 +99,24 @@ impl ServerState {
         if device_info.pairing_pin.is_none() {
             device_info.pairing_pin = Some(crate::pairing::pin::generate_pin());
         }
+        let (event_tx, _) = broadcast::channel(256);
         Self {
             device_info: Arc::new(RwLock::new(device_info)),
             download_dir,
             consent_policy,
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            event_tx,
         }
+    }
+
+    /// Subscribes to receiver-side transfer events.
+    pub fn subscribe_events(&self) -> broadcast::Receiver<ServerTransferEvent> {
+        self.event_tx.subscribe()
+    }
+
+    /// Emits a receiver-side transfer event across the broadcast channel.
+    pub fn emit_event(&self, event: ServerTransferEvent) {
+        let _ = self.event_tx.send(event);
     }
 
     /// Returns a clone of the current device info.

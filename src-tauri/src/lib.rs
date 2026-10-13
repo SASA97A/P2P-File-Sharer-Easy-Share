@@ -11,7 +11,7 @@ use app_state::AppState;
 use discovery::{DiscoveryConfig, DiscoveryEvent, DiscoveryService, PeerEvent};
 use models::peer::DeviceInfo;
 use server::routes::start_server;
-use server::state::{ConsentPolicy, ConsentRequest, ServerState};
+use server::state::{ConsentPolicy, ConsentRequest, ServerState, ServerTransferEvent};
 use storage::file_manager::FileManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -113,6 +113,25 @@ pub async fn setup_services(
             }
 
             let _ = app_consent.emit("transfer-requested", &req_payload);
+        }
+    });
+
+    // 9. Bridge receiver-side transfer progress & completion events to Tauri frontend
+    let mut server_events = server_state.subscribe_events();
+    let app_server = app.clone();
+    tokio::spawn(async move {
+        while let Ok(event) = server_events.recv().await {
+            match event {
+                ServerTransferEvent::Progress(progress) => {
+                    let _ = app_server.emit("receive-progress", &progress);
+                }
+                ServerTransferEvent::Completed(completed) => {
+                    let _ = app_server.emit("receive-completed", &completed);
+                }
+                ServerTransferEvent::Cancelled(cancelled) => {
+                    let _ = app_server.emit("receive-cancelled", &cancelled);
+                }
+            }
         }
     });
 

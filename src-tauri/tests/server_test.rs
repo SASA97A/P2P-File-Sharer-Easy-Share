@@ -3,7 +3,9 @@ use easy_share_lib::models::transfer::{
     CancelRequest, ChunkResponse, FileMetadata, FinishRequest, FinishResponse, TransferRequest,
     TransferResponse, TransferStatus, TransferStatusQueryResponse,
 };
-use easy_share_lib::server::{start_server, ConsentPolicy, ConsentRequest, ServerState};
+use easy_share_lib::server::{
+    start_server, ConsentPolicy, ConsentRequest, ServerState, ServerTransferEvent,
+};
 use easy_share_lib::storage::file_manager::FileManager;
 use reqwest::Client;
 use std::fs;
@@ -906,6 +908,122 @@ async fn test_transfer_cancel() {
         .await
         .unwrap();
     assert!(chunk_after_cancel.status().is_client_error());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_server_transfer_events_emission() {
+    let temp_dir = setup_test_dir("events_emission");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+    let mut event_rx = state.subscribe_events();
+
+    let (port, _handle) = start_server(state, 0)
+        .await
+        .expect("failed to start server");
+
+    let client = Client::new();
+
+    let payload = vec![0x99; 500];
+    let expected_hash = FileManager::calculate_blake3_bytes(&payload);
+
+    let request_payload = TransferRequest::new(
+        "req-events",
+        "SenderDevice",
+        "windows",
+        vec![FileMetadata::new(
+            "f-event",
+            "events_test.bin",
+            500,
+            Some(expected_hash),
+        )],
+    );
+
+    let handshake_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/request", port))
+        .json(&request_payload)
+        .send()
+        .await
+        .unwrap();
+    let handshake: TransferResponse = handshake_res.json().await.unwrap();
+    let token = handshake.session_token.unwrap();
+
+    // 1. Upload chunk and verify Progress event
+    let chunk_res = client
+        .post(format!(
+            "http://127.0.0.1:{}/api/v1/transfer/chunk?session_token={}&file_id=f-event&offset=0",
+            port, token
+        ))
+        .body(payload.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(chunk_res.status(), 200);
+
+    let received_event = event_rx.recv().await.expect("receive progress event");
+    match received_event {
+        ServerTransferEvent::Progress(prog) => {
+            assert_eq!(prog.session_token, token);
+            assert_eq!(prog.file_id, "f-event");
+            assert_eq!(prog.file_name, "events_test.bin");
+            assert_eq!(prog.received_bytes, 500);
+            assert_eq!(prog.total_bytes, 500);
+            assert_eq!(prog.percent, 100);
+        }
+        other => panic!("expected Progress event, got {:?}", other),
+    }
+
+    // 2. Finish transfer and verify Completed event
+    let finish_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/finish", port))
+        .json(&FinishRequest::new(&token, "f-event"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(finish_res.status(), 200);
+
+    let completed_event = event_rx.recv().await.expect("receive completed event");
+    match completed_event {
+        ServerTransferEvent::Completed(comp) => {
+            assert_eq!(comp.session_token, token);
+            assert_eq!(comp.file_id, "f-event");
+            assert_eq!(comp.file_name, "events_test.bin");
+            assert!(comp.saved_path.contains("events_test.bin"));
+        }
+        other => panic!("expected Completed event, got {:?}", other),
+    }
+
+    // 3. Cancel transfer on another session and verify Cancelled event
+    let req_cancel = TransferRequest::new(
+        "req-cancel-events",
+        "SenderDevice",
+        "windows",
+        vec![FileMetadata::new("f-c", "temp.bin", 100, None)],
+    );
+    let h_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/request", port))
+        .json(&req_cancel)
+        .send()
+        .await
+        .unwrap();
+    let h: TransferResponse = h_res.json().await.unwrap();
+    let tok_cancel = h.session_token.unwrap();
+
+    let cancel_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/cancel", port))
+        .json(&CancelRequest::new(&tok_cancel, Some("User cancelled".to_string())))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(cancel_res.status(), 200);
+
+    let cancelled_event = event_rx.recv().await.expect("receive cancelled event");
+    match cancelled_event {
+        ServerTransferEvent::Cancelled(c) => {
+            assert_eq!(c.session_token, tok_cancel);
+        }
+        other => panic!("expected Cancelled event, got {:?}", other),
+    }
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

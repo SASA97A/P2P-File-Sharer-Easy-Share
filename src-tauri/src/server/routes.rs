@@ -304,6 +304,22 @@ pub async fn handle_transfer_chunk(
         }
     }
 
+    let percent = if file_size > 0 {
+        ((current_total as f64 / file_size as f64) * 100.0) as u32
+    } else {
+        100
+    };
+    state.emit_event(crate::server::state::ServerTransferEvent::Progress(
+        crate::server::state::ReceiveProgressPayload {
+            session_token: query.session_token.clone(),
+            file_id: query.file_id.clone(),
+            file_name: file_name.clone(),
+            received_bytes: current_total,
+            total_bytes: file_size,
+            percent,
+        },
+    ));
+
     Ok(Json(ChunkResponse {
         file_id: query.file_id,
         bytes_written,
@@ -395,9 +411,19 @@ pub async fn handle_transfer_finish(
         )
     })?;
 
+    let saved_path_str = dest_path.to_string_lossy().to_string();
+    state.emit_event(crate::server::state::ServerTransferEvent::Completed(
+        crate::server::state::ReceiveCompletedPayload {
+            session_token: payload.session_token.clone(),
+            file_id: payload.file_id.clone(),
+            file_name: file.name.clone(),
+            saved_path: saved_path_str.clone(),
+        },
+    ));
+
     Ok(Json(FinishResponse::completed(
         payload.file_id,
-        dest_path.to_string_lossy(),
+        saved_path_str,
     )))
 }
 
@@ -421,6 +447,12 @@ pub async fn handle_transfer_cancel(
             let _ = tokio::fs::remove_file(part_path).await;
         }
     }
+
+    state.emit_event(crate::server::state::ServerTransferEvent::Cancelled(
+        crate::server::state::ReceiveCancelledPayload {
+            session_token: payload.session_token.clone(),
+        },
+    ));
 
     Ok(StatusCode::OK)
 }
