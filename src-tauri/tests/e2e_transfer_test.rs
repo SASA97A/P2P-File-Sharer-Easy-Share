@@ -356,10 +356,11 @@ async fn test_e2e_transfer_interruption_and_resumption() {
     );
 
     // Verify .part cleanup
+    let file_key = FileManager::deterministic_file_key("dataset.raw", f_size as u64, Some(&expected_hash));
     let part_file = FileManager::get_part_path(
         &node_b_receiver.download_dir,
         "dataset.raw",
-        &session_token,
+        &file_key,
     );
     assert!(!part_file.exists(), "part file must be removed after commit");
 

@@ -115,10 +115,25 @@ impl FileManager {
         Ok(())
     }
 
-    /// Derives the temporary `.part` file path for an active transfer session.
-    pub fn get_part_path(downloads_dir: &Path, file_name: &str, session_token: &str) -> PathBuf {
+    /// Derives a deterministic 16-character identifier for a file across sessions.
+    /// If BLAKE3 hash is present, uses its prefix; otherwise computes a hash of file name and size.
+    pub fn deterministic_file_key(file_name: &str, file_size: u64, blake3_hash: Option<&str>) -> String {
+        if let Some(hash) = blake3_hash {
+            let trimmed = hash.trim();
+            if !trimmed.is_empty() {
+                let len = std::cmp::min(16, trimmed.len());
+                return trimmed[..len].to_ascii_lowercase();
+            }
+        }
+        let input = format!("{}:{}", file_name, file_size);
+        let digest = blake3::hash(input.as_bytes()).to_hex().to_string();
+        digest[..16].to_string()
+    }
+
+    /// Derives the temporary `.part` file path for an active transfer using its deterministic key or token.
+    pub fn get_part_path(downloads_dir: &Path, file_name: &str, file_key: &str) -> PathBuf {
         let sanitized = Self::sanitize_filename(file_name);
-        downloads_dir.join(format!("{}.{}.part", sanitized, session_token))
+        downloads_dir.join(format!("{}.{}.part", sanitized, file_key))
     }
 
     /// Generates a unique destination path in `downloads_dir`, incrementing a suffix

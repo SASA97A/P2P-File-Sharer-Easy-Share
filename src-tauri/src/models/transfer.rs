@@ -39,6 +39,15 @@ impl FileMetadata {
             blake3_hash,
         }
     }
+
+    /// Derives the deterministic file key for cross-session resumption.
+    pub fn file_key(&self) -> String {
+        crate::storage::file_manager::FileManager::deterministic_file_key(
+            &self.name,
+            self.size,
+            self.blake3_hash.as_deref(),
+        )
+    }
 }
 
 /// Handshake request payload sent by the sender.

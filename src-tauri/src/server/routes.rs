@@ -146,7 +146,7 @@ pub async fn handle_transfer_status(
         ))?;
 
     let part_path =
-        FileManager::get_part_path(state.download_dir(), &file.name, &query.session_token);
+        FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
     let bytes_received = if part_path.exists() {
         FileManager::get_file_size(&part_path).unwrap_or(0)
     } else {
@@ -181,7 +181,7 @@ pub async fn handle_transfer_chunk(
     Query(query): Query<ChunkQuery>,
     body: Body,
 ) -> Result<Json<ChunkResponse>, (StatusCode, String)> {
-    let (file_name, file_size) = {
+    let (file_name, file_size, file_key) = {
         let sessions = state.sessions.read().await;
         let session = sessions.get(&query.session_token).ok_or((
             StatusCode::UNAUTHORIZED,
@@ -205,7 +205,7 @@ pub async fn handle_transfer_chunk(
                 "File ID not found in session".to_string(),
             ))?;
 
-        (file.name.clone(), file.size)
+        (file.name.clone(), file.size, file.file_key())
     };
 
     if query.offset > file_size {
@@ -218,8 +218,7 @@ pub async fn handle_transfer_chunk(
         ));
     }
 
-    let part_path =
-        FileManager::get_part_path(state.download_dir(), &file_name, &query.session_token);
+    let part_path = FileManager::get_part_path(state.download_dir(), &file_name, &file_key);
 
     if let Some(parent) = part_path.parent() {
         if !parent.exists() {
@@ -344,7 +343,7 @@ pub async fn handle_transfer_finish(
     };
 
     let part_path =
-        FileManager::get_part_path(state.download_dir(), &file.name, &payload.session_token);
+        FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
 
     if !part_path.exists() {
         return Err((
@@ -417,7 +416,7 @@ pub async fn handle_transfer_cancel(
 
     for file in &session.request.files {
         let part_path =
-            FileManager::get_part_path(state.download_dir(), &file.name, &payload.session_token);
+            FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
         if part_path.exists() {
             let _ = tokio::fs::remove_file(part_path).await;
         }

@@ -362,7 +362,8 @@ async fn test_chunk_upload_status_and_streaming() {
     assert_eq!(chunk2_resp.current_total, 100);
 
     // Verify raw .part file content on disk
-    let part_path = FileManager::get_part_path(&temp_dir, "test.bin", &token);
+    let file_key = FileManager::deterministic_file_key("test.bin", 100, None);
+    let part_path = FileManager::get_part_path(&temp_dir, "test.bin", &file_key);
     let file_bytes = fs::read(&part_path).expect("failed to read .part file");
     assert_eq!(file_bytes.len(), 100);
     assert_eq!(&file_bytes[0..50], &vec![0xAA; 50][..]);
@@ -489,11 +490,128 @@ async fn test_resumed_chunk_upload_seekable() {
         .unwrap();
     assert_eq!(res_chunk2.status(), 200);
 
-    let part_path = FileManager::get_part_path(&temp_dir, "data.iso", &token);
+    let file_key = FileManager::deterministic_file_key("data.iso", 1000, None);
+    let part_path = FileManager::get_part_path(&temp_dir, "data.iso", &file_key);
     let file_bytes = fs::read(&part_path).expect("failed to read .part file");
     assert_eq!(file_bytes.len(), 1000);
     assert_eq!(&file_bytes[0..400], &vec![0x11; 400][..]);
     assert_eq!(&file_bytes[400..1000], &vec![0x22; 600][..]);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_cross_session_resumption_with_deterministic_part_files() {
+    let temp_dir = setup_test_dir("cross_session_resume");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+    let (port, _handle) = start_server(state, 0)
+        .await
+        .expect("failed to start server");
+
+    let client = Client::new();
+
+    // Prepare payload of 1000 bytes
+    let mut payload = vec![0x33; 400];
+    payload.extend(vec![0x44; 600]);
+    let expected_hash = FileManager::calculate_blake3_bytes(&payload);
+
+    let file_meta = FileMetadata::new(
+        "f-cross",
+        "archive.zip",
+        payload.len() as u64,
+        Some(expected_hash),
+    );
+
+    // --- Session 1: Initiate transfer and upload first 400 bytes ---
+    let req1 = TransferRequest::new(
+        "req-sess-1",
+        "SenderDevice",
+        "windows",
+        vec![file_meta.clone()],
+    );
+    let res1 = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/request", port))
+        .json(&req1)
+        .send()
+        .await
+        .unwrap();
+    let handshake1: TransferResponse = res1.json().await.unwrap();
+    let token1 = handshake1.session_token.unwrap();
+    assert_eq!(
+        *handshake1
+            .existing_offsets
+            .get("f-cross")
+            .unwrap(),
+        0
+    );
+
+    // Upload first 400 bytes
+    let chunk1 = payload[0..400].to_vec();
+    let chunk_res1 = client
+        .post(format!(
+            "http://127.0.0.1:{}/api/v1/transfer/chunk?session_token={}&file_id=f-cross&offset=0",
+            port, token1
+        ))
+        .body(chunk1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(chunk_res1.status(), 200);
+
+    // --- Session 2: New session handshake for the same file should resume at 400 bytes ---
+    let req2 = TransferRequest::new(
+        "req-sess-2",
+        "SenderDevice",
+        "windows",
+        vec![file_meta.clone()],
+    );
+    let res2 = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/request", port))
+        .json(&req2)
+        .send()
+        .await
+        .unwrap();
+    let handshake2: TransferResponse = res2.json().await.unwrap();
+    let token2 = handshake2.session_token.unwrap();
+    assert_ne!(token1, token2, "sessions must have unique tokens");
+
+    // The key assertion: offset discovered for the file in the new session must be 400!
+    assert_eq!(
+        *handshake2
+            .existing_offsets
+            .get("f-cross")
+            .unwrap_or(&0),
+        400,
+        "new session must discover deterministic partial offset of 400 bytes"
+    );
+
+    // Send remaining 600 bytes with session 2
+    let chunk2 = payload[400..1000].to_vec();
+    let chunk_res2 = client
+        .post(format!(
+            "http://127.0.0.1:{}/api/v1/transfer/chunk?session_token={}&file_id=f-cross&offset=400",
+            port, token2
+        ))
+        .body(chunk2)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(chunk_res2.status(), 200);
+
+    // Finish transfer using session 2
+    let finish_payload = FinishRequest::new(&token2, "f-cross");
+    let finish_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/finish", port))
+        .json(&finish_payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(finish_res.status(), 200);
+
+    let committed_file = temp_dir.join("archive.zip");
+    assert!(committed_file.exists());
+    let disk_bytes = fs::read(&committed_file).expect("read committed archive");
+    assert_eq!(disk_bytes, payload);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -519,7 +637,7 @@ async fn test_transfer_finish_checksum_validation_and_commit() {
             "f-final",
             "greeting.txt",
             payload.len() as u64,
-            Some(expected_hash),
+            Some(expected_hash.clone()),
         )],
     );
 
@@ -563,7 +681,8 @@ async fn test_transfer_finish_checksum_validation_and_commit() {
     assert_eq!(fs::read(&final_path).unwrap(), payload);
 
     // Verify .part file is removed
-    let part_path = FileManager::get_part_path(&temp_dir, "greeting.txt", &token);
+    let file_key = FileManager::deterministic_file_key("greeting.txt", payload.len() as u64, Some(&expected_hash));
+    let part_path = FileManager::get_part_path(&temp_dir, "greeting.txt", &file_key);
     assert!(!part_path.exists(), ".part file must be removed after commit");
 
     let _ = fs::remove_dir_all(&temp_dir);

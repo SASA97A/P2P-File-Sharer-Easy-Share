@@ -152,7 +152,7 @@ impl ServerState {
         let mut offsets = HashMap::new();
 
         for file in &request.files {
-            let part_path = FileManager::get_part_path(&self.download_dir, &file.name, &token);
+            let part_path = FileManager::get_part_path(&self.download_dir, &file.name, &file.file_key());
             let offset = if part_path.exists() {
                 FileManager::get_file_size(&part_path).unwrap_or(0)
             } else {
