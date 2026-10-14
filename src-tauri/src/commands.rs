@@ -42,20 +42,27 @@ pub fn inspect_file_paths<P: AsRef<std::path::Path>>(paths: &[P]) -> Vec<Selecte
                 size,
             });
         } else if path_ref.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(path_ref) {
-                for entry in entries.flatten() {
-                    let sub_path = entry.path();
-                    if sub_path.is_file() {
-                        let name = sub_path
-                            .file_name()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "unnamed_file".to_string());
-                        let size = std::fs::metadata(&sub_path).map(|m| m.len()).unwrap_or(0);
-                        results.push(SelectedFile {
-                            name,
-                            path: sub_path.to_string_lossy().to_string(),
-                            size,
-                        });
+            let mut dir_stack = vec![path_ref.to_path_buf()];
+            while let Some(current_dir) = dir_stack.pop() {
+                if let Ok(entries) = std::fs::read_dir(&current_dir) {
+                    for entry in entries.flatten() {
+                        let sub_path = entry.path();
+                        if let Ok(file_type) = entry.file_type() {
+                            if file_type.is_dir() {
+                                dir_stack.push(sub_path);
+                            } else if file_type.is_file() {
+                                let name = sub_path
+                                    .file_name()
+                                    .map(|s| s.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| "unnamed_file".to_string());
+                                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                                results.push(SelectedFile {
+                                    name,
+                                    path: sub_path.to_string_lossy().to_string(),
+                                    size,
+                                });
+                            }
+                        }
                     }
                 }
             }

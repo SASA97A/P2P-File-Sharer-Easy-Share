@@ -406,3 +406,45 @@ async fn test_inspect_file_paths_resolution() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_inspect_file_paths_deep_recursion() {
+    let temp_dir = setup_test_dir("inspect_deep_recursion");
+    let file_root = temp_dir.join("file_root.txt");
+    let empty_dir = temp_dir.join("empty_dir");
+    let level1 = temp_dir.join("level1");
+    let file_l1 = level1.join("file_level1.txt");
+    let level2 = level1.join("level2");
+    let file_l2 = level2.join("file_level2.txt");
+    let level3 = level2.join("level3");
+    let file_l3 = level3.join("file_level3.txt");
+
+    fs::create_dir_all(&empty_dir).unwrap();
+    fs::create_dir_all(&level3).unwrap();
+
+    fs::write(&file_root, vec![1u8; 10]).unwrap();
+    fs::write(&file_l1, vec![2u8; 20]).unwrap();
+    fs::write(&file_l2, vec![3u8; 30]).unwrap();
+    fs::write(&file_l3, vec![4u8; 40]).unwrap();
+
+    let paths = vec![temp_dir.to_string_lossy().to_string()];
+    let selected = inspect_file_paths(&paths);
+
+    let total_size: u64 = selected.iter().map(|f| f.size).sum();
+    let mut names: Vec<String> = selected.into_iter().map(|f| f.name).collect();
+    names.sort();
+
+    assert_eq!(names.len(), 4, "Must find all 4 nested files recursively");
+    assert_eq!(
+        names,
+        vec![
+            "file_level1.txt".to_string(),
+            "file_level2.txt".to_string(),
+            "file_level3.txt".to_string(),
+            "file_root.txt".to_string(),
+        ]
+    );
+    assert_eq!(total_size, 100, "Total size of all recursive files must match");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
