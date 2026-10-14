@@ -239,6 +239,65 @@ async fn test_resumption_after_partial_transfer() {
 }
 
 #[tokio::test]
+async fn test_send_file_resumable_with_cancellation() {
+    let server_dir = setup_test_dir("cancel_token_server");
+    let client_dir = setup_test_dir("cancel_token_client");
+
+    let server_state = Arc::new(ServerState::new(
+        sample_device_info(0),
+        server_dir.clone(),
+    ));
+
+    let (port, _handle) = start_server(server_state, 0)
+        .await
+        .expect("failed to start server");
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
+
+    let file_size = 1024 * 1024;
+    let file_path = client_dir.join("cancel_test.dat");
+    create_test_file(&file_path, file_size);
+
+    let file_to_send = FileToSend::from_path("f-cancel", &file_path)
+        .expect("failed to create FileToSend");
+
+    let req = TransferRequest::new(
+        "req-cancel",
+        "Sender",
+        "windows",
+        vec![file_to_send.to_metadata()],
+    );
+
+    let res = client
+        .request_transfer(&peer, &req)
+        .await
+        .expect("handshake failed");
+    let token = res.session_token.expect("missing token");
+
+    let cancel_token = tokio_util::sync::CancellationToken::new();
+    cancel_token.cancel();
+
+    let result = client
+        .send_file_resumable_cancelling(
+            &peer,
+            &token,
+            &file_to_send,
+            Some(&cancel_token),
+            |_sent, _total| {},
+        )
+        .await;
+
+    assert!(result.is_err(), "Must fail when cancelled");
+    match result.unwrap_err() {
+        ClientError::Cancelled => {}
+        other => panic!("Expected ClientError::Cancelled, got {:?}", other),
+    }
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
 async fn test_progress_reporting_monotonically_increasing() {
     let server_dir = setup_test_dir("progress_server");
     let client_dir = setup_test_dir("progress_client");

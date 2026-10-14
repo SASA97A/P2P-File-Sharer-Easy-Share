@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::client::FileToSend;
+use crate::client::{ClientError, FileToSend};
 use crate::models::peer::{DeviceInfo, PeerInfo};
 use crate::models::transfer::{TransferRequest, TransferStatus};
 use serde::{Deserialize, Serialize};
@@ -97,6 +97,13 @@ pub struct TransferBatchCompletedPayload {
     pub session_token: String,
     pub total_files: usize,
     pub total_bytes: u64,
+}
+
+/// Event payload emitted when an active transfer session is cancelled.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransferCancelledPayload {
+    pub session_token: String,
+    pub reason: String,
 }
 
 /// Event payload emitted when a transfer fails or is aborted.
@@ -375,15 +382,41 @@ pub async fn start_transfer(
                 "Receiver accepted transfer but did not return a session token".to_string()
             })?;
 
+            let cancel_token = tokio_util::sync::CancellationToken::new();
+            state
+                .register_cancellation_token(&session_token, cancel_token.clone())
+                .await;
+
             let client = state.transfer_client.clone();
             let peer_clone = peer.clone();
             let token_clone = session_token.clone();
             let app_handle = app.clone();
+            let cancel_token_clone = cancel_token.clone();
+            let tokens_registry = state.cancellation_tokens.clone();
             let total_files = files_to_send.len();
             let total_batch_bytes = files_to_send.iter().map(|f| f.size).sum::<u64>();
 
             tokio::spawn(async move {
                 for file in files_to_send {
+                    if cancel_token_clone.is_cancelled() {
+                        let _ = app_handle.emit(
+                            "transfer-cancelled",
+                            &TransferCancelledPayload {
+                                session_token: token_clone.clone(),
+                                reason: "Transfer cancelled by user".to_string(),
+                            },
+                        );
+                        let _ = client
+                            .cancel_transfer(
+                                &peer_clone,
+                                &token_clone,
+                                Some("Cancelled by user".to_string()),
+                            )
+                            .await;
+                        tokens_registry.write().await.remove(&token_clone);
+                        return;
+                    }
+
                     let file_id = file.file_id.clone();
                     let file_name = file.name.clone();
                     let total_bytes = file.size;
@@ -407,10 +440,11 @@ pub async fn start_transfer(
                     let tok_cb = token_clone.clone();
 
                     let send_res = client
-                        .send_file_resumable(
+                        .send_file_resumable_cancelling(
                             &peer_clone,
                             &token_clone,
                             &file,
+                            Some(&cancel_token_clone),
                             move |sent, total| {
                                 let percent = if total > 0 {
                                     ((sent as f64 / total as f64) * 100.0) as u32
@@ -433,6 +467,25 @@ pub async fn start_transfer(
                         .await;
 
                     if let Err(err) = send_res {
+                        if matches!(err, ClientError::Cancelled) || cancel_token_clone.is_cancelled() {
+                            let _ = app_handle.emit(
+                                "transfer-cancelled",
+                                &TransferCancelledPayload {
+                                    session_token: token_clone.clone(),
+                                    reason: "Transfer cancelled by user".to_string(),
+                                },
+                            );
+                            let _ = client
+                                .cancel_transfer(
+                                    &peer_clone,
+                                    &token_clone,
+                                    Some("Cancelled by user".to_string()),
+                                )
+                                .await;
+                            tokens_registry.write().await.remove(&token_clone);
+                            return;
+                        }
+
                         let _ = app_handle.emit(
                             "transfer-error",
                             &TransferErrorPayload {
@@ -442,6 +495,26 @@ pub async fn start_transfer(
                                 error: err.to_string(),
                             },
                         );
+                        tokens_registry.write().await.remove(&token_clone);
+                        return;
+                    }
+
+                    if cancel_token_clone.is_cancelled() {
+                        let _ = app_handle.emit(
+                            "transfer-cancelled",
+                            &TransferCancelledPayload {
+                                session_token: token_clone.clone(),
+                                reason: "Transfer cancelled by user".to_string(),
+                            },
+                        );
+                        let _ = client
+                            .cancel_transfer(
+                                &peer_clone,
+                                &token_clone,
+                                Some("Cancelled by user".to_string()),
+                            )
+                            .await;
+                        tokens_registry.write().await.remove(&token_clone);
                         return;
                     }
 
@@ -471,10 +544,14 @@ pub async fn start_transfer(
                                     error: format!("Failed to finalize transfer: {}", err),
                                 },
                             );
+                            tokens_registry.write().await.remove(&token_clone);
                             return;
                         }
                     }
                 }
+
+                // Clean up token from registry
+                tokens_registry.write().await.remove(&token_clone);
 
                 // Emit batch completion when all files finish successfully
                 let _ = app_handle.emit(
@@ -509,6 +586,10 @@ pub async fn cancel_transfer(
     session_token: String,
     peer: Option<PeerInfo>,
 ) -> Result<(), String> {
+    // 1. Cancel active outbound transfer via CancellationToken if present
+    state.cancel_session(&session_token).await;
+
+    // 2. Notify remote peer
     if let Some(peer_info) = peer {
         let _ = state
             .transfer_client
@@ -516,7 +597,7 @@ pub async fn cancel_transfer(
             .await;
     }
 
-    // Cancel in local server state if this device was the receiver
+    // 3. Cancel in local server state if this device was the receiver
     let mut sessions = state.server_state.sessions.write().await;
     if let Some(session) = sessions.get_mut(&session_token) {
         session.status = TransferStatus::Cancelled;

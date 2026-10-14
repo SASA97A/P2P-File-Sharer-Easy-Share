@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, RwLock};
+use tokio_util::sync::CancellationToken;
 
 /// Unified application state shared across Tauri IPC command handlers and background tasks.
 pub struct AppState {
@@ -17,6 +18,7 @@ pub struct AppState {
     pub transfer_client: TransferClient,
     pub download_dir: PathBuf,
     pub pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
+    pub cancellation_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
 }
 
 impl AppState {
@@ -33,7 +35,32 @@ impl AppState {
             transfer_client: TransferClient::new(),
             download_dir,
             pending_consents,
+            cancellation_tokens: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Registers an active transfer cancellation token.
+    pub async fn register_cancellation_token(&self, session_token: &str, token: CancellationToken) {
+        self.cancellation_tokens
+            .write()
+            .await
+            .insert(session_token.to_string(), token);
+    }
+
+    /// Triggers cancellation of an active session token if registered.
+    /// Returns true if a token was found and cancelled.
+    pub async fn cancel_session(&self, session_token: &str) -> bool {
+        if let Some(token) = self.cancellation_tokens.write().await.remove(session_token) {
+            token.cancel();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes a cancellation token after normal completion or error.
+    pub async fn remove_cancellation_token(&self, session_token: &str) {
+        self.cancellation_tokens.write().await.remove(session_token);
     }
 
     /// Returns a clone of the current device info.

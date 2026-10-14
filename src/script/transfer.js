@@ -14,11 +14,13 @@ import {
 } from "./ui.js";
 import {
   startTransfer,
+  cancelTransfer,
   respondTransferRequest,
   onTransferRequested,
   onTransferProgress,
   onTransferCompleted,
   onTransferBatchCompleted,
+  onTransferCancelled,
   onReceiveProgress,
   onReceiveCompleted,
   onReceiveCancelled,
@@ -30,6 +32,7 @@ import {
  */
 export function setupTransfer() {
   const sendBtn = document.getElementById("sendBtn") || document.querySelector(".send-btn");
+  const cancelTransferBtn = document.getElementById("cancelTransferBtn");
   const sendActionLabel = document.querySelector(".send-action span");
   let isSending = false;
   let activeBatch = null;
@@ -56,6 +59,7 @@ export function setupTransfer() {
     }
     isSending = false;
     activeBatch = null;
+    if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
     if (sendBtn) sendBtn.disabled = false;
     setSendBtnLabel("Send");
   }
@@ -81,6 +85,7 @@ export function setupTransfer() {
 
       isSending = true;
       sendBtn.disabled = true;
+      if (cancelTransferBtn) cancelTransferBtn.classList.remove("hidden");
       setSendBtnLabel("Connecting…");
 
       try {
@@ -97,9 +102,29 @@ export function setupTransfer() {
         showToast(`Transfer failed: ${err}`, "error");
         isSending = false;
         activeBatch = null;
+        if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
         if (sendBtn) sendBtn.disabled = false;
         setSendBtnLabel("Send");
       }
+    });
+  }
+
+  if (cancelTransferBtn) {
+    cancelTransferBtn.addEventListener("click", async () => {
+      if (!isSending || !activeBatch) return;
+      const peer = getSelectedPeer();
+      const token = activeBatch.sessionToken;
+      try {
+        await cancelTransfer(token, peer);
+      } catch (err) {
+        console.error("Error cancelling transfer:", err);
+      }
+      isSending = false;
+      activeBatch = null;
+      if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
+      if (sendBtn) sendBtn.disabled = false;
+      setSendBtnLabel("Send");
+      showToast("Transfer cancelled.", "info");
     });
   }
 
@@ -219,6 +244,18 @@ export function setupTransfer() {
   });
 
   // -------------------------------------------------------------
+  // Outbound Transfer Cancelled Event
+  // -------------------------------------------------------------
+  onTransferCancelled((_payload) => {
+    showToast("Transfer was cancelled.", "info");
+    isSending = false;
+    activeBatch = null;
+    if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
+    if (sendBtn) sendBtn.disabled = false;
+    setSendBtnLabel("Send");
+  });
+
+  // -------------------------------------------------------------
   // Outbound Transfer Error Event
   // -------------------------------------------------------------
   onTransferError((payload) => {
@@ -228,6 +265,7 @@ export function setupTransfer() {
 
     isSending = false;
     activeBatch = null;
+    if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
     if (sendBtn) sendBtn.disabled = false;
     setSendBtnLabel("Send");
   });

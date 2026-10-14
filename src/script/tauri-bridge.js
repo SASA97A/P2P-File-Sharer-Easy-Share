@@ -498,6 +498,10 @@ export async function onTransferBatchCompleted(cb) {
   return await subscribeEvent("transfer-batch-completed", cb);
 }
 
+export async function onTransferCancelled(cb) {
+  return await subscribeEvent("transfer-cancelled", cb);
+}
+
 export async function onReceiveProgress(cb) {
   return await subscribeEvent("receive-progress", cb);
 }

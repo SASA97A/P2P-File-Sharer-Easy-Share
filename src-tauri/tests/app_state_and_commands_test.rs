@@ -448,3 +448,50 @@ async fn test_inspect_file_paths_deep_recursion() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_app_state_cancellation_token_lifecycle() {
+    let temp_dir = setup_test_dir("cancellation_token");
+    let info = sample_device_info();
+    let server_state = Arc::new(ServerState::new(info.clone(), temp_dir.clone()));
+    let pending_consents = Arc::new(RwLock::new(HashMap::new()));
+
+    let app_state = AppState::new(server_state, None, temp_dir.clone(), pending_consents);
+
+    let session_token = "session-test-token-12345";
+    let token = tokio_util::sync::CancellationToken::new();
+
+    // 1. Initially not cancelled
+    assert!(!token.is_cancelled());
+
+    // 2. Register token in AppState
+    app_state
+        .register_cancellation_token(session_token, token.clone())
+        .await;
+
+    // 3. Cancelling non-existent session returns false
+    let not_found = app_state.cancel_session("non-existent-session").await;
+    assert!(!not_found);
+    assert!(!token.is_cancelled());
+
+    // 4. Cancelling registered session cancels the token and returns true
+    let cancelled = app_state.cancel_session(session_token).await;
+    assert!(cancelled);
+    assert!(token.is_cancelled());
+
+    // 5. Token is now removed from registry, cancelling again returns false
+    let cancelled_again = app_state.cancel_session(session_token).await;
+    assert!(!cancelled_again);
+
+    // 6. Test remove_cancellation_token
+    let token2 = tokio_util::sync::CancellationToken::new();
+    let session_token2 = "session-test-token-67890";
+    app_state
+        .register_cancellation_token(session_token2, token2.clone())
+        .await;
+    app_state.remove_cancellation_token(session_token2).await;
+    assert!(!app_state.cancel_session(session_token2).await);
+    assert!(!token2.is_cancelled());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

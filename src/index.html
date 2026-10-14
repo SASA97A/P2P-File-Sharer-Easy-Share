@@ -52,16 +52,21 @@
             </div>
           </div>
 
-          <!-- Send Action Button -->
-          <button class="send-btn" id="sendBtn" disabled>
-            <div class="send-info">
-              <span class="send-count">0 files</span>
-              <span class="send-size">0 MB</span>
-            </div>
-            <div class="send-action">
-              <span>Send</span>
-            </div>
-          </button>
+          <!-- Send Action Button Bar -->
+          <div class="send-action-bar">
+            <button class="send-btn" id="sendBtn" disabled>
+              <div class="send-info">
+                <span class="send-count">0 files</span>
+                <span class="send-size">0 MB</span>
+              </div>
+              <div class="send-action">
+                <span>Send</span>
+              </div>
+            </button>
+            <button class="cancel-transfer-btn hidden" id="cancelTransferBtn" type="button" aria-label="Cancel active transfer">
+              <span>Cancel</span>
+            </button>
+          </div>
         </section>
 
         <!-- Right Panel: Devices Sidebar -->

@@ -23,6 +23,7 @@ pub enum ClientError {
     FileNotFound(PathBuf),
     InvalidOffset { expected: u64, actual: u64 },
     Blake3Mismatch { expected: String, actual: String },
+    Cancelled,
     Other(String),
 }
 
@@ -43,6 +44,7 @@ impl fmt::Display for ClientError {
             ClientError::Blake3Mismatch { expected, actual } => {
                 write!(f, "BLAKE3 checksum mismatch: expected {}, got {}", expected, actual)
             }
+            ClientError::Cancelled => write!(f, "Transfer cancelled by user"),
             ClientError::Other(msg) => write!(f, "{}", msg),
         }
     }
@@ -325,8 +327,30 @@ impl TransferClient {
     where
         F: FnMut(u64, u64) + Send,
     {
-        self.send_file_resumable_url(&peer.base_url(), session_token, file, progress_cb)
+        self.send_file_resumable_cancelling(peer, session_token, file, None, progress_cb)
             .await
+    }
+
+    /// Transmits a file to a remote peer with cooperative cancellation support.
+    pub async fn send_file_resumable_cancelling<F>(
+        &self,
+        peer: &PeerInfo,
+        session_token: &str,
+        file: &FileToSend,
+        cancel_token: Option<&tokio_util::sync::CancellationToken>,
+        progress_cb: F,
+    ) -> Result<(), ClientError>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        self.send_file_resumable_url_cancelling(
+            &peer.base_url(),
+            session_token,
+            file,
+            cancel_token,
+            progress_cb,
+        )
+        .await
     }
 
     // =========================================================================
@@ -496,11 +520,43 @@ impl TransferClient {
         file: &FileToSend,
         start_offset: u64,
         max_bytes_to_send: Option<u64>,
+        progress_cb: F,
+    ) -> Result<u64, ClientError>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        self.send_file_chunks_with_cancellation(
+            base_url,
+            session_token,
+            file,
+            start_offset,
+            max_bytes_to_send,
+            None,
+            progress_cb,
+        )
+        .await
+    }
+
+    /// Sends chunks of a file with optional byte limit and cooperative cancellation check.
+    pub async fn send_file_chunks_with_cancellation<F>(
+        &self,
+        base_url: &str,
+        session_token: &str,
+        file: &FileToSend,
+        start_offset: u64,
+        max_bytes_to_send: Option<u64>,
+        cancel_token: Option<&tokio_util::sync::CancellationToken>,
         mut progress_cb: F,
     ) -> Result<u64, ClientError>
     where
         F: FnMut(u64, u64) + Send,
     {
+        if let Some(token) = cancel_token {
+            if token.is_cancelled() {
+                return Err(ClientError::Cancelled);
+            }
+        }
+
         if !file.path.exists() {
             return Err(ClientError::FileNotFound(file.path.clone()));
         }
@@ -528,6 +584,12 @@ impl TransferClient {
         let mut total_sent_in_call = 0u64;
 
         while current_offset < file.size {
+            if let Some(token) = cancel_token {
+                if token.is_cancelled() {
+                    return Err(ClientError::Cancelled);
+                }
+            }
+
             if let Some(limit) = max_bytes_to_send {
                 if total_sent_in_call >= limit {
                     break;
@@ -574,6 +636,28 @@ impl TransferClient {
     where
         F: FnMut(u64, u64) + Send,
     {
+        self.send_file_resumable_url_cancelling(base_url, session_token, file, None, progress_cb)
+            .await
+    }
+
+    /// Automatically discovers current remote offset and streams remaining chunks with cancellation support.
+    pub async fn send_file_resumable_url_cancelling<F>(
+        &self,
+        base_url: &str,
+        session_token: &str,
+        file: &FileToSend,
+        cancel_token: Option<&tokio_util::sync::CancellationToken>,
+        progress_cb: F,
+    ) -> Result<(), ClientError>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        if let Some(token) = cancel_token {
+            if token.is_cancelled() {
+                return Err(ClientError::Cancelled);
+            }
+        }
+
         if !file.path.exists() {
             return Err(ClientError::FileNotFound(file.path.clone()));
         }
@@ -584,12 +668,13 @@ impl TransferClient {
 
         let start_offset = status.bytes_received;
 
-        self.send_file_chunks_with_limit(
+        self.send_file_chunks_with_cancellation(
             base_url,
             session_token,
             file,
             start_offset,
             None,
+            cancel_token,
             progress_cb,
         )
         .await?;
