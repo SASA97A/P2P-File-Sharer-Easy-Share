@@ -224,4 +224,13 @@ impl ServerState {
     pub async fn get_session(&self, token: &str) -> Option<SessionState> {
         self.sessions.read().await.get(token).cloned()
     }
+
+    /// Prunes expired transfer sessions from state whose age exceeds `max_age`.
+    /// Returns the number of evicted sessions.
+    pub async fn prune_expired_sessions(&self, max_age: std::time::Duration) -> usize {
+        let mut sessions = self.sessions.write().await;
+        let before_count = sessions.len();
+        sessions.retain(|_token, session| session.created_at.elapsed() < max_age);
+        before_count - sessions.len()
+    }
 }

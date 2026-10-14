@@ -135,6 +135,18 @@ pub async fn setup_services(
         }
     });
 
+    // 10. Background maintenance task to prune expired server sessions (> 1 hour TTL)
+    let prune_state = server_state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            prune_state
+                .prune_expired_sessions(std::time::Duration::from_secs(3600))
+                .await;
+        }
+    });
+
     let app_state = AppState::new(
         server_state,
         Some(discovery_handle),

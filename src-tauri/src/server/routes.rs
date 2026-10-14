@@ -428,6 +428,21 @@ pub async fn handle_transfer_finish(
     })?;
 
     let saved_path_str = dest_path.to_string_lossy().to_string();
+
+    // Update session state: mark file progress as completed and update session status
+    {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(&payload.session_token) {
+            session.file_progress.insert(payload.file_id.clone(), file.size);
+            let all_finished = session.request.files.iter().all(|f| {
+                session.file_progress.get(&f.file_id).copied().unwrap_or(0) >= f.size
+            });
+            if all_finished {
+                session.status = TransferStatus::Completed;
+            }
+        }
+    }
+
     state.emit_event(crate::server::state::ServerTransferEvent::Completed(
         crate::server::state::ReceiveCompletedPayload {
             session_token: payload.session_token.clone(),
