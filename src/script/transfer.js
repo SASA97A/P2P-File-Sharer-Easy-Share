@@ -125,42 +125,58 @@ export function setupTransfer() {
   // Real-time Outbound Transfer Progress Event
   // -------------------------------------------------------------
   onTransferProgress((progress) => {
-    const { file_name, percent } = progress;
+    const { file_id, file_name, percent } = progress;
 
     if (isSending) {
       setSendBtnLabel(`Sending (${percent}%)`);
     }
 
-    // Locate matching file element in the UI staging area
-    const fileItems = document.querySelectorAll(".file-item");
-    fileItems.forEach((item) => {
-      const nameEl = item.querySelector(".file-name");
-      if (nameEl && nameEl.textContent.trim() === (file_name || "").trim()) {
-        item.style.setProperty("--progress", `${percent}%`);
-        if (percent >= 100) {
-          item.classList.add("completed");
+    // Locate matching file element in the UI staging area by file_id, fallback to name
+    let targetItem = file_id ? document.querySelector(`.file-item[data-file-id="${file_id}"]`) : null;
+    if (!targetItem) {
+      const fileItems = document.querySelectorAll(".file-item");
+      for (const item of fileItems) {
+        const nameEl = item.querySelector(".file-name");
+        if (nameEl && nameEl.textContent.trim() === (file_name || "").trim()) {
+          targetItem = item;
+          break;
         }
       }
-    });
+    }
+
+    if (targetItem) {
+      targetItem.style.setProperty("--progress", `${percent}%`);
+      if (percent >= 100) {
+        targetItem.classList.add("completed");
+      }
+    }
   });
 
   // -------------------------------------------------------------
   // Individual File Transfer Completed Event
   // -------------------------------------------------------------
   onTransferCompleted((payload) => {
-    const { file_name, saved_path } = payload;
+    const { file_id, file_name, saved_path } = payload;
     const pathInfo = saved_path ? ` (Saved to: ${saved_path})` : "";
     showToast(`Transferred: ${file_name}${pathInfo}`, "success");
 
     // Mark matching UI file item as 100% complete
-    const fileItems = document.querySelectorAll(".file-item");
-    fileItems.forEach((item) => {
-      const nameEl = item.querySelector(".file-name");
-      if (nameEl && nameEl.textContent.trim() === (file_name || "").trim()) {
-        item.style.setProperty("--progress", "100%");
-        item.classList.add("completed");
+    let targetItem = file_id ? document.querySelector(`.file-item[data-file-id="${file_id}"]`) : null;
+    if (!targetItem) {
+      const fileItems = document.querySelectorAll(".file-item");
+      for (const item of fileItems) {
+        const nameEl = item.querySelector(".file-name");
+        if (nameEl && nameEl.textContent.trim() === (file_name || "").trim()) {
+          targetItem = item;
+          break;
+        }
       }
-    });
+    }
+
+    if (targetItem) {
+      targetItem.style.setProperty("--progress", "100%");
+      targetItem.classList.add("completed");
+    }
 
     if (activeBatch) {
       activeBatch.completedFiles++;

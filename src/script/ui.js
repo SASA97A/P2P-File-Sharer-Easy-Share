@@ -107,15 +107,18 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
  * @param {Function} removeFileCb
  */
 export function updateFileList(files, removeFileCb) {
+  if (typeof document === "undefined") return;
   const fileList = document.getElementById("fileList");
   if (!fileList) return;
 
   fileList.innerHTML = "";
 
   files.forEach((file, index) => {
+    const fileId = file.id || `file-${index}`;
     const item = document.createElement("div");
     item.className = "file-item";
-    item.id = `file-${index}`;
+    item.id = `file-${fileId}`;
+    item.dataset.fileId = fileId;
     item.style.setProperty("--progress", "0%");
 
     item.innerHTML = `
@@ -123,7 +126,7 @@ export function updateFileList(files, removeFileCb) {
         <div class="file-icon-box">${getIconSvg("fileText", { size: 18 })}</div>
         <span class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
         <span class="file-size">${formatFileSize(file.size)}</span>
-        <button class="remove-btn" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">
+        <button class="remove-btn" data-file-id="${fileId}" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">
           ${getIconSvg("x", { size: 14 })}
         </button>
       </div>
@@ -137,7 +140,7 @@ export function updateFileList(files, removeFileCb) {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const target = e.currentTarget;
-      removeFileCb(target.dataset.index);
+      removeFileCb(target.dataset.fileId || target.dataset.index);
     });
   });
 }

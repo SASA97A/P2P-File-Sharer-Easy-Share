@@ -13,6 +13,8 @@ pub struct FileSelection {
     pub path: String,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default, alias = "fileId", alias = "id")]
+    pub file_id: Option<String>,
 }
 
 /// Detailed representation of a selected file on the host machine.
@@ -315,7 +317,10 @@ pub async fn start_transfer(
     let mut tasks = Vec::with_capacity(files.len());
     for (idx, sel) in files.into_iter().enumerate() {
         let path = PathBuf::from(&sel.path);
-        let file_id = format!("f_{}_{}", idx, uuid::Uuid::new_v4());
+        let file_id = sel
+            .file_id
+            .filter(|id| !id.trim().is_empty())
+            .unwrap_or_else(|| format!("f_{}_{}", idx, uuid::Uuid::new_v4()));
         let raw_path = sel.path.clone();
         let custom_name = sel.name;
         tasks.push(tokio::spawn(async move {

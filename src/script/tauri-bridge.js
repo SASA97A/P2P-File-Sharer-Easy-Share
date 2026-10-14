@@ -370,6 +370,7 @@ export async function startTransfer(peer, files) {
   const fileSelections = files.map((f) => ({
     path: f.fullPath || f.path || f.name,
     name: f.name || undefined,
+    file_id: f.id || undefined,
   }));
   return await callInvoke("start_transfer", {
     peer,
