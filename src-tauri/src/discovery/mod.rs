@@ -75,7 +75,7 @@ impl DiscoveryHandle {
         };
 
         let mut tracker = self.tracker.write().await;
-        if let Some(event) = tracker.record_seen(peer.clone()) {
+        if let Some(event) = tracker.record_seen_with_source(peer.clone(), PeerSource::Manual) {
             let _ = self.event_tx.send(DiscoveryEvent::Peer(event));
         }
 
@@ -180,6 +180,22 @@ impl DiscoveryService {
             }
         });
         tasks.push(agg_handle);
+
+        // Periodic reaper task on aggregate tracker (prunes expired manual and stale peers)
+        let tracker_reaper = tracker.clone();
+        let broadcast_reaper_tx = self.event_tx.clone();
+        let reaper_interval = self.config.broadcast_interval.min(Duration::from_millis(500));
+        let reaper_handle = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(reaper_interval).await;
+                let mut tr = tracker_reaper.write().await;
+                let expired = tr.prune_expired_manual();
+                for event in expired {
+                    let _ = broadcast_reaper_tx.send(DiscoveryEvent::Peer(event));
+                }
+            }
+        });
+        tasks.push(reaper_handle);
 
         let handle = DiscoveryHandle {
             tracker,

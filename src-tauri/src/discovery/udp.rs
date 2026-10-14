@@ -75,10 +75,18 @@ pub fn create_broadcast_socket(port: u16) -> std::io::Result<UdpSocket> {
     UdpSocket::from_std(std_socket)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeerSource {
+    Udp,
+    Mdns,
+    Manual,
+}
+
 #[derive(Debug, Clone)]
 pub struct TrackedPeer {
     pub peer: PeerInfo,
     pub last_seen: Instant,
+    pub source: PeerSource,
 }
 
 #[derive(Debug, Clone)]
@@ -100,10 +108,19 @@ impl PeerTracker {
     }
 
     pub fn record_seen(&mut self, peer: PeerInfo) -> Option<PeerEvent> {
+        self.record_seen_with_source(peer, PeerSource::Udp)
+    }
+
+    pub fn record_seen_with_source(
+        &mut self,
+        peer: PeerInfo,
+        source: PeerSource,
+    ) -> Option<PeerEvent> {
         let key = Self::key_for_peer(&peer);
         let now = Instant::now();
         if let Some(tracked) = self.peers.get_mut(&key) {
             tracked.last_seen = now;
+            tracked.source = source;
             if tracked.peer != peer {
                 tracked.peer = peer.clone();
                 Some(PeerEvent::Discovered(peer))
@@ -116,6 +133,7 @@ impl PeerTracker {
                 TrackedPeer {
                     peer: peer.clone(),
                     last_seen: now,
+                    source,
                 },
             );
             Some(PeerEvent::Discovered(peer))
@@ -128,7 +146,62 @@ impl PeerTracker {
         let mut lost_events = Vec::new();
 
         for (key, tracked) in &self.peers {
-            if now.duration_since(tracked.last_seen) > self.ttl {
+            let max_age = match tracked.source {
+                PeerSource::Udp => self.ttl,
+                PeerSource::Manual => {
+                    if self.ttl < Duration::from_secs(1) {
+                        self.ttl * 3
+                    } else {
+                        self.ttl.max(Duration::from_secs(30))
+                    }
+                }
+                PeerSource::Mdns => {
+                    if self.ttl < Duration::from_secs(1) {
+                        self.ttl * 5
+                    } else {
+                        Duration::from_secs(300)
+                    }
+                }
+            };
+            if now.duration_since(tracked.last_seen) > max_age {
+                expired_keys.push(key.clone());
+                lost_events.push(PeerEvent::Lost(tracked.peer.clone()));
+            }
+        }
+
+        for key in expired_keys {
+            self.peers.remove(&key);
+        }
+
+        lost_events
+    }
+
+    pub fn prune_expired_manual(&mut self) -> Vec<PeerEvent> {
+        let now = Instant::now();
+        let mut expired_keys = Vec::new();
+        let mut lost_events = Vec::new();
+
+        for (key, tracked) in &self.peers {
+            let is_expired = match tracked.source {
+                PeerSource::Manual => {
+                    let manual_ttl = if self.ttl < Duration::from_secs(1) {
+                        self.ttl * 3
+                    } else {
+                        self.ttl.max(Duration::from_secs(30))
+                    };
+                    now.duration_since(tracked.last_seen) > manual_ttl
+                }
+                PeerSource::Mdns => {
+                    let mdns_ttl = if self.ttl < Duration::from_secs(1) {
+                        self.ttl * 5
+                    } else {
+                        Duration::from_secs(300)
+                    };
+                    now.duration_since(tracked.last_seen) > mdns_ttl
+                }
+                PeerSource::Udp => false,
+            };
+            if is_expired {
                 expired_keys.push(key.clone());
                 lost_events.push(PeerEvent::Lost(tracked.peer.clone()));
             }
@@ -176,11 +249,27 @@ impl UdpDiscovery {
         ttl: Duration,
         event_tx: mpsc::Sender<PeerEvent>,
     ) -> Self {
+        Self::with_tracker(
+            device_info,
+            port,
+            interval,
+            Arc::new(RwLock::new(PeerTracker::new(ttl))),
+            event_tx,
+        )
+    }
+
+    pub fn with_tracker(
+        device_info: DeviceInfo,
+        port: u16,
+        interval: Duration,
+        tracker: Arc<RwLock<PeerTracker>>,
+        event_tx: mpsc::Sender<PeerEvent>,
+    ) -> Self {
         Self {
             device_info,
             port,
             interval,
-            tracker: Arc::new(RwLock::new(PeerTracker::new(ttl))),
+            tracker,
             event_tx,
             tasks: Vec::new(),
         }
