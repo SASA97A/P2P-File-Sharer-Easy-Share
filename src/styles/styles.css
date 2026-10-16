@@ -239,7 +239,8 @@ body {
   gap: 10px;
 }
 
-.pair-btn {
+.pair-btn,
+.header-icon-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -255,14 +256,16 @@ body {
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
-.pair-btn:hover {
+.pair-btn:hover,
+.header-icon-btn:hover {
   background: #f4f4ec;
   border-color: #d0d0c4;
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
-.pair-btn:active {
+.pair-btn:active,
+.header-icon-btn:active {
   transform: translateY(0);
 }
 
@@ -1495,6 +1498,113 @@ body {
 .pairing-status-message-box.error .pairing-status-spinner,
 .pairing-status-message-box.success .pairing-status-spinner {
   display: none;
+}
+
+/* ============================================================
+   SETTINGS MODAL
+   ============================================================ */
+
+.settings-modal-card {
+  max-width: 540px;
+  width: 92%;
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-modal-icon {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.settings-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.settings-section-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.settings-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.settings-input {
+  flex: 1;
+  padding: 9px 14px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: #fafaf6;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.settings-input:focus {
+  border-color: var(--color-ink);
+  background: #ffffff;
+}
+
+.settings-action-btn {
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.settings-path-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fafaf6;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  margin-top: 6px;
+}
+
+.settings-path-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 270px;
+}
+
+.settings-path-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* ============================================================

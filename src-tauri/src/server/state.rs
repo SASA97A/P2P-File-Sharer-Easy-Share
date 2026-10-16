@@ -4,7 +4,7 @@ use crate::storage::file_manager::FileManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -78,7 +78,7 @@ pub struct SessionState {
 /// Shared server state across all Axum handlers.
 pub struct ServerState {
     pub device_info: Arc<RwLock<DeviceInfo>>,
-    pub download_dir: PathBuf,
+    pub download_dir: Arc<std::sync::RwLock<PathBuf>>,
     pub consent_policy: ConsentPolicy,
     pub sessions: Arc<RwLock<HashMap<String, SessionState>>>,
     pub event_tx: broadcast::Sender<ServerTransferEvent>,
@@ -102,7 +102,7 @@ impl ServerState {
         let (event_tx, _) = broadcast::channel(256);
         Self {
             device_info: Arc::new(RwLock::new(device_info)),
-            download_dir,
+            download_dir: Arc::new(std::sync::RwLock::new(download_dir)),
             consent_policy,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             event_tx,
@@ -158,9 +158,21 @@ impl ServerState {
         info.pairing_pin.clone()
     }
 
-    /// Returns the download directory reference.
-    pub fn download_dir(&self) -> &Path {
-        &self.download_dir
+    /// Returns the download directory.
+    pub fn download_dir(&self) -> PathBuf {
+        self.download_dir.read().unwrap().clone()
+    }
+
+    /// Updates the download directory.
+    pub fn set_download_dir(&self, dir: PathBuf) {
+        *self.download_dir.write().unwrap() = dir;
+    }
+
+    /// Updates the local device display name.
+    pub async fn set_device_name(&self, new_name: String) -> DeviceInfo {
+        let mut info = self.device_info.write().await;
+        info.device_name = new_name;
+        info.clone()
     }
 
     /// Evaluates consent for an incoming `TransferRequest` according to the configured policy.
@@ -200,7 +212,7 @@ impl ServerState {
         let mut offsets = HashMap::new();
 
         for file in &request.files {
-            let part_path = FileManager::get_part_path(&self.download_dir, &file.name, &file.file_key());
+            let part_path = FileManager::get_part_path(&self.download_dir(), &file.name, &file.file_key());
             let offset = if part_path.exists() {
                 FileManager::get_file_size(&part_path).unwrap_or(0)
             } else {

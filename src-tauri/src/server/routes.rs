@@ -146,7 +146,7 @@ pub async fn handle_transfer_status(
         ))?;
 
     let part_path =
-        FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
+        FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
     let bytes_received = if part_path.exists() {
         FileManager::get_file_size(&part_path).unwrap_or(0)
     } else {
@@ -218,7 +218,7 @@ pub async fn handle_transfer_chunk(
         ));
     }
 
-    let part_path = FileManager::get_part_path(state.download_dir(), &file_name, &file_key);
+    let part_path = FileManager::get_part_path(&state.download_dir(), &file_name, &file_key);
 
     if let Some(parent) = part_path.parent() {
         if !parent.exists() {
@@ -360,7 +360,7 @@ pub async fn handle_transfer_finish(
     };
 
     let part_path =
-        FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
+        FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
 
     if !part_path.exists() {
         return Err((
@@ -407,7 +407,7 @@ pub async fn handle_transfer_finish(
         }
     }
 
-    let dest_path = FileManager::get_unique_dest_path(state.download_dir(), &file.name);
+    let dest_path = FileManager::get_unique_dest_path(&state.download_dir(), &file.name);
     let part_path_clone = part_path.clone();
     let dest_path_clone = dest_path.clone();
     tokio::task::spawn_blocking(move || {
@@ -473,7 +473,7 @@ pub async fn handle_transfer_cancel(
 
     for file in &session.request.files {
         let part_path =
-            FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
+            FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
         if part_path.exists() {
             let _ = tokio::fs::remove_file(part_path).await;
         }

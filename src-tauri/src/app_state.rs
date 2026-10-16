@@ -5,7 +5,7 @@ use crate::discovery::{
 use crate::models::peer::{DeviceInfo, PeerInfo};
 use crate::server::state::ServerState;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, RwLock};
@@ -16,7 +16,8 @@ pub struct AppState {
     pub server_state: Arc<ServerState>,
     pub discovery_handle: Arc<RwLock<Option<DiscoveryHandle>>>,
     pub transfer_client: TransferClient,
-    pub download_dir: PathBuf,
+    pub download_dir: Arc<std::sync::RwLock<PathBuf>>,
+    pub config_dir: PathBuf,
     pub pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     pub cancellation_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
 }
@@ -29,11 +30,30 @@ impl AppState {
         download_dir: PathBuf,
         pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     ) -> Self {
+        let config_dir = download_dir.clone();
+        Self::with_config_dir(
+            server_state,
+            discovery_handle,
+            download_dir,
+            config_dir,
+            pending_consents,
+        )
+    }
+
+    /// Creates a new `AppState` instance with an explicit configuration directory.
+    pub fn with_config_dir(
+        server_state: Arc<ServerState>,
+        discovery_handle: Option<DiscoveryHandle>,
+        download_dir: PathBuf,
+        config_dir: PathBuf,
+        pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
+    ) -> Self {
         Self {
             server_state,
             discovery_handle: Arc::new(RwLock::new(discovery_handle)),
             transfer_client: TransferClient::new(),
-            download_dir,
+            download_dir: Arc::new(std::sync::RwLock::new(download_dir)),
+            config_dir,
             pending_consents,
             cancellation_tokens: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -127,8 +147,53 @@ impl AppState {
         Ok(())
     }
 
-    /// Returns a reference to the download directory.
-    pub fn download_dir(&self) -> &Path {
-        &self.download_dir
+    /// Returns the download directory.
+    pub fn get_download_dir(&self) -> PathBuf {
+        self.download_dir.read().unwrap().clone()
+    }
+
+    /// Compatibility accessor for download directory.
+    pub fn download_dir(&self) -> PathBuf {
+        self.get_download_dir()
+    }
+
+    /// Updates the download directory, ensures it exists, updates server state, and persists settings.
+    pub async fn set_download_dir(&self, new_path_str: String) -> Result<PathBuf, String> {
+        let trimmed = new_path_str.trim();
+        if trimmed.is_empty() {
+            return Err("Download path cannot be empty".to_string());
+        }
+        let new_path = PathBuf::from(trimmed);
+
+        crate::storage::file_manager::FileManager::ensure_download_dir(&new_path)
+            .map_err(|e| format!("Failed to access or create directory {:?}: {}", new_path, e))?;
+
+        *self.download_dir.write().unwrap() = new_path.clone();
+        self.server_state.set_download_dir(new_path.clone());
+
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.download_dir = Some(new_path.to_string_lossy().to_string());
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+
+        Ok(new_path)
+    }
+
+    /// Updates the local device display name, updates server state, and persists settings.
+    pub async fn set_device_name(&self, new_name_str: String) -> Result<DeviceInfo, String> {
+        let trimmed = new_name_str.trim();
+        if trimmed.is_empty() {
+            return Err("Device name cannot be empty".to_string());
+        }
+        if trimmed.len() > 32 {
+            return Err("Device name must be 32 characters or less".to_string());
+        }
+
+        let updated_info = self.server_state.set_device_name(trimmed.to_string()).await;
+
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.device_name = Some(trimmed.to_string());
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+
+        Ok(updated_info)
     }
 }

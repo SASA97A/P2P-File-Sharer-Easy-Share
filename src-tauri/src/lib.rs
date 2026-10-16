@@ -22,10 +22,19 @@ use tokio::sync::{mpsc, RwLock};
 pub async fn setup_services(
     app: &tauri::AppHandle,
 ) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
-    // 1. Determine device identity
-    let device_name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "EasyShare-Device".to_string());
+    // 0. Resolve config directory and load persisted settings
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|_| FileManager::get_downloads_dir());
+    let settings = storage::settings::load_settings(&config_dir);
+
+    // 1. Determine device identity (using persisted custom name if set)
+    let device_name = settings.device_name.unwrap_or_else(|| {
+        std::env::var("COMPUTERNAME")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| "EasyShare-Device".to_string())
+    });
     let os = std::env::consts::OS.to_string();
     let version = env!("CARGO_PKG_VERSION").to_string();
     let initial_port = 5050;
@@ -38,9 +47,21 @@ pub async fn setup_services(
         initial_port,
     );
 
-    // 2. Resolve and ensure download directory exists
-    let download_dir = FileManager::get_downloads_dir();
-    FileManager::ensure_download_dir(&download_dir)?;
+    // 2. Resolve and ensure download directory exists (using persisted custom path if set)
+    let download_dir = if let Some(custom_dir) = settings.download_dir {
+        let path = std::path::PathBuf::from(custom_dir);
+        if FileManager::ensure_download_dir(&path).is_ok() {
+            path
+        } else {
+            let default_dir = FileManager::get_downloads_dir();
+            FileManager::ensure_download_dir(&default_dir)?;
+            default_dir
+        }
+    } else {
+        let default_dir = FileManager::get_downloads_dir();
+        FileManager::ensure_download_dir(&default_dir)?;
+        default_dir
+    };
 
     // 3. Create consent request channel for interactive handshake prompts
     let (consent_tx, mut consent_rx) = mpsc::channel::<ConsentRequest>(64);
@@ -147,10 +168,11 @@ pub async fn setup_services(
         }
     });
 
-    let app_state = AppState::new(
+    let app_state = AppState::with_config_dir(
         server_state,
         Some(discovery_handle),
         download_dir,
+        config_dir,
         pending_consents,
     );
 
@@ -186,6 +208,8 @@ pub fn run() {
             commands::start_transfer,
             commands::cancel_transfer,
             commands::get_download_dir,
+            commands::set_download_dir,
+            commands::set_device_name,
             commands::open_download_dir,
             commands::inspect_paths,
             commands::pick_files,

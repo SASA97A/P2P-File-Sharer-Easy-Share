@@ -609,13 +609,35 @@ pub async fn cancel_transfer(
 /// Returns the current download directory path.
 #[tauri::command]
 pub async fn get_download_dir(state: State<'_, AppState>) -> Result<String, String> {
-    Ok(state.download_dir.to_string_lossy().to_string())
+    Ok(state.get_download_dir().to_string_lossy().to_string())
+}
+
+/// Updates the download directory path and ensures it exists.
+#[tauri::command]
+pub async fn set_download_dir(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<String, String> {
+    let new_path = state.set_download_dir(path).await?;
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/// Updates the local device display name and notifies the frontend.
+#[tauri::command]
+pub async fn set_device_name(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<DeviceInfo, String> {
+    let updated_info = state.set_device_name(name).await?;
+    let _ = app.emit("device-info-updated", &updated_info);
+    Ok(updated_info)
 }
 
 /// Opens the download directory in the native file manager (Explorer/Finder/Files).
 #[tauri::command]
 pub async fn open_download_dir(state: State<'_, AppState>) -> Result<(), String> {
-    let dir = &state.download_dir;
+    let dir = state.get_download_dir();
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")

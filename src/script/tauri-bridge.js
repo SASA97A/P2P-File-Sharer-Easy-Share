@@ -56,6 +56,7 @@ const mockState = {
     port: 5050,
     pairing_pin: "839421",
   },
+  download_dir: "C:\\Users\\MockUser\\Downloads",
   peers: [],
   listeners: new Map(),
 };
@@ -177,7 +178,20 @@ async function callInvoke(command, args = {}) {
       return;
 
     case "get_download_dir":
-      return "Downloads";
+      return mockState.download_dir || "Downloads";
+
+    case "set_download_dir": {
+      mockState.download_dir = args.path;
+      return args.path;
+    }
+
+    case "set_device_name": {
+      const name = (args.name || "").trim();
+      if (!name) throw new Error("Device name cannot be empty");
+      mockState.deviceInfo.device_name = name;
+      emitMockEvent("device-info-updated", { ...mockState.deviceInfo });
+      return { ...mockState.deviceInfo };
+    }
 
     case "open_download_dir":
       console.log("[Mock] Opened download directory");
@@ -404,6 +418,20 @@ export async function openDownloadDir() {
 }
 
 /**
+ * Updates the download directory path
+ */
+export async function setDownloadDir(path) {
+  return await callInvoke("set_download_dir", { path });
+}
+
+/**
+ * Updates the local device display name
+ */
+export async function setDeviceName(name) {
+  return await callInvoke("set_device_name", { name });
+}
+
+/**
  * Fetches the local pairing configuration (PIN, QR code SVG, direct URL)
  */
 export async function getMyPairingInfo() {
@@ -480,6 +508,10 @@ export async function onPeerLost(cb) {
 
 export async function onPeerUpdated(cb) {
   return await subscribeEvent("peer-updated", cb);
+}
+
+export async function onDeviceInfoUpdated(cb) {
+  return await subscribeEvent("device-info-updated", cb);
 }
 
 export async function onTransferRequested(cb) {

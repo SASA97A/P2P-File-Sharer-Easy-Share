@@ -43,7 +43,7 @@ async fn test_app_state_creation_and_device_info() {
     let dev_info = app_state.get_device_info().await;
     assert_eq!(dev_info.device_name, "Test-Host");
     assert_eq!(dev_info.os, "windows");
-    assert_eq!(app_state.download_dir(), &temp_dir);
+    assert_eq!(app_state.download_dir(), temp_dir);
     assert!(dev_info.pairing_pin.is_some());
     let initial_pin = dev_info.pairing_pin.unwrap();
     assert_eq!(initial_pin.len(), 6);
