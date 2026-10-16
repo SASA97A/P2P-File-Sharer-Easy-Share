@@ -12,6 +12,7 @@ import {
 import { setupTransfer } from "./transfer.js";
 import { setupPairing } from "./pairing.js";
 import { setupSettings } from "./settings.js";
+import { setupHistory } from "./history.js";
 import { updateMyDeviceBadge } from "./ui.js";
 import {
   getMyDeviceInfo,
@@ -186,4 +187,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 6. Settings Setup (Device Name, Downloads Folder)
   // -------------------------------------------------------------
   setupSettings();
+
+  // -------------------------------------------------------------
+  // 7. Transfer History & Activity Log Setup
+  // -------------------------------------------------------------
+  setupHistory();
 });
