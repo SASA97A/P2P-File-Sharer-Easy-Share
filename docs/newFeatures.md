@@ -24,22 +24,23 @@ This document outlines the planned feature additions, enhancements, and architec
 
 ## 2. Transfer History & Activity Log
 
-### 2.1 Persistent Transfer Log
-- **Target Specification:**
-  - Create a dedicated **Transfer History** tab or slide-out drawer accessible from the top navigation bar.
-  - Track both **Sent** and **Received** batches with the following metadata:
-    - Transfer timestamp (date & time)
-    - Direction (`Sent` / `Received`)
-    - Remote peer identity (device name, IP address, OS)
-    - File details (file count, individual file names, individual sizes, total batch size)
-    - Transfer outcome (`Completed`, `Cancelled`, `Failed`, with error reason if failed)
-    - Local file path on disk (for received files)
+### 2.1 Persistent Transfer Log ✅ [Completed]
+- **Current State:** Implemented in `v2.2`. Unlimited retention transfer activity log.
+- **Implementation:**
+  - Dedicated Center Modal Dialog matching Settings and Pairing designs, accessible from header "History" button.
+  - Persistent JSON storage (`history.json`) storing both `Sent` and `Received` batches.
+  - Full metadata tracking: record ID, session token, timestamp, direction, peer device name and IP, transfer status (`Completed`, `Cancelled`, `Failed`), list of file items with name, path, and size, total batch bytes, and failure error messages.
+  - Real-time updates via Tauri `history-updated` event bus.
 
-### 2.2 Direct File Actions from History
-- For completed incoming transfers, each history item provides quick action buttons:
-  - **Show in Folder:** Selects and highlights the file inside the OS file manager.
-  - **Open File:** Launches the file with the default system application.
-- Provide a "Clear History" button and an optional search/filter bar for past transfers.
+### 2.2 Direct File Actions & Search Filtering ✅ [Completed]
+- **Current State:** Implemented in `v2.2`.
+- **Implementation:**
+  - Tab filters for quick view switching: `All`, `Sent`, `Received`.
+  - Live search filtering by peer name or file name.
+  - Direct file action buttons on each file record:
+    - **Open File:** Launches the file with default system application via `open_file`.
+    - **Show in Folder:** Opens the native OS file manager and highlights/selects the file via `show_in_folder`.
+  - Individual record removal (`delete_history_record`) and full log clearing with confirmation prompt (`clear_transfer_history`).
 
 ---
 

@@ -395,8 +395,39 @@ pub async fn start_transfer(
             let tokens_registry = state.cancellation_tokens.clone();
             let total_files = files_to_send.len();
             let total_batch_bytes = files_to_send.iter().map(|f| f.size).sum::<u64>();
+            let files_to_send_clone = files_to_send.clone();
+            let config_dir = state.config_dir.clone();
 
             tokio::spawn(async move {
+                let record_sender_history = |status: crate::storage::history::HistoryStatus, err_msg: Option<String>| {
+                    let record = crate::storage::history::TransferHistoryRecord {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        session_token: Some(token_clone.clone()),
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as i64)
+                            .unwrap_or(0),
+                        direction: crate::storage::history::TransferDirection::Sent,
+                        peer_name: peer_clone.device_name.clone(),
+                        peer_ip: peer_clone.ip.clone(),
+                        status,
+                        files: files_to_send_clone
+                            .iter()
+                            .map(|f| crate::storage::history::HistoryFileItem {
+                                name: f.name.clone(),
+                                path: Some(f.path.to_string_lossy().to_string()),
+                                size: f.size,
+                            })
+                            .collect(),
+                        total_bytes: total_batch_bytes,
+                        error_message: err_msg,
+                    };
+                    if let Ok(_) = crate::storage::history::add_record(&config_dir, record) {
+                        let hist = crate::storage::history::load_history(&config_dir);
+                        let _ = app_handle.emit("history-updated", &hist);
+                    }
+                };
+
                 for file in files_to_send {
                     if cancel_token_clone.is_cancelled() {
                         let _ = app_handle.emit(
@@ -413,6 +444,10 @@ pub async fn start_transfer(
                                 Some("Cancelled by user".to_string()),
                             )
                             .await;
+                        record_sender_history(
+                            crate::storage::history::HistoryStatus::Cancelled,
+                            Some("Transfer cancelled by user".to_string()),
+                        );
                         tokens_registry.write().await.remove(&token_clone);
                         return;
                     }
@@ -482,18 +517,27 @@ pub async fn start_transfer(
                                     Some("Cancelled by user".to_string()),
                                 )
                                 .await;
+                            record_sender_history(
+                                crate::storage::history::HistoryStatus::Cancelled,
+                                Some("Transfer cancelled by user".to_string()),
+                            );
                             tokens_registry.write().await.remove(&token_clone);
                             return;
                         }
 
+                        let err_msg = err.to_string();
                         let _ = app_handle.emit(
                             "transfer-error",
                             &TransferErrorPayload {
                                 session_token: token_clone.clone(),
                                 file_id: Some(file_id.clone()),
                                 file_name: Some(file_name.clone()),
-                                error: err.to_string(),
+                                error: err_msg.clone(),
                             },
+                        );
+                        record_sender_history(
+                            crate::storage::history::HistoryStatus::Failed,
+                            Some(err_msg),
                         );
                         tokens_registry.write().await.remove(&token_clone);
                         return;
@@ -514,6 +558,10 @@ pub async fn start_transfer(
                                 Some("Cancelled by user".to_string()),
                             )
                             .await;
+                        record_sender_history(
+                            crate::storage::history::HistoryStatus::Cancelled,
+                            Some("Transfer cancelled by user".to_string()),
+                        );
                         tokens_registry.write().await.remove(&token_clone);
                         return;
                     }
@@ -535,14 +583,19 @@ pub async fn start_transfer(
                             );
                         }
                         Err(err) => {
+                            let err_msg = format!("Failed to finalize transfer: {}", err);
                             let _ = app_handle.emit(
                                 "transfer-error",
                                 &TransferErrorPayload {
                                     session_token: token_clone.clone(),
                                     file_id: Some(file.file_id.clone()),
                                     file_name: Some(file.name.clone()),
-                                    error: format!("Failed to finalize transfer: {}", err),
+                                    error: err_msg.clone(),
                                 },
+                            );
+                            record_sender_history(
+                                crate::storage::history::HistoryStatus::Failed,
+                                Some(err_msg),
                             );
                             tokens_registry.write().await.remove(&token_clone);
                             return;
@@ -552,6 +605,9 @@ pub async fn start_transfer(
 
                 // Clean up token from registry
                 tokens_registry.write().await.remove(&token_clone);
+
+                // Record successful batch completion in history
+                record_sender_history(crate::storage::history::HistoryStatus::Completed, None);
 
                 // Emit batch completion when all files finish successfully
                 let _ = app_handle.emit(
@@ -706,4 +762,106 @@ pub async fn pick_folder() -> Result<Vec<SelectedFile>, String> {
         }
         None => Ok(Vec::new()),
     }
+}
+
+/// Returns the full list of transfer history records.
+#[tauri::command]
+pub async fn get_transfer_history(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::storage::history::TransferHistoryRecord>, String> {
+    Ok(state.get_history())
+}
+
+/// Deletes a specific transfer history record by ID and emits history-updated.
+#[tauri::command]
+pub async fn delete_history_record(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    record_id: String,
+) -> Result<bool, String> {
+    let deleted = state.delete_history_record(&record_id)?;
+    if deleted {
+        let history = state.get_history();
+        let _ = app.emit("history-updated", &history);
+    }
+    Ok(deleted)
+}
+
+/// Clears all transfer history records and emits history-updated.
+#[tauri::command]
+pub async fn clear_transfer_history(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.clear_history()?;
+    let _ = app.emit("history-updated", &Vec::<crate::storage::history::TransferHistoryRecord>::new());
+    Ok(())
+}
+
+/// Opens the native OS file explorer and highlights/selects the specified file.
+#[tauri::command]
+pub async fn show_in_folder(path: String) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    if !file_path.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|e| format!("Failed to open file in explorer: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in finder: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let parent = file_path.parent().unwrap_or(&file_path);
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Opens the specified file using the system's default application.
+#[tauri::command]
+pub async fn open_file(path: String) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    if !file_path.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    Ok(())
 }

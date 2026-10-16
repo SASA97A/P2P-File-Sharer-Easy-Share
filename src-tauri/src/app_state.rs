@@ -196,4 +196,27 @@ impl AppState {
 
         Ok(updated_info)
     }
+
+    /// Loads the transfer history records from disk.
+    pub fn get_history(&self) -> Vec<crate::storage::history::TransferHistoryRecord> {
+        crate::storage::history::load_history(&self.config_dir)
+    }
+
+    /// Appends a new transfer history record to disk.
+    pub fn add_history_record(
+        &self,
+        record: crate::storage::history::TransferHistoryRecord,
+    ) -> Result<crate::storage::history::TransferHistoryRecord, String> {
+        crate::storage::history::add_record(&self.config_dir, record)
+    }
+
+    /// Deletes a transfer history record by ID.
+    pub fn delete_history_record(&self, record_id: &str) -> Result<bool, String> {
+        crate::storage::history::delete_record(&self.config_dir, record_id)
+    }
+
+    /// Clears all transfer history records.
+    pub fn clear_history(&self) -> Result<(), String> {
+        crate::storage::history::clear_history(&self.config_dir)
+    }
 }
