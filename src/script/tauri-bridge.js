@@ -349,6 +349,14 @@ async function callInvoke(command, args = {}) {
     case "open_file":
       return null;
 
+    case "pause_transfer":
+      emitMockEvent("transfer-paused", { session_token: args.session_token || args.sessionToken });
+      return true;
+
+    case "resume_transfer":
+      emitMockEvent("transfer-resumed", { session_token: args.session_token || args.sessionToken });
+      return true;
+
     default:
       console.warn(`[TauriBridge] Unhandled mock command: ${command}`);
       return null;
@@ -443,6 +451,26 @@ export async function cancelTransfer(sessionToken, peer = null) {
     sessionToken,
     session_token: sessionToken,
     peer,
+  });
+}
+
+/**
+ * Pauses an active outbound transfer session
+ */
+export async function pauseTransfer(sessionToken) {
+  return await callInvoke("pause_transfer", {
+    sessionToken,
+    session_token: sessionToken,
+  });
+}
+
+/**
+ * Resumes a paused outbound transfer session
+ */
+export async function resumeTransfer(sessionToken) {
+  return await callInvoke("resume_transfer", {
+    sessionToken,
+    session_token: sessionToken,
   });
 }
 
@@ -563,6 +591,14 @@ export async function onTransferRequested(cb) {
 
 export async function onTransferProgress(cb) {
   return await subscribeEvent("transfer-progress", cb);
+}
+
+export async function onTransferPaused(cb) {
+  return await subscribeEvent("transfer-paused", cb);
+}
+
+export async function onTransferResumed(cb) {
+  return await subscribeEvent("transfer-resumed", cb);
 }
 
 export async function onTransferCompleted(cb) {

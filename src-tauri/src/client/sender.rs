@@ -7,10 +7,74 @@ use crate::storage::file_manager::FileManager;
 use std::fmt;
 use std::io::SeekFrom;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
 
 /// Default chunk buffer size: 4 MB (4,194,304 bytes).
 pub const DEFAULT_CHUNK_SIZE: usize = 4 * 1024 * 1024;
+
+/// Controller handle allowing cooperative cancellation and pause/resume of a transfer session.
+#[derive(Debug, Clone)]
+pub struct TransferControl {
+    pub cancel_token: CancellationToken,
+    pub is_paused: Arc<AtomicBool>,
+    pub pause_notify: Arc<Notify>,
+}
+
+impl Default for TransferControl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TransferControl {
+    pub fn new() -> Self {
+        Self {
+            cancel_token: CancellationToken::new(),
+            is_paused: Arc::new(AtomicBool::new(false)),
+            pause_notify: Arc::new(Notify::new()),
+        }
+    }
+
+    /// Creates a controller wrapping an existing CancellationToken.
+    pub fn from_cancellation_token(cancel_token: CancellationToken) -> Self {
+        Self {
+            cancel_token,
+            is_paused: Arc::new(AtomicBool::new(false)),
+            pause_notify: Arc::new(Notify::new()),
+        }
+    }
+
+    /// Pause the transfer stream.
+    pub fn pause(&self) {
+        self.is_paused.store(true, Ordering::SeqCst);
+    }
+
+    /// Resume the transfer stream if paused.
+    pub fn resume(&self) {
+        self.is_paused.store(false, Ordering::SeqCst);
+        self.pause_notify.notify_waiters();
+    }
+
+    /// Check if transfer is currently in paused state.
+    pub fn is_paused(&self) -> bool {
+        self.is_paused.load(Ordering::SeqCst)
+    }
+
+    /// Cancel the transfer, waking any paused threads so they can exit promptly.
+    pub fn cancel(&self) {
+        self.cancel_token.cancel();
+        self.pause_notify.notify_waiters();
+    }
+
+    /// Check if transfer has been cancelled.
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel_token.is_cancelled()
+    }
+}
 
 /// Errors that may occur during client transfer operations.
 #[derive(Debug)]
@@ -327,7 +391,7 @@ impl TransferClient {
     where
         F: FnMut(u64, u64) + Send,
     {
-        self.send_file_resumable_cancelling(peer, session_token, file, None, progress_cb)
+        self.send_file_resumable_controlled(peer, session_token, file, None, progress_cb)
             .await
     }
 
@@ -343,14 +407,9 @@ impl TransferClient {
     where
         F: FnMut(u64, u64) + Send,
     {
-        self.send_file_resumable_url_cancelling(
-            &peer.base_url(),
-            session_token,
-            file,
-            cancel_token,
-            progress_cb,
-        )
-        .await
+        let ctrl = cancel_token.map(|t| TransferControl::from_cancellation_token(t.clone()));
+        self.send_file_resumable_controlled(peer, session_token, file, ctrl.as_ref(), progress_cb)
+            .await
     }
 
     // =========================================================================
@@ -537,22 +596,22 @@ impl TransferClient {
         .await
     }
 
-    /// Sends chunks of a file with optional byte limit and cooperative cancellation check.
-    pub async fn send_file_chunks_with_cancellation<F>(
+    /// Sends chunks of a file with optional byte limit and cooperative cancellation/pause check.
+    pub async fn send_file_chunks_with_control<F>(
         &self,
         base_url: &str,
         session_token: &str,
         file: &FileToSend,
         start_offset: u64,
         max_bytes_to_send: Option<u64>,
-        cancel_token: Option<&tokio_util::sync::CancellationToken>,
+        control: Option<&TransferControl>,
         mut progress_cb: F,
     ) -> Result<u64, ClientError>
     where
         F: FnMut(u64, u64) + Send,
     {
-        if let Some(token) = cancel_token {
-            if token.is_cancelled() {
+        if let Some(ctrl) = control {
+            if ctrl.is_cancelled() {
                 return Err(ClientError::Cancelled);
             }
         }
@@ -584,9 +643,17 @@ impl TransferClient {
         let mut total_sent_in_call = 0u64;
 
         while current_offset < file.size {
-            if let Some(token) = cancel_token {
-                if token.is_cancelled() {
+            if let Some(ctrl) = control {
+                if ctrl.is_cancelled() {
                     return Err(ClientError::Cancelled);
+                }
+                while ctrl.is_paused() {
+                    tokio::select! {
+                        _ = ctrl.cancel_token.cancelled() => {
+                            return Err(ClientError::Cancelled);
+                        }
+                        _ = ctrl.pause_notify.notified() => {}
+                    }
                 }
             }
 
@@ -625,7 +692,98 @@ impl TransferClient {
         Ok(total_sent_in_call)
     }
 
-    /// Automatically discovers current remote offset and streams remaining chunks to peer.
+    /// Sends chunks of a file with optional byte limit and cooperative cancellation check.
+    pub async fn send_file_chunks_with_cancellation<F>(
+        &self,
+        base_url: &str,
+        session_token: &str,
+        file: &FileToSend,
+        start_offset: u64,
+        max_bytes_to_send: Option<u64>,
+        cancel_token: Option<&tokio_util::sync::CancellationToken>,
+        progress_cb: F,
+    ) -> Result<u64, ClientError>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        let ctrl = cancel_token.map(|t| TransferControl::from_cancellation_token(t.clone()));
+        self.send_file_chunks_with_control(
+            base_url,
+            session_token,
+            file,
+            start_offset,
+            max_bytes_to_send,
+            ctrl.as_ref(),
+            progress_cb,
+        )
+        .await
+    }
+
+    /// Automatically discovers current remote offset and streams remaining chunks to peer with transfer control.
+    pub async fn send_file_resumable_controlled<F>(
+        &self,
+        peer: &PeerInfo,
+        session_token: &str,
+        file: &FileToSend,
+        control: Option<&TransferControl>,
+        progress_cb: F,
+    ) -> Result<(), ClientError>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        self.send_file_resumable_controlled_url(
+            &peer.base_url(),
+            session_token,
+            file,
+            control,
+            progress_cb,
+        )
+        .await
+    }
+
+    /// Automatically discovers current remote offset and streams remaining chunks using explicit base URL with transfer control.
+    pub async fn send_file_resumable_controlled_url<F>(
+        &self,
+        base_url: &str,
+        session_token: &str,
+        file: &FileToSend,
+        control: Option<&TransferControl>,
+        progress_cb: F,
+    ) -> Result<(), ClientError>
+    where
+        F: FnMut(u64, u64) + Send,
+    {
+        if let Some(ctrl) = control {
+            if ctrl.is_cancelled() {
+                return Err(ClientError::Cancelled);
+            }
+        }
+
+        if !file.path.exists() {
+            return Err(ClientError::FileNotFound(file.path.clone()));
+        }
+
+        let status = self
+            .get_transfer_status_url(base_url, session_token, &file.file_id)
+            .await?;
+
+        let start_offset = status.bytes_received;
+
+        self.send_file_chunks_with_control(
+            base_url,
+            session_token,
+            file,
+            start_offset,
+            None,
+            control,
+            progress_cb,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    /// Automatically discovers current remote offset and streams remaining chunks using explicit base URL.
     pub async fn send_file_resumable_url<F>(
         &self,
         base_url: &str,
@@ -636,7 +794,7 @@ impl TransferClient {
     where
         F: FnMut(u64, u64) + Send,
     {
-        self.send_file_resumable_url_cancelling(base_url, session_token, file, None, progress_cb)
+        self.send_file_resumable_controlled_url(base_url, session_token, file, None, progress_cb)
             .await
     }
 
@@ -652,33 +810,14 @@ impl TransferClient {
     where
         F: FnMut(u64, u64) + Send,
     {
-        if let Some(token) = cancel_token {
-            if token.is_cancelled() {
-                return Err(ClientError::Cancelled);
-            }
-        }
-
-        if !file.path.exists() {
-            return Err(ClientError::FileNotFound(file.path.clone()));
-        }
-
-        let status = self
-            .get_transfer_status_url(base_url, session_token, &file.file_id)
-            .await?;
-
-        let start_offset = status.bytes_received;
-
-        self.send_file_chunks_with_cancellation(
+        let ctrl = cancel_token.map(|t| TransferControl::from_cancellation_token(t.clone()));
+        self.send_file_resumable_controlled_url(
             base_url,
             session_token,
             file,
-            start_offset,
-            None,
-            cancel_token,
+            ctrl.as_ref(),
             progress_cb,
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 }

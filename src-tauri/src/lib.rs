@@ -286,6 +286,8 @@ pub fn run() {
             commands::add_manual_peer,
             commands::respond_transfer_request,
             commands::start_transfer,
+            commands::pause_transfer,
+            commands::resume_transfer,
             commands::cancel_transfer,
             commands::get_download_dir,
             commands::set_download_dir,

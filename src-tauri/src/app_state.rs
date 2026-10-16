@@ -1,4 +1,4 @@
-use crate::client::TransferClient;
+use crate::client::{TransferClient, TransferControl};
 use crate::discovery::{
     DiscoveryConfig, DiscoveryEvent, DiscoveryHandle, DiscoveryService, PeerEvent,
 };
@@ -20,6 +20,7 @@ pub struct AppState {
     pub config_dir: PathBuf,
     pub pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     pub cancellation_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    pub transfer_controls: Arc<RwLock<HashMap<String, TransferControl>>>,
 }
 
 impl AppState {
@@ -56,6 +57,7 @@ impl AppState {
             config_dir,
             pending_consents,
             cancellation_tokens: Arc::new(RwLock::new(HashMap::new())),
+            transfer_controls: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -67,20 +69,65 @@ impl AppState {
             .insert(session_token.to_string(), token);
     }
 
+    /// Registers an active transfer control handle.
+    pub async fn register_transfer_control(&self, session_token: &str, control: TransferControl) {
+        self.transfer_controls
+            .write()
+            .await
+            .insert(session_token.to_string(), control);
+    }
+
     /// Triggers cancellation of an active session token if registered.
     /// Returns true if a token was found and cancelled.
     pub async fn cancel_session(&self, session_token: &str) -> bool {
+        let mut cancelled = false;
         if let Some(token) = self.cancellation_tokens.write().await.remove(session_token) {
             token.cancel();
+            cancelled = true;
+        }
+        if let Some(ctrl) = self.transfer_controls.write().await.remove(session_token) {
+            ctrl.cancel();
+            cancelled = true;
+        }
+        cancelled
+    }
+
+    /// Removes a cancellation token after normal completion or error.
+    pub async fn remove_cancellation_token(&self, session_token: &str) {
+        self.cancellation_tokens.write().await.remove(session_token);
+        self.transfer_controls.write().await.remove(session_token);
+    }
+
+    /// Pauses an active transfer session if registered.
+    pub async fn pause_transfer(&self, session_token: &str) -> bool {
+        let controls = self.transfer_controls.read().await;
+        if let Some(ctrl) = controls.get(session_token) {
+            ctrl.pause();
             true
         } else {
             false
         }
     }
 
-    /// Removes a cancellation token after normal completion or error.
-    pub async fn remove_cancellation_token(&self, session_token: &str) {
-        self.cancellation_tokens.write().await.remove(session_token);
+    /// Resumes a paused transfer session if registered.
+    pub async fn resume_transfer(&self, session_token: &str) -> bool {
+        let controls = self.transfer_controls.read().await;
+        if let Some(ctrl) = controls.get(session_token) {
+            ctrl.resume();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Checks if a transfer session is currently paused.
+    pub async fn is_transfer_paused(&self, session_token: &str) -> bool {
+        let controls = self.transfer_controls.read().await;
+        if let Some(ctrl) = controls.get(session_token) {
+            ctrl.is_paused()
+        } else {
+            false
+        }
     }
 
     /// Returns a clone of the current device info.

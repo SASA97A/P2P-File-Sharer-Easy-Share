@@ -434,6 +434,23 @@ body {
   color: var(--color-text-muted);
 }
 
+.file-metrics {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 9999px);
+  white-space: nowrap;
+  margin-left: 6px;
+  margin-right: 4px;
+}
+
+.file-item.completed .file-metrics {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+}
+
 .remove-btn {
   display: flex;
   align-items: center;
@@ -722,6 +739,33 @@ body {
   box-shadow: var(--shadow-lg);
   font-size: 15px;
   transition: background 0.2s, transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.pause-transfer-btn {
+  padding: 12px 20px;
+  background: #f59e0b;
+  color: #111827;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: background 0.2s, transform 0.15s, opacity 0.2s;
+  white-space: nowrap;
+}
+
+.pause-transfer-btn:hover {
+  background: #d97706;
+  transform: translateY(-2px);
+}
+
+.pause-transfer-btn:active {
+  transform: translateY(0);
+}
+
+.pause-transfer-btn.hidden {
+  display: none !important;
 }
 
 .cancel-transfer-btn {
@@ -1712,6 +1756,24 @@ body {
   background: #4caf50;
   border-radius: 3px;
   transition: width 0.15s ease-out;
+}
+
+.receive-progress-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+}
+
+.receive-metric-speed {
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.receive-metric-eta {
+  font-weight: 500;
 }
 
 @keyframes toastFade {

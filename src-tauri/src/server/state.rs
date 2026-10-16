@@ -19,6 +19,10 @@ pub struct ReceiveProgressPayload {
     pub received_bytes: u64,
     pub total_bytes: u64,
     pub percent: u32,
+    #[serde(default)]
+    pub speed_bps: u64,
+    #[serde(default)]
+    pub eta_seconds: Option<u64>,
 }
 
 /// Payload emitted for receiver-side completion notification events.
@@ -73,6 +77,7 @@ pub struct SessionState {
     pub status: TransferStatus,
     pub created_at: Instant,
     pub file_progress: HashMap<String, u64>,
+    pub tracker: Arc<std::sync::Mutex<crate::client::metrics::ThroughputTracker>>,
 }
 
 /// Shared server state across all Axum handlers.
@@ -226,6 +231,9 @@ impl ServerState {
             status: TransferStatus::Accepted,
             created_at: Instant::now(),
             file_progress: offsets.clone(),
+            tracker: Arc::new(std::sync::Mutex::new(
+                crate::client::ThroughputTracker::new(),
+            )),
         };
 
         self.sessions.write().await.insert(token.clone(), session);

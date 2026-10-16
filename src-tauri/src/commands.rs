@@ -80,6 +80,10 @@ pub struct ProgressPayload {
     pub sent_bytes: u64,
     pub total_bytes: u64,
     pub percent: u32,
+    #[serde(default)]
+    pub speed_bps: u64,
+    #[serde(default)]
+    pub eta_seconds: Option<u64>,
 }
 
 /// Event payload emitted when an individual file transfer completes successfully.
@@ -383,16 +387,21 @@ pub async fn start_transfer(
             })?;
 
             let cancel_token = tokio_util::sync::CancellationToken::new();
+            let transfer_control = crate::client::TransferControl::from_cancellation_token(cancel_token.clone());
             state
                 .register_cancellation_token(&session_token, cancel_token.clone())
+                .await;
+            state
+                .register_transfer_control(&session_token, transfer_control.clone())
                 .await;
 
             let client = state.transfer_client.clone();
             let peer_clone = peer.clone();
             let token_clone = session_token.clone();
             let app_handle = app.clone();
-            let cancel_token_clone = cancel_token.clone();
+            let control_clone = transfer_control.clone();
             let tokens_registry = state.cancellation_tokens.clone();
+            let controls_registry = state.transfer_controls.clone();
             let total_files = files_to_send.len();
             let total_batch_bytes = files_to_send.iter().map(|f| f.size).sum::<u64>();
             let files_to_send_clone = files_to_send.clone();
@@ -429,7 +438,7 @@ pub async fn start_transfer(
                 };
 
                 for file in files_to_send {
-                    if cancel_token_clone.is_cancelled() {
+                    if control_clone.is_cancelled() {
                         let _ = app_handle.emit(
                             "transfer-cancelled",
                             &TransferCancelledPayload {
@@ -449,12 +458,17 @@ pub async fn start_transfer(
                             Some("Transfer cancelled by user".to_string()),
                         );
                         tokens_registry.write().await.remove(&token_clone);
+                        controls_registry.write().await.remove(&token_clone);
                         return;
                     }
 
                     let file_id = file.file_id.clone();
                     let file_name = file.name.clone();
                     let total_bytes = file.size;
+
+                    let tracker = std::sync::Arc::new(std::sync::Mutex::new(
+                        crate::client::ThroughputTracker::new(),
+                    ));
 
                     // Initial 0% progress event
                     let _ = app_handle.emit(
@@ -466,6 +480,8 @@ pub async fn start_transfer(
                             sent_bytes: 0,
                             total_bytes,
                             percent: 0,
+                            speed_bps: 0,
+                            eta_seconds: None,
                         },
                     );
 
@@ -473,18 +489,23 @@ pub async fn start_transfer(
                     let fid_cb = file_id.clone();
                     let fname_cb = file_name.clone();
                     let tok_cb = token_clone.clone();
+                    let tracker_cb = tracker.clone();
 
                     let send_res = client
-                        .send_file_resumable_cancelling(
+                        .send_file_resumable_controlled(
                             &peer_clone,
                             &token_clone,
                             &file,
-                            Some(&cancel_token_clone),
+                            Some(&control_clone),
                             move |sent, total| {
                                 let percent = if total > 0 {
                                     ((sent as f64 / total as f64) * 100.0) as u32
                                 } else {
                                     100
+                                };
+                                let (speed_bps, eta_seconds) = {
+                                    let mut tr = tracker_cb.lock().unwrap();
+                                    tr.update(sent, total, std::time::Instant::now())
                                 };
                                 let _ = app_cb.emit(
                                     "transfer-progress",
@@ -495,6 +516,8 @@ pub async fn start_transfer(
                                         sent_bytes: sent,
                                         total_bytes: total,
                                         percent,
+                                        speed_bps,
+                                        eta_seconds,
                                     },
                                 );
                             },
@@ -502,7 +525,7 @@ pub async fn start_transfer(
                         .await;
 
                     if let Err(err) = send_res {
-                        if matches!(err, ClientError::Cancelled) || cancel_token_clone.is_cancelled() {
+                        if matches!(err, ClientError::Cancelled) || control_clone.is_cancelled() {
                             let _ = app_handle.emit(
                                 "transfer-cancelled",
                                 &TransferCancelledPayload {
@@ -522,6 +545,7 @@ pub async fn start_transfer(
                                 Some("Transfer cancelled by user".to_string()),
                             );
                             tokens_registry.write().await.remove(&token_clone);
+                            controls_registry.write().await.remove(&token_clone);
                             return;
                         }
 
@@ -540,10 +564,11 @@ pub async fn start_transfer(
                             Some(err_msg),
                         );
                         tokens_registry.write().await.remove(&token_clone);
+                        controls_registry.write().await.remove(&token_clone);
                         return;
                     }
 
-                    if cancel_token_clone.is_cancelled() {
+                    if control_clone.is_cancelled() {
                         let _ = app_handle.emit(
                             "transfer-cancelled",
                             &TransferCancelledPayload {
@@ -563,6 +588,7 @@ pub async fn start_transfer(
                             Some("Transfer cancelled by user".to_string()),
                         );
                         tokens_registry.write().await.remove(&token_clone);
+                        controls_registry.write().await.remove(&token_clone);
                         return;
                     }
 
@@ -598,6 +624,7 @@ pub async fn start_transfer(
                                 Some(err_msg),
                             );
                             tokens_registry.write().await.remove(&token_clone);
+                            controls_registry.write().await.remove(&token_clone);
                             return;
                         }
                     }
@@ -605,6 +632,7 @@ pub async fn start_transfer(
 
                 // Clean up token from registry
                 tokens_registry.write().await.remove(&token_clone);
+                controls_registry.write().await.remove(&token_clone);
 
                 // Record successful batch completion in history
                 record_sender_history(crate::storage::history::HistoryStatus::Completed, None);
@@ -660,6 +688,34 @@ pub async fn cancel_transfer(
     }
 
     Ok(())
+}
+
+/// Pauses an active outbound transfer session.
+#[tauri::command]
+pub async fn pause_transfer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_token: String,
+) -> Result<bool, String> {
+    let paused = state.pause_transfer(&session_token).await;
+    if paused {
+        let _ = app.emit("transfer-paused", serde_json::json!({ "session_token": session_token }));
+    }
+    Ok(paused)
+}
+
+/// Resumes a paused outbound transfer session.
+#[tauri::command]
+pub async fn resume_transfer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_token: String,
+) -> Result<bool, String> {
+    let resumed = state.resume_transfer(&session_token).await;
+    if resumed {
+        let _ = app.emit("transfer-resumed", serde_json::json!({ "session_token": session_token }));
+    }
+    Ok(resumed)
 }
 
 /// Returns the current download directory path.

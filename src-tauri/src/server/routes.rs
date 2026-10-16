@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 #[derive(Debug)]
@@ -296,14 +297,18 @@ pub async fn handle_transfer_chunk(
     let current_total = query.offset + bytes_written;
 
     // Update progress in session
-    {
+    let (speed_bps, eta_seconds) = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&query.session_token) {
             session
                 .file_progress
                 .insert(query.file_id.clone(), current_total);
+            let mut tr = session.tracker.lock().unwrap();
+            tr.update(current_total, file_size, Instant::now())
+        } else {
+            (0, None)
         }
-    }
+    };
 
     let percent = if file_size > 0 {
         ((current_total as f64 / file_size as f64) * 100.0) as u32
@@ -318,6 +323,8 @@ pub async fn handle_transfer_chunk(
             received_bytes: current_total,
             total_bytes: file_size,
             percent,
+            speed_bps,
+            eta_seconds,
         },
     ));
 

@@ -11,13 +11,19 @@ import {
   showToast,
   updateReceiveProgress,
   hideReceiveProgress,
+  formatSpeed,
+  formatEta,
 } from "./ui.js";
 import {
   startTransfer,
   cancelTransfer,
+  pauseTransfer,
+  resumeTransfer,
   respondTransferRequest,
   onTransferRequested,
   onTransferProgress,
+  onTransferPaused,
+  onTransferResumed,
   onTransferCompleted,
   onTransferBatchCompleted,
   onTransferCancelled,
@@ -33,8 +39,10 @@ import {
 export function setupTransfer() {
   const sendBtn = document.getElementById("sendBtn") || document.querySelector(".send-btn");
   const cancelTransferBtn = document.getElementById("cancelTransferBtn");
+  const pauseTransferBtn = document.getElementById("pauseTransferBtn");
   const sendActionLabel = document.querySelector(".send-action span");
   let isSending = false;
+  let isPaused = false;
   let activeBatch = null;
 
   /**
@@ -44,6 +52,17 @@ export function setupTransfer() {
   function setSendBtnLabel(text) {
     if (sendActionLabel) {
       sendActionLabel.textContent = text;
+    }
+  }
+
+  /**
+   * Updates pause button text safely
+   * @param {string} text
+   */
+  function setPauseBtnLabel(text) {
+    if (pauseTransferBtn) {
+      const label = pauseTransferBtn.querySelector(".pause-btn-text") || pauseTransferBtn;
+      label.textContent = text;
     }
   }
 
@@ -58,7 +77,12 @@ export function setupTransfer() {
       showToast(`All ${count} files transferred successfully!`, "success");
     }
     isSending = false;
+    isPaused = false;
     activeBatch = null;
+    if (pauseTransferBtn) {
+      pauseTransferBtn.classList.add("hidden");
+      setPauseBtnLabel("Pause");
+    }
     if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
     if (sendBtn) sendBtn.disabled = false;
     setSendBtnLabel("Send");
@@ -84,7 +108,12 @@ export function setupTransfer() {
       }
 
       isSending = true;
+      isPaused = false;
       sendBtn.disabled = true;
+      if (pauseTransferBtn) {
+        pauseTransferBtn.classList.remove("hidden");
+        setPauseBtnLabel("Pause");
+      }
       if (cancelTransferBtn) cancelTransferBtn.classList.remove("hidden");
       setSendBtnLabel("Connecting…");
 
@@ -101,10 +130,31 @@ export function setupTransfer() {
       } catch (err) {
         showToast(`Transfer failed: ${err}`, "error");
         isSending = false;
+        isPaused = false;
         activeBatch = null;
+        if (pauseTransferBtn) {
+          pauseTransferBtn.classList.add("hidden");
+          setPauseBtnLabel("Pause");
+        }
         if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
         if (sendBtn) sendBtn.disabled = false;
         setSendBtnLabel("Send");
+      }
+    });
+  }
+
+  if (pauseTransferBtn) {
+    pauseTransferBtn.addEventListener("click", async () => {
+      if (!isSending || !activeBatch) return;
+      const token = activeBatch.sessionToken;
+      try {
+        if (!isPaused) {
+          await pauseTransfer(token);
+        } else {
+          await resumeTransfer(token);
+        }
+      } catch (err) {
+        console.error("Error toggling pause state:", err);
       }
     });
   }
@@ -120,7 +170,12 @@ export function setupTransfer() {
         console.error("Error cancelling transfer:", err);
       }
       isSending = false;
+      isPaused = false;
       activeBatch = null;
+      if (pauseTransferBtn) {
+        pauseTransferBtn.classList.add("hidden");
+        setPauseBtnLabel("Pause");
+      }
       if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
       if (sendBtn) sendBtn.disabled = false;
       setSendBtnLabel("Send");
@@ -150,10 +205,16 @@ export function setupTransfer() {
   // Real-time Outbound Transfer Progress Event
   // -------------------------------------------------------------
   onTransferProgress((progress) => {
-    const { file_id, file_name, percent } = progress;
+    const { file_id, file_name, percent, speed_bps, eta_seconds } = progress;
 
     if (isSending) {
-      setSendBtnLabel(`Sending (${percent}%)`);
+      if (isPaused) {
+        setSendBtnLabel(`Paused (${percent}%)`);
+      } else if (speed_bps) {
+        setSendBtnLabel(`Sending (${percent}%) • ${formatSpeed(speed_bps)}`);
+      } else {
+        setSendBtnLabel(`Sending (${percent}%)`);
+      }
     }
 
     // Locate matching file element in the UI staging area by file_id, fallback to name
@@ -171,10 +232,60 @@ export function setupTransfer() {
 
     if (targetItem) {
       targetItem.style.setProperty("--progress", `${percent}%`);
+      let metricEl = targetItem.querySelector(".file-metrics");
+      if (!metricEl) {
+        metricEl = document.createElement("span");
+        metricEl.className = "file-metrics";
+        const infoEl = targetItem.querySelector(".file-info");
+        const removeBtn = targetItem.querySelector(".remove-btn");
+        if (infoEl) {
+          if (removeBtn) {
+            infoEl.insertBefore(metricEl, removeBtn);
+          } else {
+            infoEl.appendChild(metricEl);
+          }
+        }
+      }
+      if (metricEl) {
+        if (percent >= 100) {
+          metricEl.textContent = "Done";
+        } else if (isPaused) {
+          metricEl.textContent = "Paused";
+        } else if (speed_bps) {
+          metricEl.textContent = `${formatSpeed(speed_bps)} • ${formatEta(eta_seconds)}`;
+        }
+      }
       if (percent >= 100) {
         targetItem.classList.add("completed");
       }
     }
+  });
+
+  // -------------------------------------------------------------
+  // Outbound Transfer Paused / Resumed Events
+  // -------------------------------------------------------------
+  onTransferPaused((_payload) => {
+    isPaused = true;
+    setPauseBtnLabel("Resume");
+    setSendBtnLabel("Paused");
+    showToast("Transfer paused.", "info");
+
+    const fileItems = document.querySelectorAll(".file-item");
+    for (const item of fileItems) {
+      if (!item.classList.contains("completed")) {
+        const metricEl = item.querySelector(".file-metrics");
+        if (metricEl) {
+          metricEl.textContent = "Paused";
+        }
+      }
+    }
+  });
+
+  onTransferResumed((_payload) => {
+    isPaused = false;
+    setPauseBtnLabel("Pause");
+    setSendBtnLabel("Sending…");
+    showToast("Transfer resumed.", "info");
   });
 
   // -------------------------------------------------------------
@@ -201,6 +312,10 @@ export function setupTransfer() {
     if (targetItem) {
       targetItem.style.setProperty("--progress", "100%");
       targetItem.classList.add("completed");
+      const metricEl = targetItem.querySelector(".file-metrics");
+      if (metricEl) {
+        metricEl.textContent = "Done";
+      }
     }
 
     if (activeBatch) {
@@ -249,7 +364,12 @@ export function setupTransfer() {
   onTransferCancelled((_payload) => {
     showToast("Transfer was cancelled.", "info");
     isSending = false;
+    isPaused = false;
     activeBatch = null;
+    if (pauseTransferBtn) {
+      pauseTransferBtn.classList.add("hidden");
+      setPauseBtnLabel("Pause");
+    }
     if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
     if (sendBtn) sendBtn.disabled = false;
     setSendBtnLabel("Send");
@@ -264,7 +384,12 @@ export function setupTransfer() {
     showToast(`Transfer failed: ${filePrefix}${error}`, "error");
 
     isSending = false;
+    isPaused = false;
     activeBatch = null;
+    if (pauseTransferBtn) {
+      pauseTransferBtn.classList.add("hidden");
+      setPauseBtnLabel("Pause");
+    }
     if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
     if (sendBtn) sendBtn.disabled = false;
     setSendBtnLabel("Send");

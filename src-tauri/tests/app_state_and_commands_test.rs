@@ -218,6 +218,8 @@ async fn test_full_client_server_transfer_with_events_payload() {
                 sent_bytes: sent,
                 total_bytes: total,
                 percent,
+                speed_bps: 0,
+                eta_seconds: None,
             };
             tokio::spawn({
                 let list = progress_records_cb.clone();
