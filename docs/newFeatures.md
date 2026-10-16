@@ -4,6 +4,27 @@ This document outlines the planned feature additions, enhancements, and architec
 
 ---
 
+## Roadmap Status Matrix
+
+| Feature | Category | Target Release | Status |
+| :--- | :--- | :--- | :--- |
+| **1.1 Custom Download Directory Picker** | Storage Management | `v2.1` | ✅ **Completed** |
+| **1.2 "Open Downloads Folder" Shortcut** | Storage Management | `v2.1` | ✅ **Completed** |
+| **2.1 Persistent Transfer Log (`history.json`)** | Transfer History | `v2.2` | ✅ **Completed** |
+| **2.2 Direct File Actions & Search Filtering** | Transfer History | `v2.2` | ✅ **Completed** |
+| **3.1 Network Interface (NIC) Selector** | Network & Discovery | `v2.x` | ⏳ *Planned* |
+| **3.2 Offline / Direct Hotspot Mode** | Network & Discovery | `v2.x` | ⏳ *Planned* |
+| **4.1 Real-Time Transfer Metrics (Speed & ETA)** | UX & Transfer Engine | `v2.x` | ⏳ *Planned* |
+| **4.2 Pause & Resume Transfer Controls** | UX & Transfer Engine | `v2.x` | ⏳ *Planned* |
+| **5.1 Settings Modal Dialog** | Identity & Settings | `v2.1` | ✅ **Completed** |
+| **5.2 Custom Device Display Name** | Identity & Settings | `v2.1` | ✅ **Completed** |
+| **5.3 Trusted Devices & Auto-Accept** | Identity & Settings | `v2.x` | ⏳ *Planned* |
+| **6.1 Native Desktop Notifications** | System Integration | `v2.x` | ⏳ *Planned* |
+| **6.2 Quick Text & Clipboard Sharing** | System Integration | `v2.x` | ⏳ *Planned* |
+| **6.3 System Tray & Background Operation** | System Integration | `v2.x` | ⏳ *Planned* |
+
+---
+
 ## 1. Storage & Download Management
 
 ### 1.1 Custom Download Directory Picker ✅ [Completed]
