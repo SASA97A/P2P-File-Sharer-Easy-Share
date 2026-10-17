@@ -56,7 +56,28 @@ const mockState = {
     port: 5050,
     pairing_pin: "839421",
   },
+  download_dir: "C:\\Users\\MockUser\\Downloads",
   peers: [],
+  history: [
+    {
+      id: "mock-record-1",
+      session_token: "mock-token-1",
+      timestamp: Date.now() - 3600000,
+      direction: "received",
+      peer_name: "Mock-Phone",
+      peer_ip: "192.168.1.101",
+      status: "completed",
+      files: [
+        {
+          name: "document.pdf",
+          path: "C:\\Users\\MockUser\\Downloads\\document.pdf",
+          size: 1048576,
+        },
+      ],
+      total_bytes: 1048576,
+      error_message: null,
+    },
+  ],
   listeners: new Map(),
 };
 
@@ -177,7 +198,20 @@ async function callInvoke(command, args = {}) {
       return;
 
     case "get_download_dir":
-      return "Downloads";
+      return mockState.download_dir || "Downloads";
+
+    case "set_download_dir": {
+      mockState.download_dir = args.path;
+      return args.path;
+    }
+
+    case "set_device_name": {
+      const name = (args.name || "").trim();
+      if (!name) throw new Error("Device name cannot be empty");
+      mockState.deviceInfo.device_name = name;
+      emitMockEvent("device-info-updated", { ...mockState.deviceInfo });
+      return { ...mockState.deviceInfo };
+    }
 
     case "open_download_dir":
       console.log("[Mock] Opened download directory");
@@ -292,6 +326,37 @@ async function callInvoke(command, args = {}) {
       return peer;
     }
 
+    case "get_transfer_history":
+      return [...mockState.history];
+
+    case "delete_history_record": {
+      const idx = mockState.history.findIndex((r) => r.id === args.record_id);
+      if (idx !== -1) {
+        mockState.history.splice(idx, 1);
+        emitMockEvent("history-updated", [...mockState.history]);
+        return true;
+      }
+      return false;
+    }
+
+    case "clear_transfer_history": {
+      mockState.history = [];
+      emitMockEvent("history-updated", []);
+      return null;
+    }
+
+    case "show_in_folder":
+    case "open_file":
+      return null;
+
+    case "pause_transfer":
+      emitMockEvent("transfer-paused", { session_token: args.session_token || args.sessionToken });
+      return true;
+
+    case "resume_transfer":
+      emitMockEvent("transfer-resumed", { session_token: args.session_token || args.sessionToken });
+      return true;
+
     default:
       console.warn(`[TauriBridge] Unhandled mock command: ${command}`);
       return null;
@@ -370,6 +435,7 @@ export async function startTransfer(peer, files) {
   const fileSelections = files.map((f) => ({
     path: f.fullPath || f.path || f.name,
     name: f.name || undefined,
+    file_id: f.id || undefined,
   }));
   return await callInvoke("start_transfer", {
     peer,
@@ -389,6 +455,26 @@ export async function cancelTransfer(sessionToken, peer = null) {
 }
 
 /**
+ * Pauses an active outbound transfer session
+ */
+export async function pauseTransfer(sessionToken) {
+  return await callInvoke("pause_transfer", {
+    sessionToken,
+    session_token: sessionToken,
+  });
+}
+
+/**
+ * Resumes a paused outbound transfer session
+ */
+export async function resumeTransfer(sessionToken) {
+  return await callInvoke("resume_transfer", {
+    sessionToken,
+    session_token: sessionToken,
+  });
+}
+
+/**
  * Returns current download directory path
  */
 export async function getDownloadDir() {
@@ -400,6 +486,20 @@ export async function getDownloadDir() {
  */
 export async function openDownloadDir() {
   return await callInvoke("open_download_dir");
+}
+
+/**
+ * Updates the download directory path
+ */
+export async function setDownloadDir(path) {
+  return await callInvoke("set_download_dir", { path });
+}
+
+/**
+ * Updates the local device display name
+ */
+export async function setDeviceName(name) {
+  return await callInvoke("set_device_name", { name });
 }
 
 /**
@@ -481,6 +581,10 @@ export async function onPeerUpdated(cb) {
   return await subscribeEvent("peer-updated", cb);
 }
 
+export async function onDeviceInfoUpdated(cb) {
+  return await subscribeEvent("device-info-updated", cb);
+}
+
 export async function onTransferRequested(cb) {
   return await subscribeEvent("transfer-requested", cb);
 }
@@ -489,12 +593,24 @@ export async function onTransferProgress(cb) {
   return await subscribeEvent("transfer-progress", cb);
 }
 
+export async function onTransferPaused(cb) {
+  return await subscribeEvent("transfer-paused", cb);
+}
+
+export async function onTransferResumed(cb) {
+  return await subscribeEvent("transfer-resumed", cb);
+}
+
 export async function onTransferCompleted(cb) {
   return await subscribeEvent("transfer-completed", cb);
 }
 
 export async function onTransferBatchCompleted(cb) {
   return await subscribeEvent("transfer-batch-completed", cb);
+}
+
+export async function onTransferCancelled(cb) {
+  return await subscribeEvent("transfer-cancelled", cb);
 }
 
 export async function onReceiveProgress(cb) {
@@ -511,4 +627,50 @@ export async function onReceiveCancelled(cb) {
 
 export async function onTransferError(cb) {
   return await subscribeEvent("transfer-error", cb);
+}
+
+// -------------------------------------------------------------
+// History Commands & Events
+// -------------------------------------------------------------
+
+/**
+ * Returns the full list of transfer history records.
+ */
+export async function getTransferHistory() {
+  return await callInvoke("get_transfer_history");
+}
+
+/**
+ * Deletes a specific transfer history record by ID.
+ */
+export async function deleteHistoryRecord(recordId) {
+  return await callInvoke("delete_history_record", { record_id: recordId });
+}
+
+/**
+ * Clears all transfer history records.
+ */
+export async function clearTransferHistory() {
+  return await callInvoke("clear_transfer_history");
+}
+
+/**
+ * Shows and selects the specified file in native OS file explorer.
+ */
+export async function showInFolder(path) {
+  return await callInvoke("show_in_folder", { path });
+}
+
+/**
+ * Opens the specified file using the system's default application.
+ */
+export async function openFile(path) {
+  return await callInvoke("open_file", { path });
+}
+
+/**
+ * Subscribes to history update events.
+ */
+export async function onHistoryUpdated(cb) {
+  return await subscribeEvent("history-updated", cb);
 }

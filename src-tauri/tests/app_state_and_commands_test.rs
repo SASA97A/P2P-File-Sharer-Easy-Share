@@ -43,7 +43,7 @@ async fn test_app_state_creation_and_device_info() {
     let dev_info = app_state.get_device_info().await;
     assert_eq!(dev_info.device_name, "Test-Host");
     assert_eq!(dev_info.os, "windows");
-    assert_eq!(app_state.download_dir(), &temp_dir);
+    assert_eq!(app_state.download_dir(), temp_dir);
     assert!(dev_info.pairing_pin.is_some());
     let initial_pin = dev_info.pairing_pin.unwrap();
     assert_eq!(initial_pin.len(), 6);
@@ -218,6 +218,8 @@ async fn test_full_client_server_transfer_with_events_payload() {
                 sent_bytes: sent,
                 total_bytes: total,
                 percent,
+                speed_bps: 0,
+                eta_seconds: None,
             };
             tokio::spawn({
                 let list = progress_records_cb.clone();
@@ -403,6 +405,95 @@ async fn test_inspect_file_paths_resolution() {
     assert_eq!(folder_selected.len(), 1);
     assert_eq!(folder_selected[0].name, "doc3.txt");
     assert_eq!(folder_selected[0].size, 19);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_inspect_file_paths_deep_recursion() {
+    let temp_dir = setup_test_dir("inspect_deep_recursion");
+    let file_root = temp_dir.join("file_root.txt");
+    let empty_dir = temp_dir.join("empty_dir");
+    let level1 = temp_dir.join("level1");
+    let file_l1 = level1.join("file_level1.txt");
+    let level2 = level1.join("level2");
+    let file_l2 = level2.join("file_level2.txt");
+    let level3 = level2.join("level3");
+    let file_l3 = level3.join("file_level3.txt");
+
+    fs::create_dir_all(&empty_dir).unwrap();
+    fs::create_dir_all(&level3).unwrap();
+
+    fs::write(&file_root, vec![1u8; 10]).unwrap();
+    fs::write(&file_l1, vec![2u8; 20]).unwrap();
+    fs::write(&file_l2, vec![3u8; 30]).unwrap();
+    fs::write(&file_l3, vec![4u8; 40]).unwrap();
+
+    let paths = vec![temp_dir.to_string_lossy().to_string()];
+    let selected = inspect_file_paths(&paths);
+
+    let total_size: u64 = selected.iter().map(|f| f.size).sum();
+    let mut names: Vec<String> = selected.into_iter().map(|f| f.name).collect();
+    names.sort();
+
+    assert_eq!(names.len(), 4, "Must find all 4 nested files recursively");
+    assert_eq!(
+        names,
+        vec![
+            "file_level1.txt".to_string(),
+            "file_level2.txt".to_string(),
+            "file_level3.txt".to_string(),
+            "file_root.txt".to_string(),
+        ]
+    );
+    assert_eq!(total_size, 100, "Total size of all recursive files must match");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_app_state_cancellation_token_lifecycle() {
+    let temp_dir = setup_test_dir("cancellation_token");
+    let info = sample_device_info();
+    let server_state = Arc::new(ServerState::new(info.clone(), temp_dir.clone()));
+    let pending_consents = Arc::new(RwLock::new(HashMap::new()));
+
+    let app_state = AppState::new(server_state, None, temp_dir.clone(), pending_consents);
+
+    let session_token = "session-test-token-12345";
+    let token = tokio_util::sync::CancellationToken::new();
+
+    // 1. Initially not cancelled
+    assert!(!token.is_cancelled());
+
+    // 2. Register token in AppState
+    app_state
+        .register_cancellation_token(session_token, token.clone())
+        .await;
+
+    // 3. Cancelling non-existent session returns false
+    let not_found = app_state.cancel_session("non-existent-session").await;
+    assert!(!not_found);
+    assert!(!token.is_cancelled());
+
+    // 4. Cancelling registered session cancels the token and returns true
+    let cancelled = app_state.cancel_session(session_token).await;
+    assert!(cancelled);
+    assert!(token.is_cancelled());
+
+    // 5. Token is now removed from registry, cancelling again returns false
+    let cancelled_again = app_state.cancel_session(session_token).await;
+    assert!(!cancelled_again);
+
+    // 6. Test remove_cancellation_token
+    let token2 = tokio_util::sync::CancellationToken::new();
+    let session_token2 = "session-test-token-67890";
+    app_state
+        .register_cancellation_token(session_token2, token2.clone())
+        .await;
+    app_state.remove_cancellation_token(session_token2).await;
+    assert!(!app_state.cancel_session(session_token2).await);
+    assert!(!token2.is_cancelled());
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

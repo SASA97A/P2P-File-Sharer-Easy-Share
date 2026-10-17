@@ -619,6 +619,109 @@ async fn test_cross_session_resumption_with_deterministic_part_files() {
 }
 
 #[tokio::test]
+async fn test_server_session_status_transitions_to_completed() {
+    let temp_dir = setup_test_dir("session_completed_status");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+    let (port, _handle) = start_server(state.clone(), 0)
+        .await
+        .expect("failed to start server");
+
+    let client = Client::new();
+    let payload = vec![0x99; 50];
+    let file_meta = FileMetadata::new("f-complete", "done.txt", 50, None);
+
+    let req = TransferRequest::new("req-comp", "Sender", "windows", vec![file_meta]);
+    let res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/request", port))
+        .json(&req)
+        .send()
+        .await
+        .unwrap();
+    let handshake: TransferResponse = res.json().await.unwrap();
+    let token = handshake.session_token.unwrap();
+
+    // Session status before upload and finish is Accepted
+    let session_before = state.get_session(&token).await.expect("session must exist");
+    assert_eq!(session_before.status, TransferStatus::Accepted);
+
+    // Upload chunk
+    let _ = client
+        .post(format!(
+            "http://127.0.0.1:{}/api/v1/transfer/chunk?session_token={}&file_id=f-complete&offset=0",
+            port, token
+        ))
+        .body(payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Finish transfer
+    let finish_payload = FinishRequest::new(&token, "f-complete");
+    let finish_res = client
+        .post(format!("http://127.0.0.1:{}/api/v1/transfer/finish", port))
+        .json(&finish_payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(finish_res.status(), 200);
+
+    // Assert session status transitioned to Completed
+    let session_after = state.get_session(&token).await.expect("session must exist");
+    assert_eq!(
+        session_after.status,
+        TransferStatus::Completed,
+        "session status must be transitioned to Completed upon finishing all files"
+    );
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_server_session_pruning_ttl() {
+    let temp_dir = setup_test_dir("session_pruning_ttl");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+
+    let req1 = TransferRequest::new(
+        "req-1",
+        "Sender1",
+        "windows",
+        vec![FileMetadata::new("f1", "a.txt", 10, None)],
+    );
+    let req2 = TransferRequest::new(
+        "req-2",
+        "Sender2",
+        "windows",
+        vec![FileMetadata::new("f2", "b.txt", 20, None)],
+    );
+
+    let (token1, _) = state.create_session(req1).await;
+    let (token2, _) = state.create_session(req2).await;
+
+    assert_eq!(state.sessions.read().await.len(), 2);
+
+    // Pruning with large max_age should prune nothing
+    let pruned_none = state
+        .prune_expired_sessions(std::time::Duration::from_secs(3600))
+        .await;
+    assert_eq!(pruned_none, 0);
+    assert_eq!(state.sessions.read().await.len(), 2);
+
+    // Sleep 15ms
+    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+
+    // Pruning with max_age of 10ms should prune both expired sessions
+    let pruned_all = state
+        .prune_expired_sessions(std::time::Duration::from_millis(10))
+        .await;
+    assert_eq!(pruned_all, 2);
+    assert_eq!(state.sessions.read().await.len(), 0);
+    assert!(state.get_session(&token1).await.is_none());
+    assert!(state.get_session(&token2).await.is_none());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
 async fn test_transfer_finish_checksum_validation_and_commit() {
     let temp_dir = setup_test_dir("finish_commit");
     let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));

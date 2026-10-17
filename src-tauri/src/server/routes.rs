@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 #[derive(Debug)]
@@ -146,7 +147,7 @@ pub async fn handle_transfer_status(
         ))?;
 
     let part_path =
-        FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
+        FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
     let bytes_received = if part_path.exists() {
         FileManager::get_file_size(&part_path).unwrap_or(0)
     } else {
@@ -218,7 +219,7 @@ pub async fn handle_transfer_chunk(
         ));
     }
 
-    let part_path = FileManager::get_part_path(state.download_dir(), &file_name, &file_key);
+    let part_path = FileManager::get_part_path(&state.download_dir(), &file_name, &file_key);
 
     if let Some(parent) = part_path.parent() {
         if !parent.exists() {
@@ -296,14 +297,18 @@ pub async fn handle_transfer_chunk(
     let current_total = query.offset + bytes_written;
 
     // Update progress in session
-    {
+    let (speed_bps, eta_seconds) = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&query.session_token) {
             session
                 .file_progress
                 .insert(query.file_id.clone(), current_total);
+            let mut tr = session.tracker.lock().unwrap();
+            tr.update(current_total, file_size, Instant::now())
+        } else {
+            (0, None)
         }
-    }
+    };
 
     let percent = if file_size > 0 {
         ((current_total as f64 / file_size as f64) * 100.0) as u32
@@ -318,6 +323,8 @@ pub async fn handle_transfer_chunk(
             received_bytes: current_total,
             total_bytes: file_size,
             percent,
+            speed_bps,
+            eta_seconds,
         },
     ));
 
@@ -360,7 +367,7 @@ pub async fn handle_transfer_finish(
     };
 
     let part_path =
-        FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
+        FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
 
     if !part_path.exists() {
         return Err((
@@ -407,7 +414,7 @@ pub async fn handle_transfer_finish(
         }
     }
 
-    let dest_path = FileManager::get_unique_dest_path(state.download_dir(), &file.name);
+    let dest_path = FileManager::get_unique_dest_path(&state.download_dir(), &file.name);
     let part_path_clone = part_path.clone();
     let dest_path_clone = dest_path.clone();
     tokio::task::spawn_blocking(move || {
@@ -428,6 +435,21 @@ pub async fn handle_transfer_finish(
     })?;
 
     let saved_path_str = dest_path.to_string_lossy().to_string();
+
+    // Update session state: mark file progress as completed and update session status
+    {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(&payload.session_token) {
+            session.file_progress.insert(payload.file_id.clone(), file.size);
+            let all_finished = session.request.files.iter().all(|f| {
+                session.file_progress.get(&f.file_id).copied().unwrap_or(0) >= f.size
+            });
+            if all_finished {
+                session.status = TransferStatus::Completed;
+            }
+        }
+    }
+
     state.emit_event(crate::server::state::ServerTransferEvent::Completed(
         crate::server::state::ReceiveCompletedPayload {
             session_token: payload.session_token.clone(),
@@ -458,7 +480,7 @@ pub async fn handle_transfer_cancel(
 
     for file in &session.request.files {
         let part_path =
-            FileManager::get_part_path(state.download_dir(), &file.name, &file.file_key());
+            FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
         if part_path.exists() {
             let _ = tokio::fs::remove_file(part_path).await;
         }

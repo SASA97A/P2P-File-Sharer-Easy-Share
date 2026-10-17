@@ -22,10 +22,19 @@ use tokio::sync::{mpsc, RwLock};
 pub async fn setup_services(
     app: &tauri::AppHandle,
 ) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
-    // 1. Determine device identity
-    let device_name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "EasyShare-Device".to_string());
+    // 0. Resolve config directory and load persisted settings
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|_| FileManager::get_downloads_dir());
+    let settings = storage::settings::load_settings(&config_dir);
+
+    // 1. Determine device identity (using persisted custom name if set)
+    let device_name = settings.device_name.unwrap_or_else(|| {
+        std::env::var("COMPUTERNAME")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| "EasyShare-Device".to_string())
+    });
     let os = std::env::consts::OS.to_string();
     let version = env!("CARGO_PKG_VERSION").to_string();
     let initial_port = 5050;
@@ -38,9 +47,21 @@ pub async fn setup_services(
         initial_port,
     );
 
-    // 2. Resolve and ensure download directory exists
-    let download_dir = FileManager::get_downloads_dir();
-    FileManager::ensure_download_dir(&download_dir)?;
+    // 2. Resolve and ensure download directory exists (using persisted custom path if set)
+    let download_dir = if let Some(custom_dir) = settings.download_dir {
+        let path = std::path::PathBuf::from(custom_dir);
+        if FileManager::ensure_download_dir(&path).is_ok() {
+            path
+        } else {
+            let default_dir = FileManager::get_downloads_dir();
+            FileManager::ensure_download_dir(&default_dir)?;
+            default_dir
+        }
+    } else {
+        let default_dir = FileManager::get_downloads_dir();
+        FileManager::ensure_download_dir(&default_dir)?;
+        default_dir
+    };
 
     // 3. Create consent request channel for interactive handshake prompts
     let (consent_tx, mut consent_rx) = mpsc::channel::<ConsentRequest>(64);
@@ -119,7 +140,12 @@ pub async fn setup_services(
     // 9. Bridge receiver-side transfer progress & completion events to Tauri frontend
     let mut server_events = server_state.subscribe_events();
     let app_server = app.clone();
+    let s_state = server_state.clone();
+    let c_dir = config_dir.clone();
     tokio::spawn(async move {
+        use std::collections::HashSet;
+        let mut recorded_tokens = HashSet::new();
+
         while let Ok(event) = server_events.recv().await {
             match event {
                 ServerTransferEvent::Progress(progress) => {
@@ -127,18 +153,106 @@ pub async fn setup_services(
                 }
                 ServerTransferEvent::Completed(completed) => {
                     let _ = app_server.emit("receive-completed", &completed);
+
+                    if !recorded_tokens.contains(&completed.session_token) {
+                        if let Some(session) = s_state.get_session(&completed.session_token).await {
+                            let all_finished = session.request.files.iter().all(|f| {
+                                session.file_progress.get(&f.file_id).copied().unwrap_or(0) >= f.size
+                            });
+                            if all_finished {
+                                recorded_tokens.insert(completed.session_token.clone());
+                                let dl_dir = s_state.download_dir();
+                                let record = storage::history::TransferHistoryRecord {
+                                    id: uuid::Uuid::new_v4().to_string(),
+                                    session_token: Some(completed.session_token.clone()),
+                                    timestamp: std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_millis() as i64)
+                                        .unwrap_or(0),
+                                    direction: storage::history::TransferDirection::Received,
+                                    peer_name: session.request.sender_name.clone(),
+                                    peer_ip: "Direct / Wi-Fi".to_string(),
+                                    status: storage::history::HistoryStatus::Completed,
+                                    files: session
+                                        .request
+                                        .files
+                                        .iter()
+                                        .map(|f| storage::history::HistoryFileItem {
+                                            name: f.name.clone(),
+                                            path: Some(dl_dir.join(&f.name).to_string_lossy().to_string()),
+                                            size: f.size,
+                                        })
+                                        .collect(),
+                                    total_bytes: session.request.total_bytes,
+                                    error_message: None,
+                                };
+                                if let Ok(_) = storage::history::add_record(&c_dir, record) {
+                                    let history = storage::history::load_history(&c_dir);
+                                    let _ = app_server.emit("history-updated", &history);
+                                }
+                            }
+                        }
+                    }
                 }
                 ServerTransferEvent::Cancelled(cancelled) => {
                     let _ = app_server.emit("receive-cancelled", &cancelled);
+
+                    if !recorded_tokens.contains(&cancelled.session_token) {
+                        recorded_tokens.insert(cancelled.session_token.clone());
+                        if let Some(session) = s_state.get_session(&cancelled.session_token).await {
+                            let dl_dir = s_state.download_dir();
+                            let record = storage::history::TransferHistoryRecord {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                session_token: Some(cancelled.session_token.clone()),
+                                timestamp: std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis() as i64)
+                                    .unwrap_or(0),
+                                direction: storage::history::TransferDirection::Received,
+                                peer_name: session.request.sender_name.clone(),
+                                peer_ip: "Direct / Wi-Fi".to_string(),
+                                status: storage::history::HistoryStatus::Cancelled,
+                                files: session
+                                    .request
+                                    .files
+                                    .iter()
+                                    .map(|f| storage::history::HistoryFileItem {
+                                        name: f.name.clone(),
+                                        path: Some(dl_dir.join(&f.name).to_string_lossy().to_string()),
+                                        size: f.size,
+                                    })
+                                    .collect(),
+                                total_bytes: session.request.total_bytes,
+                                error_message: Some("Transfer cancelled".to_string()),
+                            };
+                            if let Ok(_) = storage::history::add_record(&c_dir, record) {
+                                let history = storage::history::load_history(&c_dir);
+                                let _ = app_server.emit("history-updated", &history);
+                            }
+                        }
+                    }
                 }
             }
         }
     });
 
-    let app_state = AppState::new(
+    // 10. Background maintenance task to prune expired server sessions (> 1 hour TTL)
+    let prune_state = server_state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            prune_state
+                .prune_expired_sessions(std::time::Duration::from_secs(3600))
+                .await;
+        }
+    });
+
+    let app_state = AppState::with_config_dir(
         server_state,
         Some(discovery_handle),
         download_dir,
+        config_dir,
         pending_consents,
     );
 
@@ -172,12 +286,21 @@ pub fn run() {
             commands::add_manual_peer,
             commands::respond_transfer_request,
             commands::start_transfer,
+            commands::pause_transfer,
+            commands::resume_transfer,
             commands::cancel_transfer,
             commands::get_download_dir,
+            commands::set_download_dir,
+            commands::set_device_name,
             commands::open_download_dir,
             commands::inspect_paths,
             commands::pick_files,
             commands::pick_folder,
+            commands::get_transfer_history,
+            commands::delete_history_record,
+            commands::clear_transfer_history,
+            commands::show_in_folder,
+            commands::open_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running easy-share application");

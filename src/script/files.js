@@ -9,8 +9,19 @@ import { updateFileList, updateFilesTotalSize } from "./ui.js";
 let selectedFiles = [];
 
 /**
+ * Generates a unique identifier for a staged file
+ * @returns {string}
+ */
+export function generateFileId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `f_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
  * Returns current staged files array
- * @returns {Array<{name: string, size: number, fullPath: string, path: string}>}
+ * @returns {Array<{id: string, name: string, size: number, fullPath: string, path: string}>}
  */
 export function getFiles() {
   return [...selectedFiles];
@@ -39,6 +50,7 @@ export function addFiles(files) {
     if (typeof item === "string") {
       const fileName = item.split(/[\\/]/).pop() || item;
       fileObj = {
+        id: generateFileId(),
         name: fileName,
         size: 0,
         fullPath: item,
@@ -48,8 +60,10 @@ export function addFiles(files) {
       const name = item.name || (item.fullPath || item.path || "unnamed_file").split(/[\\/]/).pop();
       const size = Number(item.size) || 0;
       const fullPath = item.path || item.fullPath || item.filePath || name;
+      const id = item.id || item.file_id || generateFileId();
 
       fileObj = {
+        id,
         name,
         size,
         fullPath,
@@ -77,13 +91,24 @@ export function addFiles(files) {
 }
 
 /**
- * Removes a file at a specific index and updates UI
- * @param {number|string} index
+ * Removes a file by its unique file ID or index and updates UI
+ * @param {number|string} idOrIndex
  */
-export function removeFile(index) {
-  const numIndex = Number(index);
-  if (!isNaN(numIndex) && numIndex >= 0 && numIndex < selectedFiles.length) {
-    selectedFiles.splice(numIndex, 1);
+export function removeFile(idOrIndex) {
+  let index = -1;
+  if (typeof idOrIndex === "string" && isNaN(Number(idOrIndex))) {
+    index = selectedFiles.findIndex((f) => f.id === idOrIndex);
+  } else {
+    const numIndex = Number(idOrIndex);
+    if (!isNaN(numIndex) && numIndex >= 0 && numIndex < selectedFiles.length) {
+      index = numIndex;
+    } else if (typeof idOrIndex === "string") {
+      index = selectedFiles.findIndex((f) => f.id === idOrIndex);
+    }
+  }
+
+  if (index >= 0 && index < selectedFiles.length) {
+    selectedFiles.splice(index, 1);
     updateFileList(selectedFiles, removeFile);
     updateFilesTotalSize(selectedFiles);
   }

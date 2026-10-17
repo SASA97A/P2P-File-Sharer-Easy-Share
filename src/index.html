@@ -19,11 +19,29 @@
           <span class="app-subtitle">High-speed P2P local file transfer</span>
         </div>
         <div class="header-right">
+          <button class="btn btn-secondary header-icon-btn" id="headerOpenDownloadsBtn" title="Open Downloads Folder" aria-label="Open Downloads Folder">
+            <span class="btn-icon">
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            </span>
+            <span>Downloads</span>
+          </button>
+          <button class="btn btn-secondary header-icon-btn" id="openHistoryBtn" title="Transfer History" aria-label="Transfer History">
+            <span class="btn-icon">
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-history"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+            </span>
+            <span>History</span>
+          </button>
           <button class="btn btn-secondary pair-btn" id="openPairingBtn" aria-label="Pair Device with PIN or QR Code">
             <span class="btn-icon">
               <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-qr-code"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
             </span>
             <span>Pair Device</span>
+          </button>
+          <button class="btn btn-secondary header-icon-btn" id="openSettingsBtn" title="Settings" aria-label="Settings">
+            <span class="btn-icon">
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span>Settings</span>
           </button>
         </div>
       </header>
@@ -52,16 +70,24 @@
             </div>
           </div>
 
-          <!-- Send Action Button -->
-          <button class="send-btn" id="sendBtn" disabled>
-            <div class="send-info">
-              <span class="send-count">0 files</span>
-              <span class="send-size">0 MB</span>
-            </div>
-            <div class="send-action">
-              <span>Send</span>
-            </div>
-          </button>
+          <!-- Send Action Button Bar -->
+          <div class="send-action-bar">
+            <button class="send-btn" id="sendBtn" disabled>
+              <div class="send-info">
+                <span class="send-count">0 files</span>
+                <span class="send-size">0 MB</span>
+              </div>
+              <div class="send-action">
+                <span>Send</span>
+              </div>
+            </button>
+            <button class="pause-transfer-btn hidden" id="pauseTransferBtn" type="button" aria-label="Pause active transfer">
+              <span class="pause-btn-text">Pause</span>
+            </button>
+            <button class="cancel-transfer-btn hidden" id="cancelTransferBtn" type="button" aria-label="Cancel active transfer">
+              <span>Cancel</span>
+            </button>
+          </div>
         </section>
 
         <!-- Right Panel: Devices Sidebar -->
@@ -334,6 +360,138 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div
+      id="settings-modal"
+      class="modal-overlay hidden"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settingsModalTitle"
+    >
+      <div class="modal-card settings-modal-card">
+        <div class="modal-header settings-modal-header">
+          <div class="modal-header-left">
+            <div class="modal-icon settings-modal-icon">
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <div>
+              <h3 id="settingsModalTitle" class="modal-title">Settings</h3>
+              <p class="modal-subtitle">Configure device name & download storage</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" id="closeSettingsBtn" aria-label="Close Settings">
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-body settings-modal-body">
+          <!-- Section 1: Device Identity -->
+          <div class="settings-section">
+            <h4 class="settings-section-title">Device Identity</h4>
+            <p class="settings-section-desc">Choose how this computer appears to other peers on the local network</p>
+            <div class="settings-input-group">
+              <input
+                type="text"
+                id="settingsDeviceNameInput"
+                class="settings-input"
+                placeholder="Device Name (e.g. Living Room PC)"
+                maxlength="32"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button class="btn btn-primary settings-action-btn" id="saveDeviceNameBtn">
+                <span>Save</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 2: Download Directory -->
+          <div class="settings-section">
+            <h4 class="settings-section-title">Download Destination</h4>
+            <p class="settings-section-desc">Incoming files will be saved directly to this folder</p>
+            <div class="settings-path-card">
+              <div class="settings-path-text" id="settingsDownloadDirDisplay">Detecting…</div>
+              <div class="settings-path-actions">
+                <button class="action-pill-btn" id="changeDownloadDirBtn" title="Change download directory">
+                  <span class="btn-icon">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                  </span>
+                  <span>Change</span>
+                </button>
+                <button class="action-pill-btn" id="openDownloadFolderBtn" title="Open in File Explorer">
+                  <span class="btn-icon">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                  </span>
+                  <span>Open Folder</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transfer History Modal Dialog -->
+    <div
+      id="history-modal"
+      class="modal-overlay hidden"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="historyModalTitle"
+    >
+      <div class="modal-card history-modal-card">
+        <div class="modal-header history-modal-header">
+          <div class="modal-header-left">
+            <div class="modal-icon history-modal-icon">
+              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-history"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+            </div>
+            <div>
+              <h3 id="historyModalTitle" class="modal-title">Transfer History</h3>
+              <p class="modal-subtitle">Activity log of sent and received transfers</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" id="closeHistoryBtn" aria-label="Close Transfer History">
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-body history-modal-body">
+          <div class="history-controls">
+            <div class="history-filter-tabs">
+              <button class="history-filter-btn active" id="filterAllBtn" data-filter="all">All</button>
+              <button class="history-filter-btn" id="filterSentBtn" data-filter="sent">Sent</button>
+              <button class="history-filter-btn" id="filterReceivedBtn" data-filter="received">Received</button>
+            </div>
+            <div class="history-search-wrapper">
+              <input
+                type="text"
+                id="historySearchInput"
+                class="history-search-input"
+                placeholder="Search by file or device..."
+                aria-label="Search transfer history"
+              />
+            </div>
+          </div>
+
+          <div id="historyList" class="history-list-container"></div>
+
+          <div id="historyEmptyState" class="history-empty-state hidden">
+            <div class="empty-icon">📂</div>
+            <p class="empty-title">No transfer history found</p>
+            <p class="empty-desc">Completed, cancelled, or failed transfers will appear here.</p>
+          </div>
+        </div>
+
+        <div class="modal-footer history-modal-footer">
+          <button type="button" class="btn btn-secondary history-clear-btn" id="clearHistoryBtn">
+            Clear History
+          </button>
         </div>
       </div>
     </div>

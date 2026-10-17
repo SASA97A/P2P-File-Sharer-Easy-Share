@@ -107,15 +107,18 @@ export function renderPeers(peers, onSelectPeer, selectedPeer = null) {
  * @param {Function} removeFileCb
  */
 export function updateFileList(files, removeFileCb) {
+  if (typeof document === "undefined") return;
   const fileList = document.getElementById("fileList");
   if (!fileList) return;
 
   fileList.innerHTML = "";
 
   files.forEach((file, index) => {
+    const fileId = file.id || `file-${index}`;
     const item = document.createElement("div");
     item.className = "file-item";
-    item.id = `file-${index}`;
+    item.id = `file-${fileId}`;
+    item.dataset.fileId = fileId;
     item.style.setProperty("--progress", "0%");
 
     item.innerHTML = `
@@ -123,7 +126,7 @@ export function updateFileList(files, removeFileCb) {
         <div class="file-icon-box">${getIconSvg("fileText", { size: 18 })}</div>
         <span class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
         <span class="file-size">${formatFileSize(file.size)}</span>
-        <button class="remove-btn" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">
+        <button class="remove-btn" data-file-id="${fileId}" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">
           ${getIconSvg("x", { size: 14 })}
         </button>
       </div>
@@ -137,7 +140,7 @@ export function updateFileList(files, removeFileCb) {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const target = e.currentTarget;
-      removeFileCb(target.dataset.index);
+      removeFileCb(target.dataset.fileId || target.dataset.index);
     });
   });
 }
@@ -228,13 +231,13 @@ let receiveToastEl = null;
 
 /**
  * Updates or displays the real-time progress notification for an incoming transfer
- * @param {Object} progress - { file_name, percent, received_bytes, total_bytes }
+ * @param {Object} progress - { file_name, percent, received_bytes, total_bytes, speed_bps, eta_seconds }
  */
 export function updateReceiveProgress(progress) {
   const container = document.getElementById("toast-container");
   if (!container) return;
 
-  const { file_name, percent } = progress;
+  const { file_name, percent, speed_bps, eta_seconds } = progress;
   const statusEl = document.getElementById("myDeviceStatus");
   if (statusEl) {
     statusEl.textContent = `Receiving (${percent}%)`;
@@ -248,6 +251,9 @@ export function updateReceiveProgress(progress) {
   }
 
   const safeName = escapeHtml(file_name || "file");
+  const speedText = formatSpeed(speed_bps || 0);
+  const etaText = formatEta(eta_seconds);
+
   receiveToastEl.innerHTML = `
     <div class="receive-progress-header">
       <span class="receive-progress-title" title="${safeName}">Receiving: ${safeName}</span>
@@ -255,6 +261,10 @@ export function updateReceiveProgress(progress) {
     </div>
     <div class="receive-progress-bar-bg">
       <div class="receive-progress-bar-fill" style="width: ${percent}%;"></div>
+    </div>
+    <div class="receive-progress-metrics">
+      <span class="receive-metric-speed">${speedText}</span>
+      <span class="receive-metric-eta">${etaText}</span>
     </div>
   `;
 }
@@ -369,4 +379,52 @@ export function showConsentModal(request) {
     declineBtn.addEventListener("click", onDecline);
     window.addEventListener("keydown", onKey);
   });
+}
+
+/**
+ * Formats transfer speed in bytes per second into human-readable units.
+ * @param {number} bytesPerSec
+ * @returns {string}
+ */
+export function formatSpeed(bytesPerSec) {
+  const b = Number(bytesPerSec) || 0;
+  if (b >= 1024 ** 3) {
+    return (b / 1024 ** 3).toFixed(1) + " GB/s";
+  }
+  if (b >= 1024 ** 2) {
+    return (b / 1024 ** 2).toFixed(1) + " MB/s";
+  }
+  if (b >= 1024) {
+    return (b / 1024).toFixed(1) + " KB/s";
+  }
+  return Math.round(b) + " B/s";
+}
+
+/**
+ * Formats estimated time to completion (ETA in seconds) into human-readable text.
+ * @param {number|null|undefined} seconds
+ * @returns {string}
+ */
+export function formatEta(seconds) {
+  if (seconds === null || seconds === undefined) {
+    return "--";
+  }
+  const s = Math.round(Number(seconds));
+  if (isNaN(s) || s < 0) {
+    return "--";
+  }
+  if (s === 0) {
+    return "0s";
+  }
+  if (s < 60) {
+    return `${s}s remaining`;
+  }
+  const mins = Math.floor(s / 60);
+  const remainingSecs = s % 60;
+  if (mins < 60) {
+    return remainingSecs > 0 ? `${mins}m ${remainingSecs}s remaining` : `${mins}m remaining`;
+  }
+  const hours = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return remainingMins > 0 ? `${hours}h ${remainingMins}m remaining` : `${hours}h remaining`;
 }

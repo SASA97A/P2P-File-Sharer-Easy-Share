@@ -68,6 +68,8 @@ impl MdnsDiscovery {
         let my_port = self.device_info.port;
 
         let browse_task = tokio::spawn(async move {
+            let mut resolved_peers: HashMap<String, PeerInfo> = HashMap::new();
+
             while let Ok(event) = receiver.recv_async().await {
                 match event {
                     ServiceEvent::ServiceResolved(info) => {
@@ -110,10 +112,24 @@ impl MdnsDiscovery {
                             pairing_pin,
                         };
 
+                        let fullname_key = info.get_fullname().to_string();
+                        resolved_peers.insert(fullname_key, peer.clone());
+
                         let _ = event_tx_clone.send(PeerEvent::Discovered(peer)).await;
                     }
-                    ServiceEvent::ServiceRemoved(_service_type, _fullname) => {
-                        // Removal will be picked up or handled by expiry
+                    ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+                        let key_trimmed = fullname.trim_end_matches('.').to_string();
+                        let found = resolved_peers.remove(&fullname).or_else(|| {
+                            let matching_key = resolved_peers
+                                .keys()
+                                .find(|k| k.trim_end_matches('.') == key_trimmed)
+                                .cloned();
+                            matching_key.and_then(|k| resolved_peers.remove(&k))
+                        });
+
+                        if let Some(peer) = found {
+                            let _ = event_tx_clone.send(PeerEvent::Lost(peer)).await;
+                        }
                     }
                     _ => {}
                 }

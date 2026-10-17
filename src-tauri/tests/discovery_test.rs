@@ -2,7 +2,7 @@ use easy_share_lib::discovery::nic::{
     get_best_physical_ip_from_list, is_usable_ip, is_virtual_adapter, score_interface,
 };
 use easy_share_lib::discovery::udp::{
-    create_broadcast_socket, HeartbeatMessage, PeerTracker,
+    create_broadcast_socket, HeartbeatMessage, PeerSource, PeerTracker,
 };
 use easy_share_lib::discovery::{
     DiscoveryConfig, DiscoveryEvent, DiscoveryService, PeerEvent,
@@ -298,6 +298,100 @@ async fn test_manual_peer_addition_and_query() {
     let current_peers = handle.get_peers().await;
     assert_eq!(current_peers.len(), 1);
     assert_eq!(current_peers[0].ip, "192.168.1.99");
+
+    handle.stop().await;
+}
+
+#[tokio::test]
+async fn test_peer_tracker_source_differentiation() {
+    let mut tracker = PeerTracker::new(Duration::from_millis(100));
+
+    let peer_udp = PeerInfo {
+        device_name: "UDP-Peer".to_string(),
+        device_type: "desktop".to_string(),
+        os: "windows".to_string(),
+        ip: "192.168.1.50".to_string(),
+        port: 5050,
+        pairing_pin: None,
+    };
+    let peer_manual = PeerInfo {
+        device_name: "Manual-Peer".to_string(),
+        device_type: "desktop".to_string(),
+        os: "windows".to_string(),
+        ip: "192.168.1.60".to_string(),
+        port: 5050,
+        pairing_pin: None,
+    };
+    let peer_mdns = PeerInfo {
+        device_name: "mDNS-Peer".to_string(),
+        device_type: "desktop".to_string(),
+        os: "windows".to_string(),
+        ip: "192.168.1.70".to_string(),
+        port: 5050,
+        pairing_pin: None,
+    };
+
+    tracker.record_seen_with_source(peer_udp.clone(), PeerSource::Udp);
+    tracker.record_seen_with_source(peer_manual.clone(), PeerSource::Manual);
+    tracker.record_seen_with_source(peer_mdns.clone(), PeerSource::Mdns);
+    assert_eq!(tracker.len(), 3);
+
+    // After 150ms, UDP peer (100ms TTL) expires, but Manual (30s) and Mdns (300s) persist
+    sleep(Duration::from_millis(150)).await;
+    let expired = tracker.prune_expired();
+    assert_eq!(expired.len(), 1);
+    assert_eq!(expired[0], PeerEvent::Lost(peer_udp));
+    assert_eq!(tracker.len(), 2);
+
+    // Explicit remove works for mDNS peer
+    let removed = tracker.remove_peer(&peer_mdns.ip, peer_mdns.port);
+    assert_eq!(removed, Some(PeerEvent::Lost(peer_mdns)));
+    assert_eq!(tracker.len(), 1);
+}
+
+#[tokio::test]
+async fn test_manual_peer_pruning_in_discovery_service() {
+    let dev = DeviceInfo::new("Self-Node", "desktop", "windows", "2.0.0", 5050);
+    let config = DiscoveryConfig {
+        broadcast_interval: Duration::from_millis(50),
+        peer_ttl: Duration::from_millis(150),
+        udp_port: 41259,
+        enable_mdns: false,
+        enable_udp: false,
+    };
+
+    let (service, mut rx) = DiscoveryService::new(dev, config).await.expect("service create");
+    let handle = service.start().await.expect("service start");
+
+    let added_peer = handle.add_manual_peer("192.168.1.199", 5050).await.expect("add peer");
+    assert_eq!(added_peer.ip, "192.168.1.199");
+
+    // Receive Discovered event
+    let event = rx.recv().await.expect("event recv");
+    assert_eq!(
+        event,
+        DiscoveryEvent::Peer(PeerEvent::Discovered(added_peer.clone()))
+    );
+    assert_eq!(handle.get_peers().await.len(), 1);
+
+    // Wait past expiration (peer_ttl = 150ms)
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    let mut received_lost = false;
+    while tokio::time::Instant::now() < deadline && !received_lost {
+        tokio::select! {
+            Ok(ev) = rx.recv() => {
+                if let DiscoveryEvent::Peer(PeerEvent::Lost(peer)) = ev {
+                    if peer.ip == "192.168.1.199" {
+                        received_lost = true;
+                    }
+                }
+            }
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+    }
+
+    assert!(received_lost, "Manual peer should be pruned and emit Lost event");
+    assert_eq!(handle.get_peers().await.len(), 0);
 
     handle.stop().await;
 }
