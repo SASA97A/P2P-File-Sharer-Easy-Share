@@ -17,7 +17,12 @@ function createMockElement(id, tag = "div") {
       _classes: new Set(),
       add(cls) { this._classes.add(cls); },
       remove(cls) { this._classes.delete(cls); },
-      contains(cls) { return this._classes.contains(cls); },
+      contains(cls) { return this._classes.has(cls); },
+      toggle(cls, val) {
+        const on = val === undefined ? !this._classes.has(cls) : val;
+        if (on) this._classes.add(cls);
+        else this._classes.delete(cls);
+      },
     },
     setAttribute(k, v) { attrs[k] = String(v); },
     getAttribute(k) { return attrs[k] || null; },
@@ -45,28 +50,27 @@ globalThis.document = {
   addEventListener: () => {},
 };
 
-import { setupSettings, openSettingsModal, closeSettingsModal } from "../src/script/settings.js";
+import { setupSettings, openSettingsView, closeSettingsView } from "../src/script/settings.js";
 import { getMyDeviceInfo, getDownloadDir } from "../src/script/tauri-bridge.js";
 
 test("settings UI controller", async (t) => {
   // Initialize mock DOM elements
-  const modal = createMockElement("settings-modal");
-  modal.classList.add("hidden");
+  const view = createMockElement("settingsView");
+  view.classList.add("hidden");
   const openBtn = createMockElement("openSettingsBtn", "button");
-  const closeBtn = createMockElement("closeSettingsBtn", "button");
   const nameInput = createMockElement("settingsDeviceNameInput", "input");
   const saveNameBtn = createMockElement("saveDeviceNameBtn", "button");
   const dirDisplay = createMockElement("settingsDownloadDirDisplay", "span");
   const changeDirBtn = createMockElement("changeDownloadDirBtn", "button");
   const openDirBtn = createMockElement("openDownloadFolderBtn", "button");
-  const headerOpenDirBtn = createMockElement("headerOpenDownloadsBtn", "button");
+  const sidebarOpenDirBtn = createMockElement("openDownloadsBtn", "button");
   const myDeviceNameBadge = createMockElement("myDeviceName", "span");
 
   setupSettings();
 
-  await t.test("openSettingsModal populates inputs with current configuration", async () => {
-    await openSettingsModal();
-    assert.equal(modal.classList._classes.has("hidden"), false);
+  await t.test("openSettingsView populates inputs with current configuration", async () => {
+    await openSettingsView();
+    assert.equal(view.classList._classes.has("hidden"), false);
     assert.ok(nameInput.value.length > 0);
     assert.ok(dirDisplay.textContent.length > 0);
   });
@@ -82,8 +86,8 @@ test("settings UI controller", async (t) => {
     assert.equal(myDeviceNameBadge.textContent, "New-Awesome-PC");
   });
 
-  await t.test("closeSettingsModal adds hidden class", () => {
-    closeSettingsModal();
-    assert.equal(modal.classList._classes.has("hidden"), true);
+  await t.test("closeSettingsView hides the settings page", () => {
+    closeSettingsView();
+    assert.equal(view.classList._classes.has("hidden"), true);
   });
 });

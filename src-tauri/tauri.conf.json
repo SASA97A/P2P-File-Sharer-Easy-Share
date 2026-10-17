@@ -13,8 +13,11 @@
     "windows": [
       {
         "title": "Easy Share",
-        "width": 820,
-        "height": 600,
+        "width": 1200,
+        "height": 780,
+        "minWidth": 820,
+        "minHeight": 600,
+        "center": true,
         "resizable": true,
         "fullscreen": false
       }

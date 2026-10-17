@@ -11,492 +11,439 @@
     <link rel="stylesheet" href="styles/styles.css" />
   </head>
   <body>
-    <div class="container app-shell">
-      <!-- App Header & Local Device Identity -->
-      <header class="app-header">
-        <div class="header-left">
-          <h1 class="app-title">Easy Share</h1>
-          <span class="app-subtitle">High-speed P2P local file transfer</span>
-        </div>
-        <div class="header-right">
-          <button class="btn btn-secondary header-icon-btn" id="headerOpenDownloadsBtn" title="Open Downloads Folder" aria-label="Open Downloads Folder">
-            <span class="btn-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+    <div class="app-body" id="appBody">
+      <!-- Left navigation -->
+      <nav class="side-nav" aria-label="Main">
+        <button class="nav-item nav-toggle" id="navToggleBtn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar" aria-expanded="true">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+          <span class="nav-label">Collapse</span>
+        </button>
+        <button class="nav-item is-active" id="navSendBtn" type="button" data-view="send" aria-current="page" title="Send">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>
+          <span class="nav-label">Send</span>
+          <span class="nav-badge mono hidden" id="navSendProgress"></span>
+        </button>
+        <button class="nav-item" id="openHistoryBtn" type="button" data-view="history" title="History">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+          <span class="nav-label">History</span>
+        </button>
+        <button class="nav-item" id="openSettingsBtn" type="button" data-view="settings" title="Settings">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+          <span class="nav-label">Settings</span>
+        </button>
+
+        <div class="nav-spacer"></div>
+
+        <div class="device-card" id="myDeviceBadge">
+          <span class="eyebrow">This device</span>
+          <div class="device-card-row">
+            <span class="device-card-icon" id="myDeviceIcon">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
             </span>
-            <span>Downloads</span>
-          </button>
-          <button class="btn btn-secondary header-icon-btn" id="openHistoryBtn" title="Transfer History" aria-label="Transfer History">
-            <span class="btn-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-history"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
-            </span>
-            <span>History</span>
-          </button>
-          <button class="btn btn-secondary pair-btn" id="openPairingBtn" aria-label="Pair Device with PIN or QR Code">
-            <span class="btn-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-qr-code"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
-            </span>
-            <span>Pair Device</span>
-          </button>
-          <button class="btn btn-secondary header-icon-btn" id="openSettingsBtn" title="Settings" aria-label="Settings">
-            <span class="btn-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-            </span>
-            <span>Settings</span>
+            <div class="device-card-text">
+              <div class="device-card-name" id="myDeviceName">Detecting device…</div>
+              <div class="device-card-addr mono" id="myDeviceAddress">—</div>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-block" id="openDownloadsBtn" type="button">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            Open downloads
           </button>
         </div>
-      </header>
+      </nav>
 
-      <!-- Main Two-Column Layout -->
-      <main class="main-layout">
-        <!-- Left Panel: Transfer Workspace -->
-        <section class="transfer-workspace" aria-label="Transfer Workspace">
-          <!-- File Staging Area -->
-          <div class="file-section">
-            <div class="file-list" id="fileList"></div>
-            <div
-              class="drop-area compact"
-              id="drop-area"
-              tabindex="0"
-              role="button"
-              aria-label="Pick files or drop them here"
-            >
-              <img
-                src="images/add_circle_48dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.svg"
-                alt=""
-                aria-hidden="true"
-              />
-              <span class="drop-text">Drag & drop files here, or click to browse</span>
-              <input type="file" id="fileInput" multiple hidden />
-            </div>
-          </div>
+      <!-- Main workspace -->
+      <main class="workspace">
+        <!-- Send view -->
+        <section class="view send-view" id="sendView" aria-label="Send files">
+          <!-- Incoming transfer progress -->
+          <section class="progress-card hidden" id="receiveCard" aria-label="Receiving"></section>
 
-          <!-- Send Action Button Bar -->
-          <div class="send-action-bar">
-            <button class="send-btn" id="sendBtn" disabled>
-              <div class="send-info">
-                <span class="send-count">0 files</span>
-                <span class="send-size">0 MB</span>
-              </div>
-              <div class="send-action">
-                <span>Send</span>
-              </div>
-            </button>
-            <button class="pause-transfer-btn hidden" id="pauseTransferBtn" type="button" aria-label="Pause active transfer">
-              <span class="pause-btn-text">Pause</span>
-            </button>
-            <button class="cancel-transfer-btn hidden" id="cancelTransferBtn" type="button" aria-label="Cancel active transfer">
-              <span>Cancel</span>
-            </button>
-          </div>
-        </section>
-
-        <!-- Right Panel: Devices Sidebar -->
-        <aside class="devices-sidebar" aria-label="Devices Sidebar">
-          <!-- Local Device Identity -->
-          <div class="local-device-section">
-            <div class="sidebar-section-header">
-              <span class="sidebar-section-title">This Device</span>
-            </div>
-            <div class="device-identity-badge local-device-card" id="myDeviceBadge" title="Your device identity on the network">
-              <span class="identity-icon" id="myDeviceIcon">
-                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-monitor"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+          <!-- Outbound transfer progress -->
+          <section class="progress-card hidden" id="sendProgressCard" aria-label="Transfer progress">
+            <div class="progress-head">
+              <span class="progress-icon">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
               </span>
-              <div class="identity-text">
-                <span class="identity-name" id="myDeviceName">Detecting device…</span>
-                <span class="identity-status" id="myDeviceStatus">Ready to share</span>
+              <div class="progress-titles">
+                <div class="progress-title" id="sendProgressTitle">Sending</div>
+                <div class="progress-subtitle" id="sendProgressSubtitle"></div>
               </div>
-            </div>
-          </div>
-
-          <!-- Discovered Devices Radar -->
-          <div class="device-section">
-            <div class="section-header">
-              <span class="section-title">Nearby Devices</span>
-              <span class="device-count" id="deviceCount" aria-live="polite">0 found</span>
-            </div>
-            <div class="device-list" id="deviceList">
-              <div class="loader">Searching for nearby devices…</div>
-            </div>
-          </div>
-        </aside>
-      </main>
-    </div>
-
-    <!-- Interactive Consent Modal for Incoming Transfers -->
-    <div
-      id="consent-modal"
-      class="modal-overlay hidden"
-      aria-hidden="true"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="consentModalTitle"
-    >
-      <div class="modal-card">
-        <div class="modal-header">
-          <div class="modal-icon" id="consentSenderIcon">
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-laptop"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>
-          </div>
-          <div class="modal-title-group">
-            <h3 class="modal-title" id="consentModalTitle">Incoming File Transfer</h3>
-            <span class="modal-subtitle" id="consentSenderInfo">Alice-PC (Windows)</span>
-          </div>
-        </div>
-        <div class="modal-body">
-          <div class="transfer-summary">
-            <div class="summary-left">
-              <span class="summary-count" id="consentFileCount">0 files</span>
-              <span class="summary-dot">&bull;</span>
-              <span class="summary-size" id="consentTotalSize">0 MB</span>
-            </div>
-          </div>
-          <div class="modal-file-list" id="consentFileList">
-            <!-- Dynamically populated files -->
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button id="consentDeclineBtn" class="modal-btn btn-decline">Decline</button>
-          <button id="consentAcceptBtn" class="modal-btn btn-accept">Accept & Download</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Interactive Pairing Modal (PIN & QR Code) -->
-    <div
-      id="pairing-modal"
-      class="modal-overlay hidden"
-      aria-hidden="true"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pairingModalTitle"
-    >
-      <div class="modal-card pairing-modal-card">
-        <div class="modal-header pairing-modal-header">
-          <div class="modal-header-left">
-            <div class="modal-icon pairing-modal-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-qr-code"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
-            </div>
-            <div class="modal-title-group">
-              <h3 class="modal-title" id="pairingModalTitle">Device Pairing</h3>
-              <span class="modal-subtitle">Connect via 6-digit numeric PIN or QR Code</span>
-            </div>
-          </div>
-          <button class="modal-close-btn" id="closePairingBtn" aria-label="Close pairing modal">
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
-        </div>
-
-        <div class="modal-body pairing-modal-body">
-          <!-- Segmented Tab Switcher (3 Modes) -->
-          <div class="pairing-tabs" role="tablist" aria-label="Pairing Options">
-            <button
-              class="pairing-tab active"
-              id="tabPinBtn"
-              role="tab"
-              aria-selected="true"
-              aria-controls="viewPin"
-              tabindex="0"
-            >
-              <span class="tab-icon">
-                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hash"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></svg>
-              </span>
-              <span>6-Digit PIN</span>
-            </button>
-            <button
-              class="pairing-tab"
-              id="tabQrBtn"
-              role="tab"
-              aria-selected="false"
-              aria-controls="viewQr"
-              tabindex="-1"
-            >
-              <span class="tab-icon">
-                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-qr-code"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
-              </span>
-              <span>QR Code</span>
-            </button>
-            <button
-              class="pairing-tab"
-              id="tabAddressBtn"
-              role="tab"
-              aria-selected="false"
-              aria-controls="viewAddress"
-              tabindex="-1"
-            >
-              <span class="tab-icon">
-                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wifi"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg>
-              </span>
-              <span>Direct IP</span>
-            </button>
-          </div>
-
-          <!-- Tab 1: 6-Digit PIN Screen (Default) -->
-          <div class="pairing-tab-content" id="viewPin" role="tabpanel" aria-labelledby="tabPinBtn">
-            <div class="pairing-cards-split">
-              <!-- Share PIN Card -->
-              <div class="pairing-subcard">
-                <div class="column-header">
-                  <h4 class="column-title">Your Pairing PIN</h4>
-                  <p class="column-desc">Share this 6-digit PIN with a nearby device to connect</p>
-                </div>
-                <div class="pairing-pin-box">
-                  <div class="pairing-pin-display" id="myPairingPin">839 - 421</div>
-                </div>
-                <div class="pairing-actions-row">
-                  <button class="action-pill-btn" id="copyPinBtn" title="Copy 6-digit PIN">
-                    <span class="btn-icon">
-                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                    </span>
-                    <span>Copy PIN</span>
-                  </button>
-                  <button class="action-pill-btn" id="refreshPinBtn" title="Generate new PIN">
-                    <span class="btn-icon">
-                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-                    </span>
-                    <span>New PIN</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Connect by PIN Card -->
-              <div class="pairing-subcard">
-                <div class="column-header">
-                  <h4 class="column-title">Connect via PIN</h4>
-                  <p class="column-desc">Enter the 6-digit PIN shown on the other device</p>
-                </div>
-                <div class="pin-entry-section">
-                  <label for="peerPinInput" class="field-label">Target PIN</label>
-                  <div class="pin-entry-row">
-                    <input
-                      type="text"
-                      id="peerPinInput"
-                      class="pin-text-input"
-                      placeholder="123 - 456"
-                      maxlength="9"
-                      autocomplete="off"
-                      spellcheck="false"
-                      inputmode="numeric"
-                    />
-                    <button class="btn btn-primary connect-pin-btn" id="connectPinBtn">
-                      <span>Connect</span>
-                      <span class="btn-icon">
-                        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                      </span>
-                    </button>
-                  </div>
-                </div>
-                <div class="pairing-status-message-box" id="pairingStatusBox" style="display: none;">
-                  <div class="pairing-status-spinner" id="pairingStatusSpinner"></div>
-                  <span class="pairing-status-text" id="pairingStatusMessage">Searching local subnet…</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tab 2: QR Code Screen -->
-          <div class="pairing-tab-content hidden" id="viewQr" role="tabpanel" aria-labelledby="tabQrBtn">
-            <div class="qr-tab-layout">
-              <div class="pairing-qr-box large-qr" id="myPairingQrBox" aria-label="QR Code for direct device pairing">
-                <!-- QR SVG dynamically injected -->
-              </div>
-              <p class="qr-instructions">
-                Scan this QR Code with your mobile phone or tablet camera to pair and transfer files instantly.
-              </p>
-              <div class="qr-actions-row">
-                <button class="action-pill-btn" id="copyLinkBtn" title="Copy pairing link">
-                  <span class="btn-icon">
-                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-link"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                  </span>
-                  <span>Copy Pairing Link</span>
+              <div class="progress-actions">
+                <button class="btn btn-ghost" id="pauseTransferBtn" type="button" aria-label="Pause active transfer">
+                  <span class="pause-btn-text">Pause</span>
                 </button>
-                <span class="pairing-address-hint" id="myPairingDirectInfo">IP: detecting…</span>
+                <button class="btn btn-ghost btn-danger" id="cancelTransferBtn" type="button" aria-label="Cancel active transfer">Cancel</button>
               </div>
             </div>
-          </div>
-
-          <!-- Tab 3: Direct IP / URL Screen -->
-          <div class="pairing-tab-content hidden" id="viewAddress" role="tabpanel" aria-labelledby="tabAddressBtn">
-            <div class="address-tab-layout">
-              <div class="column-header">
-                <h4 class="column-title">Direct IP or Custom URL</h4>
-                <p class="column-desc">Connect directly across subnets, corporate VLANs, or custom network ports</p>
-              </div>
-
-              <div class="direct-address-form">
-                <label for="peerAddressInput" class="field-label">Target Device Address</label>
-                <div class="direct-address-row">
-                  <input
-                    type="text"
-                    id="peerAddressInput"
-                    class="address-text-input"
-                    placeholder="e.g. 192.168.1.50:5050 or 10.20.4.55"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                  <button class="btn btn-primary connect-address-btn" id="connectAddressBtn">
-                    <span>Connect</span>
-                    <span class="btn-icon">
-                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                    </span>
-                  </button>
+            <div class="progress-metrics">
+              <div class="progress-percent mono"><span id="sendProgressPercent">0</span><span class="progress-percent-sign">%</span></div>
+              <div class="metric-grid">
+                <div>
+                  <div class="eyebrow">Speed</div>
+                  <div class="metric-value mono" id="sendProgressSpeed">—</div>
+                </div>
+                <div>
+                  <div class="eyebrow">Remaining</div>
+                  <div class="metric-value mono" id="sendProgressEta">—</div>
+                </div>
+                <div>
+                  <div class="eyebrow">Sent</div>
+                  <div class="metric-value mono" id="sendProgressBytes">—</div>
                 </div>
               </div>
-
-              <div class="my-address-card">
-                <div class="my-address-info">
-                  <span class="my-address-label">Your Local Address:</span>
-                  <span class="my-address-val" id="myLocalAddressDisplay">Detecting…</span>
-                </div>
-                <button class="action-pill-btn" id="copyMyAddressBtn" title="Copy your local address">
-                  <span class="btn-icon">
-                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  </span>
-                  <span>Copy</span>
-                </button>
-              </div>
-
-              <div class="pairing-status-message-box" id="addressStatusBox" style="display: none;">
-                <div class="pairing-status-spinner" id="addressStatusSpinner"></div>
-                <span class="pairing-status-text" id="addressStatusMessage">Connecting to remote peer…</span>
-              </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Settings Modal -->
-    <div
-      id="settings-modal"
-      class="modal-overlay hidden"
-      aria-hidden="true"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="settingsModalTitle"
-    >
-      <div class="modal-card settings-modal-card">
-        <div class="modal-header settings-modal-header">
-          <div class="modal-header-left">
-            <div class="modal-icon settings-modal-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <div class="progress-bar" id="sendProgressBar" role="progressbar" aria-label="Overall progress" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-fill" id="sendProgressFill"></div>
             </div>
+            <div class="progress-note hidden" id="sendPausedNote">Paused. Progress is kept. Resume picks up from the last chunk.</div>
+          </section>
+
+          <div class="page-head staging-only">
             <div>
-              <h3 id="settingsModalTitle" class="modal-title">Settings</h3>
-              <p class="modal-subtitle">Configure device name & download storage</p>
+              <h1 class="page-title">Send files</h1>
+              <p class="page-desc">Stage files or folders, pick a device, send. Everything stays on your network.</p>
             </div>
-          </div>
-          <button class="modal-close-btn" id="closeSettingsBtn" aria-label="Close Settings">
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
-        </div>
-
-        <div class="modal-body settings-modal-body">
-          <!-- Section 1: Device Identity -->
-          <div class="settings-section">
-            <h4 class="settings-section-title">Device Identity</h4>
-            <p class="settings-section-desc">Choose how this computer appears to other peers on the local network</p>
-            <div class="settings-input-group">
-              <input
-                type="text"
-                id="settingsDeviceNameInput"
-                class="settings-input"
-                placeholder="Device Name (e.g. Living Room PC)"
-                maxlength="32"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <button class="btn btn-primary settings-action-btn" id="saveDeviceNameBtn">
-                <span>Save</span>
+            <div class="page-actions">
+              <button class="btn btn-ghost" id="addFolderBtn" type="button">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                Add folder
+              </button>
+              <button class="btn btn-ghost" id="addFilesBtn" type="button">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                Add files
               </button>
             </div>
           </div>
 
-          <!-- Section 2: Download Directory -->
-          <div class="settings-section">
-            <h4 class="settings-section-title">Download Destination</h4>
-            <p class="settings-section-desc">Incoming files will be saved directly to this folder</p>
-            <div class="settings-path-card">
-              <div class="settings-path-text" id="settingsDownloadDirDisplay">Detecting…</div>
-              <div class="settings-path-actions">
-                <button class="action-pill-btn" id="changeDownloadDirBtn" title="Change download directory">
-                  <span class="btn-icon">
-                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
-                  </span>
-                  <span>Change</span>
-                </button>
-                <button class="action-pill-btn" id="openDownloadFolderBtn" title="Open in File Explorer">
-                  <span class="btn-icon">
-                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                  </span>
-                  <span>Open Folder</span>
-                </button>
+          <div class="drop-area staging-only" id="drop-area" tabindex="0" role="button" aria-label="Pick files or drop them here">
+            <span class="drop-icon">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+            </span>
+            <span class="drop-text">
+              <span class="drop-title">Drop files or folders here</span>
+              <span class="drop-sub">or click to browse</span>
+            </span>
+            <input type="file" id="fileInput" multiple hidden />
+          </div>
+
+          <section class="staged" id="stagedSection" aria-label="Staged items">
+            <div class="section-head">
+              <span class="eyebrow" id="stagedLabel">Staged · 0 items</span>
+              <button class="btn btn-text staging-only" id="clearFilesBtn" type="button">Clear all</button>
+            </div>
+            <div class="list-card">
+              <div class="file-list" id="fileList"></div>
+            </div>
+          </section>
+
+          <div class="send-bar staging-only" id="sendBar">
+            <div class="send-bar-info">
+              <span class="send-bar-to">To</span>
+              <span class="target-chip is-empty" id="sendTargetChip"><span class="target-dot"></span><span id="sendTargetName">Pick a device</span></span>
+              <span class="send-total mono" id="sendTotal">0 files · 0 B</span>
+            </div>
+            <button class="btn btn-primary btn-lg" id="sendBtn" type="button" disabled>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>
+              <span id="sendBtnLabel">Send</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- History view -->
+        <section class="view history-view hidden" id="historyView" aria-labelledby="historyTitle">
+          <div class="page-head">
+            <div>
+              <h1 class="page-title" id="historyTitle">History</h1>
+              <p class="page-desc">Every transfer, sent and received. Stored on this device only.</p>
+            </div>
+            <button class="btn btn-ghost btn-danger" id="clearHistoryBtn" type="button">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              Clear history
+            </button>
+          </div>
+
+          <div class="history-controls">
+            <div class="segmented" role="group" aria-label="Direction">
+              <button class="seg history-filter-btn active" id="filterAllBtn" type="button" data-filter="all" aria-pressed="true">All <span class="seg-count mono" id="filterAllCount">0</span></button>
+              <button class="seg history-filter-btn" id="filterSentBtn" type="button" data-filter="sent" aria-pressed="false">Sent <span class="seg-count mono" id="filterSentCount">0</span></button>
+              <button class="seg history-filter-btn" id="filterReceivedBtn" type="button" data-filter="received" aria-pressed="false">Received <span class="seg-count mono" id="filterReceivedCount">0</span></button>
+            </div>
+            <label class="search-field">
+              <span class="search-icon">
+                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </span>
+              <input class="input search-input" type="search" id="historySearchInput" placeholder="Search files or devices" aria-label="Search history" />
+            </label>
+          </div>
+
+          <div class="history-list" id="historyList"></div>
+
+          <div class="empty-state hidden" id="historyEmptyState">
+            <span class="empty-icon">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+            </span>
+            <div class="empty-title">No transfers here</div>
+            <div class="empty-desc">Completed, cancelled and failed transfers show up here once they finish.</div>
+          </div>
+        </section>
+
+        <!-- Settings view -->
+        <section class="view settings-view hidden" id="settingsView" aria-labelledby="settingsTitle">
+          <div class="page-head">
+            <div>
+              <h1 class="page-title" id="settingsTitle">Settings</h1>
+              <p class="page-desc">Saved on this device. Changes apply right away.</p>
+            </div>
+          </div>
+
+          <section class="settings-section" aria-labelledby="sDevice">
+            <h2 class="eyebrow settings-heading" id="sDevice">Device</h2>
+            <div class="list-card">
+              <div class="settings-row wrap">
+                <label for="settingsDeviceNameInput" class="settings-label">
+                  <span class="settings-label-title">Device name</span>
+                  <span class="settings-label-desc">How nearby devices see this computer. Up to 32 characters.</span>
+                </label>
+                <div class="settings-controls">
+                  <input type="text" id="settingsDeviceNameInput" class="input settings-input" maxlength="32" autocomplete="off" spellcheck="false" />
+                  <button class="btn btn-primary" id="saveDeviceNameBtn" type="button">Save</button>
+                </div>
               </div>
             </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="sFiles">
+            <h2 class="eyebrow settings-heading" id="sFiles">Received files</h2>
+            <div class="list-card">
+              <div class="settings-row wrap">
+                <div class="settings-path-block">
+                  <div class="settings-label-title">Download folder</div>
+                  <div class="path-box mono" id="settingsDownloadDirDisplay">Detecting…</div>
+                </div>
+                <div class="settings-controls">
+                  <button class="btn btn-ghost" id="changeDownloadDirBtn" type="button">
+                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
+                    Change
+                  </button>
+                  <button class="btn btn-ghost" id="openDownloadFolderBtn" type="button">
+                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                    Open
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="sNet">
+            <h2 class="eyebrow settings-heading" id="sNet">Network</h2>
+            <div class="list-card">
+              <div class="settings-row compact">
+                <span class="settings-row-label">Local address</span>
+                <span class="settings-row-value">
+                  <span class="mono" id="settingsLocalAddress">—</span>
+                  <button class="btn btn-ghost btn-sm" id="settingsCopyAddressBtn" type="button">Copy</button>
+                </span>
+              </div>
+              <div class="settings-row compact">
+                <span class="settings-row-label">Transfer port</span>
+                <span class="mono settings-row-value" id="settingsPort">5050</span>
+              </div>
+              <div class="settings-row compact">
+                <span class="settings-row-label">Discovery</span>
+                <span class="settings-row-value">
+                  <span class="status-dot"></span>
+                  mDNS + UDP broadcast <span class="mono text-subtle">:41234</span>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="sData">
+            <h2 class="eyebrow settings-heading" id="sData">Data</h2>
+            <div class="list-card">
+              <div class="settings-row wrap">
+                <div>
+                  <div class="settings-label-title">Transfer history</div>
+                  <div class="settings-label-desc" id="settingsHistoryCount">No entries. Clearing removes the log, not the files.</div>
+                </div>
+                <div class="settings-controls">
+                  <button class="btn btn-ghost" id="settingsViewHistoryBtn" type="button">View</button>
+                  <button class="btn btn-ghost btn-danger" id="settingsClearHistoryBtn" type="button">Clear history</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <!-- Nearby devices -->
+      <aside class="devices-aside" aria-label="Nearby devices">
+        <div class="aside-head">
+          <div class="aside-title-row">
+            <h2 class="aside-title">Nearby devices</h2>
+            <span class="count-pill mono" id="deviceCount" aria-live="polite">0</span>
           </div>
+          <button class="btn btn-icon" id="refreshPeersBtn" type="button" aria-label="Refresh discovery" title="Refresh discovery">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+          </button>
+        </div>
+        <div class="device-list" id="deviceList">
+          <div class="device-empty">Searching for nearby devices…</div>
+        </div>
+        <div class="aside-spacer"></div>
+        <div class="pair-card">
+          <div>
+            <div class="pair-card-title">Device not listed?</div>
+            <div class="pair-card-desc">Pair with a PIN, a QR code or a direct IP address.</div>
+          </div>
+          <button class="btn btn-ghost btn-block" id="openPairingBtn" type="button">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+            Pair device
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Incoming transfer consent dialog -->
+    <div id="consent-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="dialog consent-dialog" role="dialog" aria-modal="true" aria-labelledby="consentModalTitle">
+        <div class="consent-head">
+          <span class="consent-icon" id="consentSenderIcon"></span>
+          <div class="consent-titles">
+            <h2 class="dialog-title" id="consentModalTitle">Incoming transfer</h2>
+            <div class="consent-meta" id="consentSenderInfo"></div>
+          </div>
+        </div>
+        <div class="consent-body">
+          <div class="section-head">
+            <span class="eyebrow">Files</span>
+            <span class="mono text-muted consent-summary"><span id="consentFileCount">0 files</span> · <span id="consentTotalSize">0 B</span></span>
+          </div>
+          <div class="list-card consent-files" id="consentFileList"></div>
+          <div class="save-to">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            <span class="text-muted">Save to</span>
+            <span class="save-to-path mono" id="consentSavePath">Downloads</span>
+            <button class="btn btn-link" id="consentChangeDirBtn" type="button">Change</button>
+          </div>
+        </div>
+        <div class="dialog-actions two-col">
+          <button id="consentDeclineBtn" class="btn btn-ghost btn-lg" type="button">Decline</button>
+          <button id="consentAcceptBtn" class="btn btn-primary btn-lg" type="button">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+            Accept
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Transfer History Modal Dialog -->
-    <div
-      id="history-modal"
-      class="modal-overlay hidden"
-      aria-hidden="true"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="historyModalTitle"
-    >
-      <div class="modal-card history-modal-card">
-        <div class="modal-header history-modal-header">
-          <div class="modal-header-left">
-            <div class="modal-icon history-modal-icon">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-history"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
-            </div>
+    <!-- Pairing dialog (PIN, QR code, direct IP) -->
+    <div id="pairing-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="dialog pairing-dialog" role="dialog" aria-modal="true" aria-labelledby="pairingModalTitle">
+        <div class="pairing-head">
+          <div>
+            <h2 class="dialog-title" id="pairingModalTitle">Pair a device</h2>
+            <p class="dialog-desc">For devices discovery can't see: other subnets, VLANs, or phones.</p>
+          </div>
+          <button class="btn btn-icon" id="closePairingBtn" type="button" aria-label="Close">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Pairing method">
+          <button class="tab pairing-tab active" id="tabPinBtn" type="button" role="tab" aria-selected="true" aria-controls="viewPin" tabindex="0">PIN</button>
+          <button class="tab pairing-tab" id="tabQrBtn" type="button" role="tab" aria-selected="false" aria-controls="viewQr" tabindex="-1">QR code</button>
+          <button class="tab pairing-tab" id="tabAddressBtn" type="button" role="tab" aria-selected="false" aria-controls="viewAddress" tabindex="-1">Direct IP</button>
+        </div>
+
+        <!-- PIN -->
+        <div class="tab-panel pin-panel" id="viewPin" role="tabpanel" aria-labelledby="tabPinBtn">
+          <div class="sub-card">
             <div>
-              <h3 id="historyModalTitle" class="modal-title">Transfer History</h3>
-              <p class="modal-subtitle">Activity log of sent and received transfers</p>
+              <div class="sub-card-title">Your PIN</div>
+              <div class="sub-card-desc">Enter it on the other device.</div>
+            </div>
+            <div class="pin-display mono" id="myPairingPin" aria-label="Your PIN"><span>---</span><span>---</span></div>
+            <div class="row-gap">
+              <button class="btn btn-ghost" id="copyPinBtn" type="button">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                Copy
+              </button>
+              <button class="btn btn-ghost" id="refreshPinBtn" type="button">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                New PIN
+              </button>
             </div>
           </div>
-          <button class="modal-close-btn" id="closeHistoryBtn" aria-label="Close Transfer History">
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
+          <div class="sub-card">
+            <div>
+              <div class="sub-card-title">Connect with their PIN</div>
+              <div class="sub-card-desc">The PIN shown on the other device.</div>
+            </div>
+            <label class="field-stack" for="peerPinInput">
+              <span class="field-label">Their PIN</span>
+              <input type="text" id="peerPinInput" class="input pin-input mono" placeholder="123 456" maxlength="7" autocomplete="off" spellcheck="false" inputmode="numeric" />
+            </label>
+            <button class="btn btn-primary btn-lg" id="connectPinBtn" type="button">Connect</button>
+            <div class="hint-line">
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              Scans your local subnet for the matching device.
+            </div>
+            <div class="status-box hidden" id="pairingStatusBox">
+              <span class="status-spinner" id="pairingStatusSpinner"></span>
+              <span class="status-text" id="pairingStatusMessage"></span>
+            </div>
+          </div>
         </div>
 
-        <div class="modal-body history-modal-body">
-          <div class="history-controls">
-            <div class="history-filter-tabs">
-              <button class="history-filter-btn active" id="filterAllBtn" data-filter="all">All</button>
-              <button class="history-filter-btn" id="filterSentBtn" data-filter="sent">Sent</button>
-              <button class="history-filter-btn" id="filterReceivedBtn" data-filter="received">Received</button>
+        <!-- QR -->
+        <div class="tab-panel qr-panel hidden" id="viewQr" role="tabpanel" aria-labelledby="tabQrBtn">
+          <div class="qr-box" id="myPairingQrBox" role="img" aria-label="Pairing QR code"></div>
+          <div class="qr-text">
+            <div>
+              <div class="qr-title">Scan with a phone camera</div>
+              <div class="qr-desc">The code carries this device's address and PIN, so the phone connects in one step.</div>
             </div>
-            <div class="history-search-wrapper">
-              <input
-                type="text"
-                id="historySearchInput"
-                class="history-search-input"
-                placeholder="Search by file or device..."
-                aria-label="Search transfer history"
-              />
+            <div class="link-box mono" id="myPairingLink">easyshare://pair</div>
+            <div>
+              <button class="btn btn-ghost" id="copyLinkBtn" type="button">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Copy pairing link
+              </button>
             </div>
-          </div>
-
-          <div id="historyList" class="history-list-container"></div>
-
-          <div id="historyEmptyState" class="history-empty-state hidden">
-            <div class="empty-icon">📂</div>
-            <p class="empty-title">No transfer history found</p>
-            <p class="empty-desc">Completed, cancelled, or failed transfers will appear here.</p>
           </div>
         </div>
 
-        <div class="modal-footer history-modal-footer">
-          <button type="button" class="btn btn-secondary history-clear-btn" id="clearHistoryBtn">
-            Clear History
-          </button>
+        <!-- Direct IP -->
+        <div class="tab-panel address-panel hidden" id="viewAddress" role="tabpanel" aria-labelledby="tabAddressBtn">
+          <div class="field-stack">
+            <label class="field-label strong" for="peerAddressInput">Device address</label>
+            <div class="row-gap">
+              <input type="text" id="peerAddressInput" class="input mono grow" placeholder="192.168.1.50:5050" autocomplete="off" spellcheck="false" />
+              <button class="btn btn-primary btn-lg" id="connectAddressBtn" type="button">Connect</button>
+            </div>
+            <span class="hint-line">Accepts an IP, IP:port, an http:// URL, or an easyshare:// link. Port defaults to <span class="mono">5050</span>.</span>
+          </div>
+          <div class="status-box hidden" id="addressStatusBox">
+            <span class="status-spinner" id="addressStatusSpinner"></span>
+            <span class="status-text" id="addressStatusMessage"></span>
+          </div>
+          <div class="sub-card row">
+            <div>
+              <div class="sub-card-desc">Your address</div>
+              <div class="my-address mono" id="myLocalAddressDisplay">Detecting…</div>
+            </div>
+            <button class="btn btn-ghost" id="copyMyAddressBtn" type="button">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              Copy
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Non-blocking Toast Feedback -->
+    <!-- Non-blocking toast feedback -->
     <div id="toast-container" aria-live="polite"></div>
 
     <script type="module" src="./script/renderer.js"></script>

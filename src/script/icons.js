@@ -27,7 +27,17 @@ export const ICONS = {
   arrowRight: `<svg ${LUCIDE_ATTRS} class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`,
   wifi: `<svg ${LUCIDE_ATTRS} class="lucide lucide-wifi"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg>`,
   link: `<svg ${LUCIDE_ATTRS} class="lucide lucide-link"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
-  loader2: `<svg ${LUCIDE_ATTRS} class="lucide lucide-loader-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`
+  loader2: `<svg ${LUCIDE_ATTRS} class="lucide lucide-loader-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+  terminal: `<svg ${LUCIDE_ATTRS} class="lucide lucide-terminal"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>`,
+  circleCheck: `<svg ${LUCIDE_ATTRS} class="lucide lucide-circle-check"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+  ban: `<svg ${LUCIDE_ATTRS} class="lucide lucide-ban"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>`,
+  arrowUpRight: `<svg ${LUCIDE_ATTRS} class="lucide lucide-arrow-up-right"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>`,
+  arrowDownLeft: `<svg ${LUCIDE_ATTRS} class="lucide lucide-arrow-down-left"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg>`,
+  externalLink: `<svg ${LUCIDE_ATTRS} class="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
+  folder: `<svg ${LUCIDE_ATTRS} class="lucide lucide-folder"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`,
+  trash: `<svg ${LUCIDE_ATTRS} class="lucide lucide-trash"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
+  download: `<svg ${LUCIDE_ATTRS} class="lucide lucide-download"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>`,
+  upload: `<svg ${LUCIDE_ATTRS} class="lucide lucide-upload"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>`
 };
 
 /**
@@ -66,6 +76,9 @@ export function getDeviceIconSvg(os = "", deviceType = "", options = {}) {
     osLower.includes("android")
   ) {
     return getIconSvg("smartphone", options);
+  }
+  if (osLower.includes("linux")) {
+    return getIconSvg("terminal", options);
   }
   return getIconSvg("monitor", options);
 }

@@ -17,20 +17,6 @@ import { showToast } from "./ui.js";
 let activePairingInfo = null;
 
 /**
- * Formats a 6-digit numeric string as 'XXX - XXX'
- * @param {string} pin
- * @returns {string}
- */
-function formatPinDisplay(pin) {
-  if (!pin) return "--- ---";
-  const clean = String(pin).replace(/\D/g, "");
-  if (clean.length > 3) {
-    return `${clean.slice(0, 3)} - ${clean.slice(3, 6)}`;
-  }
-  return clean;
-}
-
-/**
  * Updates the modal UI with current device pairing info
  * @param {Object} info
  */
@@ -40,27 +26,27 @@ function renderPairingInfo(info) {
 
   const pinDisplay = document.getElementById("myPairingPin");
   const qrBox = document.getElementById("myPairingQrBox");
-  const directInfo = document.getElementById("myPairingDirectInfo");
+  const linkBox = document.getElementById("myPairingLink");
   const localAddressDisplay = document.getElementById("myLocalAddressDisplay");
 
   if (pinDisplay) {
-    pinDisplay.textContent = info.formatted_pin || formatPinDisplay(info.pin);
+    const digits = String(info.pin || "").replace(/\D/g, "");
+    const left = digits.slice(0, 3) || "---";
+    const right = digits.slice(3, 6) || "---";
+    pinDisplay.innerHTML = `<span>${left}</span><span>${right}</span>`;
+    pinDisplay.setAttribute("aria-label", `Your PIN ${left} ${right}`);
   }
 
   if (qrBox) {
     if (info.qr_svg) {
       qrBox.innerHTML = info.qr_svg;
     } else {
-      qrBox.innerHTML = '<span class="pairing-address-hint">QR Code Unavailable</span>';
+      qrBox.textContent = "QR code unavailable";
     }
   }
 
-  if (directInfo) {
-    if (info.ip && info.port) {
-      directInfo.textContent = `Direct: ${info.ip}:${info.port}`;
-    } else {
-      directInfo.textContent = "";
-    }
+  if (linkBox) {
+    linkBox.textContent = info.direct_url || "";
   }
 
   if (localAddressDisplay) {
@@ -85,9 +71,8 @@ function setPinStatus(message, type = "loading") {
 
   if (!statusBox || !statusMsg) return;
 
-  statusBox.className = `pairing-status-message-box ${type}`;
+  statusBox.className = `status-box ${type}`;
   statusMsg.textContent = message;
-  statusBox.style.display = "flex";
 }
 
 /**
@@ -98,8 +83,7 @@ function clearPinStatus() {
   const statusMsg = document.getElementById("pairingStatusMessage");
 
   if (statusBox) {
-    statusBox.style.display = "none";
-    statusBox.className = "pairing-status-message-box";
+    statusBox.className = "status-box hidden";
   }
   if (statusMsg) {
     statusMsg.textContent = "";
@@ -117,9 +101,8 @@ function setAddressStatus(message, type = "loading") {
 
   if (!statusBox || !statusMsg) return;
 
-  statusBox.className = `pairing-status-message-box ${type}`;
+  statusBox.className = `status-box ${type}`;
   statusMsg.textContent = message;
-  statusBox.style.display = "flex";
 }
 
 /**
@@ -130,8 +113,7 @@ function clearAddressStatus() {
   const statusMsg = document.getElementById("addressStatusMessage");
 
   if (statusBox) {
-    statusBox.style.display = "none";
-    statusBox.className = "pairing-status-message-box";
+    statusBox.className = "status-box hidden";
   }
   if (statusMsg) {
     statusMsg.textContent = "";
@@ -353,13 +335,13 @@ export function setupPairing() {
   }
 
   // -------------------------------------------------------------
-  // PIN Input Auto-Formatting (XXX - XXX)
+  // PIN Input Auto-Formatting (XXX XXX)
   // -------------------------------------------------------------
   if (peerPinInput) {
     peerPinInput.addEventListener("input", (e) => {
       const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
       if (digits.length > 3) {
-        e.target.value = `${digits.slice(0, 3)} - ${digits.slice(3)}`;
+        e.target.value = `${digits.slice(0, 3)} ${digits.slice(3)}`;
       } else {
         e.target.value = digits;
       }

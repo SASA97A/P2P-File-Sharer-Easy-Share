@@ -51,46 +51,65 @@ test("tauri bridge pause and resume transfer calls", async (t) => {
   });
 });
 
-test("updateReceiveProgress includes formatted speed and ETA in toast DOM", async () => {
-  const { updateReceiveProgress } = await import("../src/script/ui.js");
+test("updateReceiveProgress renders overall percent, speed and ETA in the receive card", async () => {
+  const { updateReceiveProgress, setReceiveContext, formatEtaShort } = await import("../src/script/ui.js");
 
-  // Minimal DOM container mock
-  const container = {
-    id: "toast-container",
-    appendChild(child) {
-      this.child = child;
+  assert.equal(formatEtaShort(14), "14s");
+  assert.equal(formatEtaShort(95), "1m 35s");
+  assert.equal(formatEtaShort(null), "—");
+
+  // Minimal receive card mock: role slots resolved through querySelector
+  const slots = new Map();
+  const makeSlot = () => ({
+    textContent: "",
+    innerHTML: "",
+    style: {},
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    addEventListener() {},
+  });
+  const card = {
+    id: "receiveCard",
+    dataset: {},
+    innerHTML: "",
+    classList: { _c: new Set(["hidden"]), add(c) { this._c.add(c); }, remove(c) { this._c.delete(c); }, contains(c) { return this._c.has(c); } },
+    querySelector(sel) {
+      const m = sel.match(/data-role="([^"]+)"/);
+      if (!m) return null;
+      if (!slots.has(m[1])) slots.set(m[1], makeSlot());
+      return slots.get(m[1]);
     },
   };
-
-  const statusEl = {
-    id: "myDeviceStatus",
-    textContent: "",
-  };
+  const badge = { textContent: "", classList: { add() {}, remove() {} } };
 
   globalThis.document = {
     getElementById: (id) => {
-      if (id === "toast-container") return container;
-      if (id === "myDeviceStatus") return statusEl;
+      if (id === "receiveCard") return card;
+      if (id === "navSendProgress") return badge;
       return null;
     },
-    createElement: (tag) => ({
-      tagName: tag.toUpperCase(),
-      id: "",
-      className: "",
-      innerHTML: "",
-      isConnected: true,
-    }),
+    querySelectorAll: () => [],
   };
 
+  setReceiveContext({ senderName: "Pixel-8-Pro", fileCount: 2, totalBytes: 2000, saveDir: "C:\Downloads" });
+
   updateReceiveProgress({
+    session_token: "tok",
+    file_id: "a",
     file_name: "archive.zip",
     percent: 65,
+    received_bytes: 1000,
+    total_bytes: 1500,
     speed_bps: 1024 * 1024 * 8.5,
     eta_seconds: 14,
   });
 
-  assert.equal(statusEl.textContent, "Receiving (65%)");
-  assert.ok(container.child);
-  assert.ok(container.child.innerHTML.includes("8.5 MB/s"));
-  assert.ok(container.child.innerHTML.includes("14s remaining"));
+  assert.equal(card.classList.contains("hidden"), false);
+  assert.equal(card.dataset.sessionToken, "tok");
+  assert.equal(slots.get("title").textContent, "Receiving from Pixel-8-Pro");
+  assert.equal(slots.get("percent").textContent, "50", "overall percent uses the batch total");
+  assert.equal(slots.get("speed").textContent, "8.5 MB/s");
+  assert.equal(slots.get("eta").textContent, "14s");
+  assert.equal(slots.get("fill").style.width, "50%");
+  assert.equal(badge.textContent, "50%");
 });

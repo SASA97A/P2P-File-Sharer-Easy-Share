@@ -3,7 +3,7 @@
  * Orchestrates event wiring, drag-and-drop, pairing controls, and discovery feeds.
  */
 
-import { addFiles } from "./files.js";
+import { addFiles, clearFiles } from "./files.js";
 import {
   setPeerList,
   upsertPeer,
@@ -13,14 +13,17 @@ import { setupTransfer } from "./transfer.js";
 import { setupPairing } from "./pairing.js";
 import { setupSettings } from "./settings.js";
 import { setupHistory } from "./history.js";
-import { updateMyDeviceBadge } from "./ui.js";
+import { setupNav } from "./nav.js";
+import { updateMyDeviceBadge, updateMyAddress, showToast } from "./ui.js";
 import {
   getMyDeviceInfo,
   getDiscoveredPeers,
+  getMyPairingInfo,
   onPeerFound,
   onPeerLost,
   onPeerUpdated,
   pickFiles,
+  pickFolder,
   inspectPaths,
   onDragDrop,
   onDragHover,
@@ -30,6 +33,8 @@ import {
 document.addEventListener("DOMContentLoaded", async () => {
   const dropArea = document.getElementById("drop-area");
   const fileInput = document.getElementById("fileInput");
+
+  setupNav();
 
   // -------------------------------------------------------------
   // 1. Initial Device & Discovery Bootstrap
@@ -42,11 +47,38 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   try {
+    const pairing = await getMyPairingInfo();
+    if (pairing) updateMyAddress(pairing.ip, pairing.port);
+  } catch (err) {
+    console.error("Failed to fetch local address:", err);
+  }
+
+  try {
     const peers = await getDiscoveredPeers();
     setPeerList(peers || []);
   } catch (err) {
     console.error("Failed to fetch initial peers:", err);
     setPeerList([]);
+  }
+
+  const refreshBtn = document.getElementById("refreshPeersBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.classList.add("is-spinning");
+      refreshBtn.disabled = true;
+      try {
+        const peers = await getDiscoveredPeers();
+        setPeerList(peers || []);
+      } catch (err) {
+        console.error("Failed to refresh peers:", err);
+      } finally {
+        // Keep the spin visible long enough to register
+        setTimeout(() => {
+          refreshBtn.classList.remove("is-spinning");
+          refreshBtn.disabled = false;
+        }, 500);
+      }
+    });
   }
 
   // -------------------------------------------------------------
@@ -84,6 +116,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
   };
+
+  const handleFolderPick = async () => {
+    try {
+      const picked = await pickFolder();
+      if (picked && picked.length > 0) {
+        addFiles(picked);
+      }
+    } catch (err) {
+      console.error("Folder picker failed:", err);
+      showToast(`Could not add folder: ${err}`, "error");
+    }
+  };
+
+  const addFilesBtn = document.getElementById("addFilesBtn");
+  const addFolderBtn = document.getElementById("addFolderBtn");
+  const clearFilesBtn = document.getElementById("clearFilesBtn");
+  if (addFilesBtn) addFilesBtn.addEventListener("click", handleFilePick);
+  if (addFolderBtn) addFolderBtn.addEventListener("click", handleFolderPick);
+  if (clearFilesBtn) clearFilesBtn.addEventListener("click", () => clearFiles());
 
   if (dropArea) {
     // Click on drop area triggers native file dialog (or fileInput fallback)

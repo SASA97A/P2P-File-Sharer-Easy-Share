@@ -10,10 +10,18 @@ import {
   openFile,
   onHistoryUpdated,
 } from "./tauri-bridge.js";
+import { showView } from "./nav.js";
+import { getIconSvg } from "./icons.js";
 
 let cachedRecords = [];
 let currentFilter = "all"; // 'all' | 'sent' | 'received'
 let currentSearch = "";
+
+const STATUS = {
+  completed: { label: "Completed", icon: "circleCheck", cls: "is-completed" },
+  cancelled: { label: "Cancelled", icon: "ban", cls: "is-cancelled" },
+  failed: { label: "Failed", icon: "alertCircle", cls: "is-failed" },
+};
 
 function escapeHtml(str) {
   if (!str) return "";
@@ -32,32 +40,56 @@ function formatBytes(bytes) {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i] || "B"}`;
 }
 
-function formatTime(timestamp) {
+function formatClock(timestamp) {
   if (!timestamp) return "";
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffSec = Math.floor((now - date) / 1000);
+  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
 
-  if (diffSec < 60) return "Just now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+function dayLabel(timestamp) {
+  const date = new Date(timestamp || 0);
+  const today = new Date();
+  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOf(today) - startOf(date)) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
   return date.toLocaleDateString(undefined, {
+    weekday: diffDays < 7 ? "long" : undefined,
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
   });
+}
+
+function updateCounts() {
+  const counts = {
+    all: cachedRecords.length,
+    sent: cachedRecords.filter((r) => r.direction === "sent").length,
+    received: cachedRecords.filter((r) => r.direction === "received").length,
+  };
+  const ids = { all: "filterAllCount", sent: "filterSentCount", received: "filterReceivedCount" };
+  Object.entries(ids).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(counts[key]);
+  });
+
+  const settingsCount = document.getElementById("settingsHistoryCount");
+  if (settingsCount) {
+    const n = counts.all;
+    settingsCount.textContent = `${n ? `${n} ${n === 1 ? "entry" : "entries"}` : "No entries"}. Clearing removes the log, not the files.`;
+  }
 }
 
 export function setActiveFilter(filter) {
   currentFilter = filter;
   const filterBtns = document.querySelectorAll(".history-filter-btn");
   filterBtns.forEach((btn) => {
-    if (btn.dataset.filter === filter) {
+    const isActive = btn.dataset.filter === filter;
+    if (isActive) {
       btn.classList.add("active");
     } else {
       btn.classList.remove("active");
     }
+    btn.setAttribute("aria-pressed", String(isActive));
   });
   applyFilterAndRender();
 }
@@ -86,7 +118,55 @@ function applyFilterAndRender() {
     });
   }
 
+  updateCounts();
   renderHistoryList(filtered);
+}
+
+function renderRow(record) {
+  const isSent = record.direction === "sent";
+  const status = STATUS[record.status] || STATUS.completed;
+  const files = record.files || [];
+  const first = files[0];
+  const title = first
+    ? `${first.name}${files.length > 1 ? ` + ${files.length - 1} more` : ""}`
+    : "Transfer";
+  const allNames = files.map((f) => f.name).join("\n");
+  const path = first && first.path ? first.path : "";
+  const canOpen = record.status === "completed" && Boolean(path);
+  const disabled = canOpen ? "" : "disabled";
+
+  return `
+    <div class="history-row" data-record-id="${escapeHtml(record.id)}">
+      <span class="history-dir" role="img" aria-label="${isSent ? "Sent" : "Received"}" title="${isSent ? "Sent" : "Received"}">
+        ${getIconSvg(isSent ? "arrowUpRight" : "arrowDownLeft", { size: 16 })}
+      </span>
+      <div class="history-main">
+        <div class="history-title" title="${escapeHtml(allNames)}">${escapeHtml(title)}</div>
+        <div class="history-peer">
+          <span>${isSent ? "to" : "from"} ${escapeHtml(record.peer_name)}</span>
+          ${record.peer_ip ? `<span class="mono">${escapeHtml(record.peer_ip)}</span>` : ""}
+          <span class="mono history-time-inline">${formatClock(record.timestamp)}</span>
+        </div>
+        ${record.error_message ? `<div class="history-error">${escapeHtml(record.error_message)}</div>` : ""}
+      </div>
+      <span class="history-status ${status.cls}" role="img" aria-label="${status.label}" title="${status.label}">
+        ${getIconSvg(status.icon, { size: 18 })}
+      </span>
+      <span class="history-size mono">${formatBytes(record.total_bytes)}</span>
+      <span class="history-time mono">${formatClock(record.timestamp)}</span>
+      <div class="history-actions">
+        <button class="btn btn-icon" type="button" data-action="open-file" data-path="${escapeHtml(path)}" aria-label="Open file" title="Open file" ${disabled}>
+          ${getIconSvg("externalLink", { size: 15 })}
+        </button>
+        <button class="btn btn-icon" type="button" data-action="show-folder" data-path="${escapeHtml(path)}" aria-label="Show in folder" title="Show in folder" ${disabled}>
+          ${getIconSvg("folder", { size: 15 })}
+        </button>
+        <button class="btn btn-icon is-delete" type="button" data-action="delete-record" data-id="${escapeHtml(record.id)}" aria-label="Delete entry" title="Delete entry">
+          ${getIconSvg("trash", { size: 15 })}
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 export function renderHistoryList(records) {
@@ -102,79 +182,28 @@ export function renderHistoryList(records) {
 
   if (emptyEl) emptyEl.classList.add("hidden");
 
-  const html = records
-    .map((record) => {
-      const isSent = record.direction === "sent";
-      const dirBadgeClass = isSent ? "badge-sent" : "badge-received";
-      const dirLabel = isSent ? "Sent" : "Received";
-      const dirIcon = isSent ? "↗" : "↙";
+  const sorted = [...records].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  const groups = [];
+  sorted.forEach((record) => {
+    const label = dayLabel(record.timestamp);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) {
+      last.items.push(record);
+    } else {
+      groups.push({ label, items: [record] });
+    }
+  });
 
-      let statusBadgeClass = "badge-status-completed";
-      let statusLabel = "Completed";
-      if (record.status === "cancelled") {
-        statusBadgeClass = "badge-status-cancelled";
-        statusLabel = "Cancelled";
-      } else if (record.status === "failed") {
-        statusBadgeClass = "badge-status-failed";
-        statusLabel = "Failed";
-      }
-
-      const filesHtml = (record.files || [])
-        .map((f) => {
-          const hasPath = Boolean(f.path);
-          return `
-            <div class="history-file-row">
-              <span class="history-file-name" title="${escapeHtml(f.name)}">
-                📄 ${escapeHtml(f.name)}
-              </span>
-              <span class="history-file-size">${formatBytes(f.size)}</span>
-              ${
-                hasPath
-                  ? `
-                <div class="history-file-actions">
-                  <button class="btn-history-file-action" data-action="open-file" data-path="${escapeHtml(f.path)}" title="Open file">
-                    Open
-                  </button>
-                  <button class="btn-history-file-action" data-action="show-folder" data-path="${escapeHtml(f.path)}" title="Show in folder">
-                    Folder
-                  </button>
-                </div>
-              `
-                  : ""
-              }
-            </div>
-          `;
-        })
-        .join("");
-
-      return `
-        <div class="history-card" data-record-id="${escapeHtml(record.id)}">
-          <div class="history-card-header">
-            <div class="history-card-meta">
-              <span class="history-badge ${dirBadgeClass}">${dirIcon} ${dirLabel}</span>
-              <span class="history-peer-name" title="${escapeHtml(record.peer_name)}">${escapeHtml(record.peer_name)}</span>
-              <span class="history-badge ${statusBadgeClass}">${statusLabel}</span>
-            </div>
-            <div class="history-card-right">
-              <span class="history-time">${formatTime(record.timestamp)}</span>
-              <button class="btn-history-delete" data-action="delete-record" data-id="${escapeHtml(record.id)}" title="Delete record">
-                &times;
-              </button>
-            </div>
-          </div>
-          <div class="history-card-files">
-            ${filesHtml}
-          </div>
-          <div class="history-card-footer">
-            <span class="history-total-bytes">Total: ${formatBytes(record.total_bytes)}</span>
-            ${record.error_message ? `<span class="history-error-text">${escapeHtml(record.error_message)}</span>` : ""}
-          </div>
-        </div>
-      `;
-    })
+  listEl.innerHTML = groups
+    .map(
+      (group) => `
+        <section class="history-group" aria-label="${escapeHtml(group.label)}">
+          <span class="eyebrow">${escapeHtml(group.label)}</span>
+          <div class="list-card">${group.items.map(renderRow).join("")}</div>
+        </section>
+      `
+    )
     .join("");
-
-  listEl.innerHTML = html;
 }
 
 export async function loadAndRenderHistory() {
@@ -186,46 +215,45 @@ export async function loadAndRenderHistory() {
   }
 }
 
-export async function openHistoryModal() {
-  const modal = document.getElementById("history-modal");
-  if (modal) {
-    modal.classList.remove("hidden");
-    await loadAndRenderHistory();
-  }
+export async function openHistoryView() {
+  showView("history");
+  await loadAndRenderHistory();
 }
 
-export function closeHistoryModal() {
-  const modal = document.getElementById("history-modal");
-  if (modal) {
-    modal.classList.add("hidden");
+export function closeHistoryView() {
+  showView("send");
+}
+
+async function handleClearHistory() {
+  if (!cachedRecords.length) return;
+  if (confirm("Clear all transfer history? Received files stay on disk.")) {
+    try {
+      await clearTransferHistory();
+      cachedRecords = [];
+      applyFilterAndRender();
+    } catch (err) {
+      console.error("Failed to clear history:", err);
+    }
   }
 }
 
 export function setupHistory() {
   const openBtn = document.getElementById("openHistoryBtn");
-  const closeBtn = document.getElementById("closeHistoryBtn");
-  const modal = document.getElementById("history-modal");
   const searchInput = document.getElementById("historySearchInput");
   const clearBtn = document.getElementById("clearHistoryBtn");
+  const settingsClearBtn = document.getElementById("settingsClearHistoryBtn");
+  const settingsViewBtn = document.getElementById("settingsViewHistoryBtn");
   const listEl = document.getElementById("historyList");
 
   if (openBtn) {
     openBtn.addEventListener("click", () => {
-      openHistoryModal();
+      openHistoryView();
     });
   }
 
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      closeHistoryModal();
-    });
-  }
-
-  if (modal) {
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) {
-        closeHistoryModal();
-      }
+  if (settingsViewBtn) {
+    settingsViewBtn.addEventListener("click", () => {
+      openHistoryView();
     });
   }
 
@@ -244,23 +272,17 @@ export function setupHistory() {
   }
 
   if (clearBtn) {
-    clearBtn.addEventListener("click", async () => {
-      if (confirm("Are you sure you want to clear all transfer history?")) {
-        try {
-          await clearTransferHistory();
-          cachedRecords = [];
-          applyFilterAndRender();
-        } catch (err) {
-          console.error("Failed to clear history:", err);
-        }
-      }
-    });
+    clearBtn.addEventListener("click", handleClearHistory);
+  }
+
+  if (settingsClearBtn) {
+    settingsClearBtn.addEventListener("click", handleClearHistory);
   }
 
   if (listEl) {
     listEl.addEventListener("click", async (e) => {
       const target = e.target.closest("button");
-      if (!target) return;
+      if (!target || target.disabled) return;
 
       const action = target.dataset.action;
       if (action === "delete-record") {
@@ -303,4 +325,7 @@ export function setupHistory() {
       applyFilterAndRender();
     }
   });
+
+  // Populate counts (settings page, filter pills) at startup
+  loadAndRenderHistory();
 }

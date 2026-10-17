@@ -14,14 +14,13 @@ import {
 } from "./tauri-bridge.js";
 import { showToast } from "./ui.js";
 
-let isSettingsOpen = false;
+import { showView, getCurrentView } from "./nav.js";
 
 /**
- * Opens the settings modal and populates current configuration values.
+ * Shows the settings page and populates current configuration values.
  */
-export async function openSettingsModal() {
-  const modal = document.getElementById("settings-modal");
-  if (!modal) return;
+export async function openSettingsView() {
+  showView("settings");
 
   try {
     const devInfo = await getMyDeviceInfo();
@@ -39,71 +38,46 @@ export async function openSettingsModal() {
   } catch (err) {
     console.error("Failed to load settings data:", err);
   }
-
-  modal.classList.remove("hidden");
-  if (modal.setAttribute) {
-    modal.setAttribute("aria-hidden", "false");
-  }
-  isSettingsOpen = true;
-
-  const nameInput = document.getElementById("settingsDeviceNameInput");
-  if (nameInput) {
-    nameInput.focus();
-  }
 }
 
 /**
- * Closes the settings modal.
+ * Leaves the settings page and returns to the Send view.
  */
-export function closeSettingsModal() {
-  const modal = document.getElementById("settings-modal");
-  if (!modal) return;
-
-  modal.classList.add("hidden");
-  if (modal.setAttribute) {
-    modal.setAttribute("aria-hidden", "true");
-  }
-  isSettingsOpen = false;
+export function closeSettingsView() {
+  showView("send");
 }
 
 /**
  * Initializes settings listeners and event handlers.
  */
 export function setupSettings() {
-  const modal = document.getElementById("settings-modal");
   const openBtn = document.getElementById("openSettingsBtn");
-  const closeBtn = document.getElementById("closeSettingsBtn");
   const saveNameBtn = document.getElementById("saveDeviceNameBtn");
   const nameInput = document.getElementById("settingsDeviceNameInput");
   const changeDirBtn = document.getElementById("changeDownloadDirBtn");
   const openDirBtn = document.getElementById("openDownloadFolderBtn");
-  const headerOpenDirBtn = document.getElementById("headerOpenDownloadsBtn");
+  const sidebarOpenDirBtn = document.getElementById("openDownloadsBtn");
+  const copyAddressBtn = document.getElementById("settingsCopyAddressBtn");
 
-  // Open / Close Modal Handlers
   if (openBtn) {
     openBtn.addEventListener("click", () => {
-      openSettingsModal();
+      openSettingsView();
     });
   }
 
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      closeSettingsModal();
-    });
-  }
-
-  if (modal) {
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) {
-        closeSettingsModal();
+  if (copyAddressBtn) {
+    copyAddressBtn.addEventListener("click", async () => {
+      const addrEl = document.getElementById("myDeviceAddress");
+      const addr = addrEl ? addrEl.textContent.trim() : "";
+      if (!addr || addr === "—") {
+        showToast("Local address not detected yet", "error");
+        return;
       }
-    });
-  }
-
-  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && isSettingsOpen) {
-        closeSettingsModal();
+      try {
+        await navigator.clipboard.writeText(addr);
+        showToast(`Address ${addr} copied to clipboard`, "success");
+      } catch (_err) {
+        showToast("Failed to copy address", "error");
       }
     });
   }
@@ -192,8 +166,8 @@ export function setupSettings() {
     openDirBtn.addEventListener("click", handleOpenDownloads);
   }
 
-  if (headerOpenDirBtn) {
-    headerOpenDirBtn.addEventListener("click", handleOpenDownloads);
+  if (sidebarOpenDirBtn) {
+    sidebarOpenDirBtn.addEventListener("click", handleOpenDownloads);
   }
 
   // Listen for device info updates
@@ -203,7 +177,7 @@ export function setupSettings() {
     if (myDeviceBadge && info.device_name) {
       myDeviceBadge.textContent = info.device_name;
     }
-    if (nameInput && info.device_name && !isSettingsOpen) {
+    if (nameInput && info.device_name && getCurrentView() !== "settings") {
       nameInput.value = info.device_name;
     }
   });

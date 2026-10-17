@@ -77,18 +77,17 @@ globalThis.confirm = () => true;
 
 import {
   setupHistory,
-  openHistoryModal,
-  closeHistoryModal,
+  openHistoryView,
+  closeHistoryView,
   renderHistoryList,
   setActiveFilter,
   setSearchQuery,
 } from "../src/script/history.js";
 
 test("transfer history UI controller", async (t) => {
-  const modal = createMockElement("history-modal");
-  modal.classList.add("hidden");
+  const view = createMockElement("historyView");
+  view.classList.add("hidden");
   const openBtn = createMockElement("openHistoryBtn", "button");
-  const closeBtn = createMockElement("closeHistoryBtn", "button");
   const searchInput = createMockElement("historySearchInput", "input");
   const filterAllBtn = createMockElement("filterAllBtn", "button");
   filterAllBtn.dataset.filter = "all";
@@ -103,14 +102,14 @@ test("transfer history UI controller", async (t) => {
 
   setupHistory();
 
-  await t.test("openHistoryModal unhides modal and loads history", async () => {
-    await openHistoryModal();
-    assert.equal(modal.classList.contains("hidden"), false);
+  await t.test("openHistoryView shows the history page and loads history", async () => {
+    await openHistoryView();
+    assert.equal(view.classList.contains("hidden"), false);
   });
 
-  await t.test("closeHistoryModal hides modal", async () => {
-    closeHistoryModal();
-    assert.equal(modal.classList.contains("hidden"), true);
+  await t.test("closeHistoryView hides the history page", async () => {
+    closeHistoryView();
+    assert.equal(view.classList.contains("hidden"), true);
   });
 
   await t.test("renderHistoryList handles empty records cleanly", async () => {
