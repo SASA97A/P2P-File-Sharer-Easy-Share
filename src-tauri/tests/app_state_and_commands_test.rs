@@ -290,6 +290,20 @@ fn test_tray_settings_payload_serialization() {
     assert!(des_camel.notifications_enabled);
 }
 
+#[test]
+fn test_format_transfer_tooltip_formatting() {
+    use easy_share_lib::tray::format_transfer_tooltip;
+
+    let tip1 = format_transfer_tooltip("Receiving", 45, Some(14_889_779), Some("project.zip"));
+    assert_eq!(tip1, "Easy Share - Receiving (45% · 14.2 MB/s) (project.zip)");
+
+    let tip2 = format_transfer_tooltip("Sending", 90, Some(512_000), None);
+    assert_eq!(tip2, "Easy Share - Sending (90% · 500 KB/s)");
+
+    let tip3 = format_transfer_tooltip("Receiving", 10, None, None);
+    assert_eq!(tip3, "Easy Share - Receiving (10%)");
+}
+
 #[tokio::test]
 async fn test_build_pairing_payload_and_regeneration() {
     let temp_dir = setup_test_dir("pairing_payload");

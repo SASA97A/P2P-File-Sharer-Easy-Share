@@ -6,6 +6,7 @@ pub mod models;
 pub mod pairing;
 pub mod server;
 pub mod storage;
+pub mod tray;
 
 use app_state::AppState;
 use discovery::{DiscoveryConfig, DiscoveryEvent, DiscoveryService, PeerEvent};
@@ -262,6 +263,7 @@ pub async fn setup_services(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
@@ -274,7 +276,25 @@ pub fn run() {
                     }
                 }
             });
+
+            if let Err(e) = tray::setup_tray(app.handle()) {
+                eprintln!("Failed to setup system tray: {}", e);
+            }
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if let Some(state) = window.try_state::<AppState>() {
+                    let minimize = tauri::async_runtime::block_on(async {
+                        state.get_tray_settings().await.0
+                    });
+                    if minimize {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_my_device_info,
@@ -295,6 +315,8 @@ pub fn run() {
             commands::set_speed_limit,
             commands::set_device_name,
             commands::open_download_dir,
+            commands::get_tray_settings,
+            commands::set_tray_settings,
             commands::inspect_paths,
             commands::pick_files,
             commands::pick_folder,
