@@ -67,16 +67,42 @@ test("settings UI controller", async (t) => {
   const myDeviceNameBadge = createMockElement("myDeviceName", "span");
   const speedSelect = createMockElement("settingsSpeedLimitSelect", "select");
 
+  const minToggle = createMockElement("settingsMinimizeToTrayToggle", "input");
+  const notifToggle = createMockElement("settingsNotificationsToggle", "input");
+
   setupSettings();
 
   await t.test("openSettingsView populates inputs with current configuration", async () => {
-    const { getSpeedLimit } = await import("../src/script/tauri-bridge.js");
+    const { getSpeedLimit, setTraySettings } = await import("../src/script/tauri-bridge.js");
+    await setTraySettings({ minimizeToTray: true, notificationsEnabled: true });
     const currentLimit = await getSpeedLimit();
     await openSettingsView();
     assert.equal(view.classList._classes.has("hidden"), false);
     assert.ok(nameInput.value.length > 0);
     assert.ok(dirDisplay.textContent.length > 0);
     assert.equal(speedSelect.value, String(currentLimit));
+    assert.equal(minToggle.checked, true);
+    assert.equal(notifToggle.checked, true);
+  });
+
+  await t.test("changing minimize to tray toggle invokes setTraySettings", async () => {
+    const { getTraySettings } = await import("../src/script/tauri-bridge.js");
+    minToggle.checked = false;
+    minToggle.dispatchEvent({ type: "change", target: { checked: false } });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const current = await getTraySettings();
+    assert.equal(current.minimizeToTray, false);
+  });
+
+  await t.test("changing desktop notifications toggle invokes setTraySettings", async () => {
+    const { getTraySettings } = await import("../src/script/tauri-bridge.js");
+    notifToggle.checked = false;
+    notifToggle.dispatchEvent({ type: "change", target: { checked: false } });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const current = await getTraySettings();
+    assert.equal(current.notificationsEnabled, false);
   });
 
   await t.test("changing speed limit dropdown invokes setSpeedLimit", async () => {

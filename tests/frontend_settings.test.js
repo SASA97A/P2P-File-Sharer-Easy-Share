@@ -10,6 +10,8 @@ import {
   getMyDeviceInfo,
   getSpeedLimit,
   setSpeedLimit,
+  getTraySettings,
+  setTraySettings,
 } from "../src/script/tauri-bridge.js";
 
 test("settings bridge API", async (t) => {
@@ -63,5 +65,26 @@ test("settings bridge API", async (t) => {
       triggered = true;
     });
     assert.equal(typeof onDeviceInfoUpdated, "function");
+  });
+
+  await t.test("getTraySettings returns default true for minimizeToTray and notificationsEnabled", async () => {
+    const settings = await getTraySettings();
+    assert.equal(typeof settings.minimizeToTray, "boolean");
+    assert.equal(typeof settings.notificationsEnabled, "boolean");
+    assert.equal(settings.minimizeToTray, true);
+    assert.equal(settings.notificationsEnabled, true);
+  });
+
+  await t.test("setTraySettings updates and persists minimizeToTray and notificationsEnabled", async () => {
+    const updated = await setTraySettings({
+      minimizeToTray: false,
+      notificationsEnabled: false,
+    });
+    assert.equal(updated.minimizeToTray, false);
+    assert.equal(updated.notificationsEnabled, false);
+
+    const current = await getTraySettings();
+    assert.equal(current.minimizeToTray, false);
+    assert.equal(current.notificationsEnabled, false);
   });
 });
