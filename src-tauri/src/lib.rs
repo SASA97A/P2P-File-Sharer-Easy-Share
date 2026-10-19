@@ -1,6 +1,7 @@
 pub mod app_state;
 pub mod client;
 pub mod commands;
+pub mod crypto;
 pub mod discovery;
 pub mod models;
 pub mod notifications;
