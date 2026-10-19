@@ -158,3 +158,6 @@ skills-lock.json
 
 
 
+
+# Tauri generated schemas
+/src-tauri/gen/
