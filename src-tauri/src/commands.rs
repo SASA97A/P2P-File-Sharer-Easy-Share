@@ -15,6 +15,8 @@ pub struct FileSelection {
     pub name: Option<String>,
     #[serde(default, alias = "fileId", alias = "id")]
     pub file_id: Option<String>,
+    #[serde(default, alias = "relativePath", alias = "relative_path")]
+    pub relative_path: Option<String>,
 }
 
 /// Detailed representation of a selected file on the host machine.
@@ -23,6 +25,8 @@ pub struct SelectedFile {
     pub name: String,
     pub path: String,
     pub size: u64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub relative_path: Option<String>,
 }
 
 /// Recursively resolves file metadata (name, size, absolute path) from a slice of path references.
@@ -40,8 +44,14 @@ pub fn inspect_file_paths<P: AsRef<std::path::Path>>(paths: &[P]) -> Vec<Selecte
                 name,
                 path: path_ref.to_string_lossy().to_string(),
                 size,
+                relative_path: None,
             });
         } else if path_ref.is_dir() {
+            let root_name = path_ref
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "folder".to_string());
+
             let mut dir_stack = vec![path_ref.to_path_buf()];
             while let Some(current_dir) = dir_stack.pop() {
                 if let Ok(entries) = std::fs::read_dir(&current_dir) {
@@ -56,10 +66,19 @@ pub fn inspect_file_paths<P: AsRef<std::path::Path>>(paths: &[P]) -> Vec<Selecte
                                     .map(|s| s.to_string_lossy().to_string())
                                     .unwrap_or_else(|| "unnamed_file".to_string());
                                 let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
+                                let relative_path = if let Ok(rel) = sub_path.strip_prefix(path_ref) {
+                                    let inner = rel.to_string_lossy().replace('\\', "/");
+                                    format!("{}/{}", root_name, inner)
+                                } else {
+                                    name.clone()
+                                };
+
                                 results.push(SelectedFile {
                                     name,
                                     path: sub_path.to_string_lossy().to_string(),
                                     size,
+                                    relative_path: Some(relative_path),
                                 });
                             }
                         }
@@ -341,6 +360,7 @@ pub async fn start_transfer(
             .unwrap_or_else(|| format!("f_{}_{}", idx, uuid::Uuid::new_v4()));
         let raw_path = sel.path.clone();
         let custom_name = sel.name;
+        let rel_path = sel.relative_path;
         tasks.push(tokio::spawn(async move {
             let mut file_obj = FileToSend::from_path_async(file_id, path)
                 .await
@@ -350,6 +370,9 @@ pub async fn start_transfer(
                 if !custom_name.trim().is_empty() {
                     file_obj.name = custom_name;
                 }
+            }
+            if let Some(rel) = rel_path {
+                file_obj = file_obj.with_relative_path(rel);
             }
             Ok::<FileToSend, String>(file_obj)
         }));

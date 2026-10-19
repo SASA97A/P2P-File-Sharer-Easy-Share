@@ -451,6 +451,23 @@ async fn test_inspect_file_paths_deep_recursion() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+#[test]
+fn test_inspect_file_paths_preserves_relative_directory_tree() {
+    let temp_root = std::env::temp_dir().join("easy_share_test_dir_inspect");
+    let _ = std::fs::remove_dir_all(&temp_root);
+    let sub = temp_root.join("Project").join("src");
+    std::fs::create_dir_all(&sub).unwrap();
+    let file_path = sub.join("main.rs");
+    std::fs::write(&file_path, "fn main() {}").unwrap();
+
+    let results = inspect_file_paths(&[temp_root.join("Project")]);
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].name, "main.rs");
+    assert_eq!(results[0].relative_path, Some("Project/src/main.rs".to_string()));
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
 #[tokio::test]
 async fn test_app_state_cancellation_token_lifecycle() {
     let temp_dir = setup_test_dir("cancellation_token");
