@@ -13,6 +13,22 @@ pub struct AppSettings {
     pub download_dir: Option<String>,
     #[serde(default)]
     pub speed_limit_bps: Option<u64>,
+    #[serde(default)]
+    pub minimize_to_tray: Option<bool>,
+    #[serde(default)]
+    pub notifications_enabled: Option<bool>,
+}
+
+impl AppSettings {
+    /// Returns whether the window close action should minimize to the system tray. Defaults to `true`.
+    pub fn minimize_to_tray(&self) -> bool {
+        self.minimize_to_tray.unwrap_or(true)
+    }
+
+    /// Returns whether desktop notifications are enabled. Defaults to `true`.
+    pub fn notifications_enabled(&self) -> bool {
+        self.notifications_enabled.unwrap_or(true)
+    }
 }
 
 /// Loads application settings from the specified directory.

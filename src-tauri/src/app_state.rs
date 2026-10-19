@@ -291,4 +291,23 @@ impl AppState {
     pub fn clear_history(&self) -> Result<(), String> {
         crate::storage::history::clear_history(&self.config_dir)
     }
+
+    /// Returns the current system tray and notification settings: (minimize_to_tray, notifications_enabled).
+    pub async fn get_tray_settings(&self) -> (bool, bool) {
+        let settings = crate::storage::settings::load_settings(&self.config_dir);
+        (settings.minimize_to_tray(), settings.notifications_enabled())
+    }
+
+    /// Updates and persists system tray and notification preferences.
+    pub async fn set_tray_settings(
+        &self,
+        minimize_to_tray: bool,
+        notifications_enabled: bool,
+    ) -> Result<(bool, bool), String> {
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.minimize_to_tray = Some(minimize_to_tray);
+        settings.notifications_enabled = Some(notifications_enabled);
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+        Ok((minimize_to_tray, notifications_enabled))
+    }
 }

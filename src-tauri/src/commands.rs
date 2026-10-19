@@ -962,3 +962,38 @@ pub async fn open_file(path: String) -> Result<(), String> {
 
     Ok(())
 }
+
+/// Payload describing system tray and notification preferences.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TraySettingsPayload {
+    #[serde(alias = "minimizeToTray")]
+    pub minimize_to_tray: bool,
+    #[serde(alias = "notificationsEnabled")]
+    pub notifications_enabled: bool,
+}
+
+/// Returns the current system tray and desktop notification settings.
+#[tauri::command]
+pub async fn get_tray_settings(state: State<'_, AppState>) -> Result<TraySettingsPayload, String> {
+    let (minimize_to_tray, notifications_enabled) = state.get_tray_settings().await;
+    Ok(TraySettingsPayload {
+        minimize_to_tray,
+        notifications_enabled,
+    })
+}
+
+/// Updates and persists system tray and desktop notification settings.
+#[tauri::command]
+pub async fn set_tray_settings(
+    state: State<'_, AppState>,
+    minimize_to_tray: bool,
+    notifications_enabled: bool,
+) -> Result<TraySettingsPayload, String> {
+    let (min, notif) = state
+        .set_tray_settings(minimize_to_tray, notifications_enabled)
+        .await?;
+    Ok(TraySettingsPayload {
+        minimize_to_tray: min,
+        notifications_enabled: notif,
+    })
+}

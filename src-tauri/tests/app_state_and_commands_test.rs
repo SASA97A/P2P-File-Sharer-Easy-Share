@@ -268,6 +268,28 @@ fn test_transfer_batch_completed_payload_serialization() {
     assert_eq!(deserialized.total_bytes, 10485760);
 }
 
+#[test]
+fn test_tray_settings_payload_serialization() {
+    use easy_share_lib::commands::TraySettingsPayload;
+
+    let payload = TraySettingsPayload {
+        minimize_to_tray: true,
+        notifications_enabled: false,
+    };
+
+    let serialized = serde_json::to_string(&payload).expect("should serialize tray settings payload");
+    let deserialized: TraySettingsPayload =
+        serde_json::from_str(&serialized).expect("should deserialize tray settings payload");
+
+    assert_eq!(deserialized, payload);
+
+    // Test camelCase alias deserialization from frontend
+    let json_camel = r#"{"minimizeToTray": false, "notificationsEnabled": true}"#;
+    let des_camel: TraySettingsPayload = serde_json::from_str(json_camel).unwrap();
+    assert!(!des_camel.minimize_to_tray);
+    assert!(des_camel.notifications_enabled);
+}
+
 #[tokio::test]
 async fn test_build_pairing_payload_and_regeneration() {
     let temp_dir = setup_test_dir("pairing_payload");
