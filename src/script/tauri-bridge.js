@@ -46,6 +46,34 @@ async function getListen() {
   return null;
 }
 
+// Helper to resolve the active Tauri Webview / Window handle for window-scoped events
+async function getWebviewWindow() {
+  if (typeof window !== "undefined") {
+    if (window.__TAURI__?.webviewWindow?.getCurrentWebviewWindow) {
+      return window.__TAURI__.webviewWindow.getCurrentWebviewWindow();
+    }
+    if (window.__TAURI__?.webview?.getCurrentWebview) {
+      return window.__TAURI__.webview.getCurrentWebview();
+    }
+    if (window.__TAURI__?.window?.getCurrentWindow) {
+      return window.__TAURI__.window.getCurrentWindow();
+    }
+    try {
+      const ww = await import("@tauri-apps/api/webviewWindow");
+      if (ww?.getCurrentWebviewWindow && window.__TAURI_INTERNALS__) {
+        return ww.getCurrentWebviewWindow();
+      }
+    } catch (_e) {}
+    try {
+      const w = await import("@tauri-apps/api/window");
+      if (w?.getCurrentWindow && window.__TAURI_INTERNALS__) {
+        return w.getCurrentWindow();
+      }
+    } catch (_e) {}
+  }
+  return null;
+}
+
 // Fallback state for standalone browser execution / testing
 const mockState = {
   deviceInfo: {
@@ -668,19 +696,83 @@ export async function inspectPaths(paths) {
 }
 
 // -------------------------------------------------------------
-// Event Subscription Helpers
+// Drag & Drop Handling (Tauri 2 onDragDropEvent with Fallbacks)
 // -------------------------------------------------------------
 
+const dragDropCallbacks = new Set();
+const dragHoverCallbacks = new Set();
+const dragLeaveCallbacks = new Set();
+let dragDropInitialized = false;
+
+async function ensureDragDropSubscription() {
+  if (dragDropInitialized) return;
+  dragDropInitialized = true;
+
+  const win = await getWebviewWindow();
+  if (win && typeof win.onDragDropEvent === "function") {
+    try {
+      await win.onDragDropEvent((event) => {
+        const payload = event?.payload || {};
+        const type = payload.type;
+        if (type === "enter" || type === "over") {
+          for (const cb of dragHoverCallbacks) {
+            try { cb(payload); } catch (e) { console.error(e); }
+          }
+        } else if (type === "leave") {
+          for (const cb of dragLeaveCallbacks) {
+            try { cb(payload); } catch (e) { console.error(e); }
+          }
+        } else if (type === "drop") {
+          for (const cb of dragDropCallbacks) {
+            try { cb(payload); } catch (e) { console.error(e); }
+          }
+        }
+      });
+      return;
+    } catch (e) {
+      console.warn("[TauriBridge] Failed to register onDragDropEvent, falling back to legacy event listeners:", e);
+    }
+  }
+
+  // Fallback to legacy Tauri events or standalone mock event bus
+  await subscribeEvent("tauri://drag-drop", (payload) => {
+    for (const cb of dragDropCallbacks) {
+      try { cb(payload); } catch (e) { console.error(e); }
+    }
+  });
+  await subscribeEvent("tauri://drag-over", (payload) => {
+    for (const cb of dragHoverCallbacks) {
+      try { cb(payload); } catch (e) { console.error(e); }
+    }
+  });
+  await subscribeEvent("tauri://drag-enter", (payload) => {
+    for (const cb of dragHoverCallbacks) {
+      try { cb(payload); } catch (e) { console.error(e); }
+    }
+  });
+  await subscribeEvent("tauri://drag-leave", (payload) => {
+    for (const cb of dragLeaveCallbacks) {
+      try { cb(payload); } catch (e) { console.error(e); }
+    }
+  });
+}
+
 export async function onDragDrop(cb) {
-  return await subscribeEvent("tauri://drag-drop", cb);
+  dragDropCallbacks.add(cb);
+  await ensureDragDropSubscription();
+  return () => dragDropCallbacks.delete(cb);
 }
 
 export async function onDragHover(cb) {
-  return await subscribeEvent("tauri://drag-over", cb);
+  dragHoverCallbacks.add(cb);
+  await ensureDragDropSubscription();
+  return () => dragHoverCallbacks.delete(cb);
 }
 
 export async function onDragLeave(cb) {
-  return await subscribeEvent("tauri://drag-leave", cb);
+  dragLeaveCallbacks.add(cb);
+  await ensureDragDropSubscription();
+  return () => dragLeaveCallbacks.delete(cb);
 }
 
 export async function onPeerFound(cb) {

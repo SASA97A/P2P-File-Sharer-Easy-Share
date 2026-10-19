@@ -220,9 +220,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Prevent default window-level drag/drop navigation
+  // Prevent default window-level drag/drop navigation while capturing dropped files
   window.addEventListener("dragover", (e) => e.preventDefault(), false);
-  window.addEventListener("drop", (e) => e.preventDefault(), false);
+  window.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (dropArea) dropArea.classList.remove("drag-over");
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length > 0) {
+      addFiles(dt.files);
+    }
+  }, false);
 
   // -------------------------------------------------------------
   // 4. Transfer Logic & Consent Setup
