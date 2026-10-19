@@ -51,6 +51,9 @@ impl AppState {
         config_dir: PathBuf,
         pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     ) -> Self {
+        let initial_speed_limit = crate::storage::settings::load_settings(&config_dir)
+            .speed_limit_bps
+            .unwrap_or(0);
         Self {
             server_state,
             discovery_handle: Arc::new(RwLock::new(discovery_handle)),
@@ -60,7 +63,7 @@ impl AppState {
             pending_consents,
             cancellation_tokens: Arc::new(RwLock::new(HashMap::new())),
             transfer_controls: Arc::new(RwLock::new(HashMap::new())),
-            speed_limit_bps: Arc::new(AtomicU64::new(0)),
+            speed_limit_bps: Arc::new(AtomicU64::new(initial_speed_limit)),
         }
     }
 
@@ -139,13 +142,17 @@ impl AppState {
     }
 
     /// Sets the global outbound speed limit in bytes per second (0 = unlimited),
-    /// and dynamically propagates the new limit to all active transfer sessions.
+    /// persists it to settings.json, and dynamically propagates the new limit to all active transfer sessions.
     pub async fn set_speed_limit(&self, limit_bps: u64) {
         self.speed_limit_bps.store(limit_bps, Ordering::SeqCst);
         let controls = self.transfer_controls.read().await;
         for control in controls.values() {
             control.set_speed_limit(limit_bps);
         }
+
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.speed_limit_bps = Some(limit_bps);
+        let _ = crate::storage::settings::save_settings(&self.config_dir, &settings);
     }
 
     /// Returns a clone of the current device info.

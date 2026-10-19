@@ -60,6 +60,7 @@ impl TransferControl {
     /// Set or update the speed limit in bytes per second (0 = unlimited).
     pub fn set_speed_limit(&self, limit_bps: u64) {
         self.speed_limit_bps.store(limit_bps, Ordering::SeqCst);
+        self.pause_notify.notify_waiters();
     }
 
     /// Retrieve the current speed limit in bytes per second (0 = unlimited).
@@ -70,6 +71,7 @@ impl TransferControl {
     /// Pause the transfer stream.
     pub fn pause(&self) {
         self.is_paused.store(true, Ordering::SeqCst);
+        self.pause_notify.notify_waiters();
     }
 
     /// Resume the transfer stream if paused.

@@ -305,7 +305,7 @@ async fn test_app_state_speed_limit_updates_active_controls() {
     let server_state = Arc::new(ServerState::new(info, test_dir.clone()));
 
     let app_state = AppState::new(
-        server_state,
+        server_state.clone(),
         None,
         test_dir.clone(),
         Arc::new(RwLock::new(HashMap::new())),
@@ -320,6 +320,21 @@ async fn test_app_state_speed_limit_updates_active_controls() {
     app_state.set_speed_limit(5_242_880).await;
     assert_eq!(app_state.get_speed_limit().await, 5_242_880);
     assert_eq!(ctrl.speed_limit(), 5_242_880);
+
+    // Verify persistence to settings.json
+    let loaded_settings = easy_share_lib::storage::settings::load_settings(&test_dir);
+    assert_eq!(loaded_settings.speed_limit_bps, Some(5_242_880));
+
+    // Verify a newly created AppState loads the persisted speed limit
+    let app_state_reloaded = AppState::new(
+        server_state,
+        None,
+        test_dir.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+    assert_eq!(app_state_reloaded.get_speed_limit().await, 5_242_880);
+
+    let _ = std::fs::remove_dir_all(&test_dir);
 }
 
 

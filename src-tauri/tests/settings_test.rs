@@ -24,6 +24,7 @@ fn test_save_and_load_settings() {
     let settings = AppSettings {
         device_name: Some("Work-Laptop-Pro".to_string()),
         download_dir: Some(dir.join("MyDownloads").to_string_lossy().to_string()),
+        speed_limit_bps: Some(5_242_880),
     };
 
     let save_res = save_settings(&dir, &settings);
@@ -35,6 +36,7 @@ fn test_save_and_load_settings() {
         loaded.download_dir,
         Some(dir.join("MyDownloads").to_string_lossy().to_string())
     );
+    assert_eq!(loaded.speed_limit_bps, Some(5_242_880));
     let _ = fs::remove_dir_all(&dir);
 }
 

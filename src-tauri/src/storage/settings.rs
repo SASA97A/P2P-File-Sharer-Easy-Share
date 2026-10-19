@@ -11,6 +11,8 @@ pub struct AppSettings {
     pub device_name: Option<String>,
     #[serde(default)]
     pub download_dir: Option<String>,
+    #[serde(default)]
+    pub speed_limit_bps: Option<u64>,
 }
 
 /// Loads application settings from the specified directory.
