@@ -78,6 +78,17 @@ pub struct SessionState {
     pub created_at: Instant,
     pub file_progress: HashMap<String, u64>,
     pub tracker: Arc<std::sync::Mutex<crate::client::metrics::ThroughputTracker>>,
+    pub session_key: Option<crate::crypto::SessionKey>,
+}
+
+/// Metadata result returned when creating a session on the receiver.
+#[derive(Debug, Clone)]
+pub struct SessionCreated {
+    pub token: String,
+    pub offsets: HashMap<String, u64>,
+    pub encryption_mode: Option<String>,
+    pub ephemeral_public_key: Option<String>,
+    pub pin_verified: Option<bool>,
 }
 
 /// Shared server state across all Axum handlers.
@@ -87,6 +98,7 @@ pub struct ServerState {
     pub consent_policy: ConsentPolicy,
     pub sessions: Arc<RwLock<HashMap<String, SessionState>>>,
     pub event_tx: broadcast::Sender<ServerTransferEvent>,
+    pub encryption_enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ServerState {
@@ -111,7 +123,18 @@ impl ServerState {
             consent_policy,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             event_tx,
+            encryption_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
+    }
+
+    /// Returns whether end-to-end encryption is enabled on the server.
+    pub fn is_encryption_enabled(&self) -> bool {
+        self.encryption_enabled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Sets whether end-to-end encryption is enabled on the server.
+    pub fn set_encryption_enabled(&self, enabled: bool) {
+        self.encryption_enabled.store(enabled, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Subscribes to receiver-side transfer events.
@@ -211,8 +234,8 @@ impl ServerState {
         }
     }
 
-    /// Creates a new session entry in state, generating a unique token and discovering partial offsets.
-    pub async fn create_session(&self, request: TransferRequest) -> (String, HashMap<String, u64>) {
+    /// Creates a new session entry in state, negotiating encryption and discovering partial offsets.
+    pub async fn create_session(&self, request: TransferRequest) -> Result<SessionCreated, String> {
         let token = format!("sess-{}", uuid::Uuid::new_v4());
         let mut offsets = HashMap::new();
 
@@ -226,6 +249,52 @@ impl ServerState {
             offsets.insert(file.file_id.clone(), offset);
         }
 
+        let mut session_key = None;
+        let mut encryption_mode = None;
+        let mut ephemeral_public_key = None;
+        let mut pin_verified = None;
+
+        if self.is_encryption_enabled()
+            && request.encryption_mode.as_deref() == Some("ChaCha20Poly1305")
+            && request.ephemeral_public_key.is_some()
+        {
+            let sender_pub_hex = request.ephemeral_public_key.as_ref().unwrap();
+            let sender_pub = crate::crypto::public_key_from_hex(sender_pub_hex)
+                .map_err(|e| format!("Invalid sender ephemeral public key: {}", e))?;
+
+            let my_pin = self
+                .device_info
+                .read()
+                .await
+                .pairing_pin
+                .clone()
+                .unwrap_or_default();
+
+            let pin_to_use = if let Some(ref auth) = request.pin_auth {
+                if crate::crypto::verify_pin_auth(&my_pin, &request.request_id, auth) {
+                    pin_verified = Some(true);
+                    my_pin.clone()
+                } else {
+                    return Err("PIN verification failed".to_string());
+                }
+            } else {
+                pin_verified = Some(false);
+                String::new()
+            };
+
+            let (receiver_secret, receiver_pub) = crate::crypto::generate_ephemeral_keypair();
+            let key = crate::crypto::derive_session_key(
+                receiver_secret,
+                &sender_pub,
+                &pin_to_use,
+                &token,
+            );
+
+            session_key = Some(key);
+            encryption_mode = Some("ChaCha20Poly1305".to_string());
+            ephemeral_public_key = Some(crate::crypto::public_key_to_hex(&receiver_pub));
+        }
+
         let session = SessionState {
             request,
             status: TransferStatus::Accepted,
@@ -234,10 +303,17 @@ impl ServerState {
             tracker: Arc::new(std::sync::Mutex::new(
                 crate::client::ThroughputTracker::new(),
             )),
+            session_key,
         };
 
         self.sessions.write().await.insert(token.clone(), session);
-        (token, offsets)
+        Ok(SessionCreated {
+            token,
+            offsets,
+            encryption_mode,
+            ephemeral_public_key,
+            pin_verified,
+        })
     }
 
     /// Retrieves session data by session token.

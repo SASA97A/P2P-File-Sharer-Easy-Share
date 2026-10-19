@@ -67,6 +67,12 @@ pub struct TransferRequest {
     pub sender_os: String,
     pub total_bytes: u64,
     pub files: Vec<FileMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub encryption_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ephemeral_public_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pin_auth: Option<String>,
 }
 
 impl TransferRequest {
@@ -83,6 +89,9 @@ impl TransferRequest {
             sender_os: sender_os.into(),
             total_bytes,
             files,
+            encryption_mode: None,
+            ephemeral_public_key: None,
+            pin_auth: None,
         }
     }
 }
@@ -97,6 +106,12 @@ pub struct TransferResponse {
     pub existing_offsets: HashMap<String, u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub encryption_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ephemeral_public_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pin_verified: Option<bool>,
 }
 
 impl TransferResponse {
@@ -106,6 +121,9 @@ impl TransferResponse {
             session_token: Some(session_token.into()),
             existing_offsets,
             reason: None,
+            encryption_mode: None,
+            ephemeral_public_key: None,
+            pin_verified: None,
         }
     }
 
@@ -115,6 +133,9 @@ impl TransferResponse {
             session_token: None,
             existing_offsets: HashMap::new(),
             reason: Some(reason.into()),
+            encryption_mode: None,
+            ephemeral_public_key: None,
+            pin_verified: None,
         }
     }
 }

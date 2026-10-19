@@ -116,3 +116,19 @@ pub fn decrypt_chunk(
         .decrypt(&nonce, ciphertext)
         .map_err(|e| format!("Decryption authentication failed: {}", e))
 }
+
+/// Computes a Blake3 HMAC/keyed authentication tag for PIN verification during handshake.
+pub fn compute_pin_auth(pin: &str, request_id: &str) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"EASY_SHARE_PIN_AUTH:");
+    hasher.update(pin.as_bytes());
+    hasher.update(b":");
+    hasher.update(request_id.as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
+/// Verifies whether the provided PIN authentication tag matches the expected PIN and request ID.
+pub fn verify_pin_auth(pin: &str, request_id: &str, auth_hex: &str) -> bool {
+    let expected = compute_pin_auth(pin, request_id);
+    expected.eq_ignore_ascii_case(auth_hex)
+}

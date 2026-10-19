@@ -51,9 +51,9 @@ impl AppState {
         config_dir: PathBuf,
         pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     ) -> Self {
-        let initial_speed_limit = crate::storage::settings::load_settings(&config_dir)
-            .speed_limit_bps
-            .unwrap_or(0);
+        let settings = crate::storage::settings::load_settings(&config_dir);
+        let initial_speed_limit = settings.speed_limit_bps.unwrap_or(0);
+        server_state.set_encryption_enabled(settings.encryption_enabled());
         Self {
             server_state,
             discovery_handle: Arc::new(RwLock::new(discovery_handle)),
@@ -322,6 +322,7 @@ impl AppState {
         let mut settings = crate::storage::settings::load_settings(&self.config_dir);
         settings.encryption_enabled = Some(enabled);
         crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+        self.server_state.set_encryption_enabled(enabled);
         Ok(enabled)
     }
 }

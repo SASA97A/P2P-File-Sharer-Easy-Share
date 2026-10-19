@@ -520,3 +520,198 @@ async fn test_send_file_with_relative_path_directory_tree_preserved() {
     let _ = fs::remove_dir_all(&server_dir);
     let _ = fs::remove_dir_all(&client_dir);
 }
+
+#[tokio::test]
+async fn test_end_to_end_encrypted_transfer_with_pin() {
+    let server_dir = setup_test_dir("e2ee_server");
+    let client_dir = setup_test_dir("e2ee_client");
+
+    let file_path = client_dir.join("encrypted_payload.bin");
+    let file_size = 1024 * 1024 + 123; // ~1 MB
+    let expected_hash = create_test_file(&file_path, file_size);
+
+    let file_to_send = FileToSend::from_path("f-e2ee", &file_path).expect("failed to create FileToSend");
+
+    let mut dev_info = sample_device_info(0);
+    dev_info.pairing_pin = Some("654321".to_string());
+    let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
+
+    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let client = TransferClient::with_chunk_size(256 * 1024);
+    let mut peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+    peer.pairing_pin = Some("654321".to_string());
+
+    // Prepare encrypted request
+    let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let pin_auth = easy_share_lib::crypto::compute_pin_auth("654321", "req-e2ee");
+
+    let mut req = TransferRequest::new("req-e2ee", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    req.pin_auth = Some(pin_auth);
+
+    let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
+    assert_eq!(resp.status, TransferStatus::Accepted);
+    assert_eq!(resp.encryption_mode.as_deref(), Some("ChaCha20Poly1305"));
+    assert_eq!(resp.pin_verified, Some(true));
+
+    let receiver_pub_hex = resp.ephemeral_public_key.expect("receiver pub key missing");
+    let receiver_pub = easy_share_lib::crypto::public_key_from_hex(&receiver_pub_hex).expect("valid hex");
+    let token = resp.session_token.expect("session token missing");
+
+    let session_key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, "654321", &token);
+    client.register_session_key(&token, session_key).await;
+
+    // Send file chunks
+    client
+        .send_file_resumable(&peer, &token, &file_to_send, |_, _| {})
+        .await
+        .expect("upload encrypted chunks failed");
+
+    let finish_resp = client
+        .finish_transfer(&peer, &token, &file_to_send.file_id)
+        .await
+        .expect("finish failed");
+
+    let saved_path = PathBuf::from(&finish_resp.saved_path);
+    assert!(saved_path.exists(), "Decrypted file must exist on disk");
+    let saved_hash = FileManager::calculate_blake3_file(&saved_path).expect("blake3 calculate failed");
+    assert_eq!(saved_hash, expected_hash, "Decrypted content must match original plaintext");
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_end_to_end_encrypted_transfer_tampered_chunk_rejected() {
+    let server_dir = setup_test_dir("e2ee_tamper_server");
+    let client_dir = setup_test_dir("e2ee_tamper_client");
+
+    let file_path = client_dir.join("tamper_payload.bin");
+    let file_size = 64 * 1024;
+    create_test_file(&file_path, file_size);
+
+    let file_to_send = FileToSend::from_path("f-tamper", &file_path).expect("failed to create FileToSend");
+
+    let mut dev_info = sample_device_info(0);
+    dev_info.pairing_pin = Some("999111".to_string());
+    let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
+
+    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let client = TransferClient::new();
+    let mut peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+    peer.pairing_pin = Some("999111".to_string());
+
+    let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let pin_auth = easy_share_lib::crypto::compute_pin_auth("999111", "req-tamper");
+
+    let mut req = TransferRequest::new("req-tamper", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    req.pin_auth = Some(pin_auth);
+
+    let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
+    let receiver_pub_hex = resp.ephemeral_public_key.expect("receiver pub key missing");
+    let receiver_pub = easy_share_lib::crypto::public_key_from_hex(&receiver_pub_hex).expect("valid hex");
+    let token = resp.session_token.expect("session token missing");
+
+    let session_key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, "999111", &token);
+
+    // Encrypt chunk manually and tamper with 1 bit
+    let raw_chunk = vec![0xAB; 1024];
+    let mut encrypted = easy_share_lib::crypto::encrypt_chunk(&session_key, 0, &raw_chunk).unwrap();
+    encrypted[10] ^= 0xFF; // Tamper
+
+    let send_res = client
+        .send_chunk_url_indexed(&peer.base_url(), &token, &file_to_send.file_id, 0, Some(0), encrypted)
+        .await;
+
+    assert!(send_res.is_err(), "Tampered encrypted chunk must be rejected by receiver");
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_end_to_end_transfer_wrong_pin_auth_rejected() {
+    let server_dir = setup_test_dir("e2ee_wrong_pin_server");
+    let client_dir = setup_test_dir("e2ee_wrong_pin_client");
+
+    let file_path = client_dir.join("wrong_pin.bin");
+    create_test_file(&file_path, 1024);
+    let file_to_send = FileToSend::from_path("f-wrong-pin", &file_path).unwrap();
+
+    let mut dev_info = sample_device_info(0);
+    dev_info.pairing_pin = Some("123456".to_string());
+    let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
+
+    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let (_, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    // Compute auth with WRONG pin "000000"
+    let wrong_pin_auth = easy_share_lib::crypto::compute_pin_auth("000000", "req-wrong");
+
+    let mut req = TransferRequest::new("req-wrong", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    req.pin_auth = Some(wrong_pin_auth);
+
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Declined);
+    assert_eq!(resp.reason.as_deref(), Some("PIN verification failed"));
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_transfer_with_encryption_disabled_in_receiver_falls_back_to_plaintext() {
+    let server_dir = setup_test_dir("e2ee_disabled_server");
+    let client_dir = setup_test_dir("e2ee_disabled_client");
+
+    let file_path = client_dir.join("plaintext_payload.bin");
+    let file_size = 256 * 1024;
+    let expected_hash = create_test_file(&file_path, file_size);
+    let file_to_send = FileToSend::from_path("f-plain", &file_path).unwrap();
+
+    let dev_info = sample_device_info(0);
+    let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
+    // Disable encryption on receiver
+    state.set_encryption_enabled(false);
+
+    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let (_, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+
+    let mut req = TransferRequest::new("req-fallback", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Accepted);
+    // Receiver disabled encryption, so negotiated mode is None
+    assert_eq!(resp.encryption_mode, None);
+
+    let token = resp.session_token.unwrap();
+    client
+        .send_file_resumable(&peer, &token, &file_to_send, |_, _| {})
+        .await
+        .unwrap();
+
+    let finish_resp = client
+        .finish_transfer(&peer, &token, &file_to_send.file_id)
+        .await
+        .unwrap();
+
+    let saved_path = PathBuf::from(&finish_resp.saved_path);
+    assert!(saved_path.exists());
+    let saved_hash = FileManager::calculate_blake3_file(&saved_path).unwrap();
+    assert_eq!(saved_hash, expected_hash);
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}

@@ -102,8 +102,19 @@ pub async fn handle_transfer_request(
 ) -> Result<Json<TransferResponse>, (StatusCode, Json<TransferResponse>)> {
     match state.evaluate_consent(&request).await {
         Ok(()) => {
-            let (token, offsets) = state.create_session(request).await;
-            Ok(Json(TransferResponse::accepted(token, offsets)))
+            match state.create_session(request).await {
+                Ok(created) => {
+                    let mut resp = TransferResponse::accepted(created.token, created.offsets);
+                    resp.encryption_mode = created.encryption_mode;
+                    resp.ephemeral_public_key = created.ephemeral_public_key;
+                    resp.pin_verified = created.pin_verified;
+                    Ok(Json(resp))
+                }
+                Err(reason) => Err((
+                    StatusCode::FORBIDDEN,
+                    Json(TransferResponse::declined(reason)),
+                )),
+            }
         }
         Err(reason) => Err((
             StatusCode::FORBIDDEN,
@@ -174,6 +185,8 @@ pub struct ChunkQuery {
     pub session_token: String,
     pub file_id: String,
     pub offset: u64,
+    #[serde(default)]
+    pub chunk_index: Option<u64>,
 }
 
 /// POST /api/v1/transfer/chunk
@@ -182,7 +195,7 @@ pub async fn handle_transfer_chunk(
     Query(query): Query<ChunkQuery>,
     body: Body,
 ) -> Result<Json<ChunkResponse>, (StatusCode, String)> {
-    let (file_name, file_size, file_key) = {
+    let (file_name, file_size, file_key, session_key) = {
         let sessions = state.sessions.read().await;
         let session = sessions.get(&query.session_token).ok_or((
             StatusCode::UNAUTHORIZED,
@@ -206,7 +219,12 @@ pub async fn handle_transfer_chunk(
                 "File ID not found in session".to_string(),
             ))?;
 
-        (file.name.clone(), file.size, file.file_key())
+        (
+            file.name.clone(),
+            file.size,
+            file.file_key(),
+            session.session_key.clone(),
+        )
     };
 
     if query.offset > file_size {
@@ -258,33 +276,74 @@ pub async fn handle_transfer_chunk(
     let mut bytes_written: u64 = 0;
     let mut stream = body.into_data_stream();
 
-    while let Some(chunk_res) = stream.next().await {
-        let chunk = chunk_res.map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("Error reading body stream: {}", e),
-            )
-        })?;
+    if let Some(ref key) = session_key {
+        // Collect encrypted payload for authenticated AEAD decryption
+        let mut encrypted_payload = Vec::new();
+        while let Some(chunk_res) = stream.next().await {
+            let chunk = chunk_res.map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Error reading body stream: {}", e),
+                )
+            })?;
+            encrypted_payload.extend_from_slice(&chunk);
+        }
 
-        let chunk_len = chunk.len() as u64;
-        if query.offset + bytes_written + chunk_len > file_size {
+        let chunk_index = query
+            .chunk_index
+            .unwrap_or_else(|| query.offset / (crate::client::DEFAULT_CHUNK_SIZE as u64));
+
+        let decrypted = crate::crypto::decrypt_chunk(key, chunk_index, &encrypted_payload)
+            .map_err(|e| (StatusCode::UNAUTHORIZED, e))?;
+
+        let decrypted_len = decrypted.len() as u64;
+        if query.offset + decrypted_len > file_size {
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!(
-                    "Chunk data exceeds declared file size (offset={}, written={}, chunk_len={}, file_size={})",
-                    query.offset, bytes_written, chunk_len, file_size
+                    "Decrypted chunk data exceeds declared file size (offset={}, len={}, file_size={})",
+                    query.offset, decrypted_len, file_size
                 ),
             ));
         }
 
-        writer.write_all(&chunk).await.map_err(|e| {
+        writer.write_all(&decrypted).await.map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to write chunk to disk: {}", e),
             )
         })?;
 
-        bytes_written += chunk.len() as u64;
+        bytes_written = decrypted_len;
+    } else {
+        while let Some(chunk_res) = stream.next().await {
+            let chunk = chunk_res.map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Error reading body stream: {}", e),
+                )
+            })?;
+
+            let chunk_len = chunk.len() as u64;
+            if query.offset + bytes_written + chunk_len > file_size {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Chunk data exceeds declared file size (offset={}, written={}, chunk_len={}, file_size={})",
+                        query.offset, bytes_written, chunk_len, file_size
+                    ),
+                ));
+            }
+
+            writer.write_all(&chunk).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to write chunk to disk: {}", e),
+                )
+            })?;
+
+            bytes_written += chunk.len() as u64;
+        }
     }
 
     writer.flush().await.map_err(|e| {
