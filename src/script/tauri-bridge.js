@@ -446,6 +446,7 @@ export async function startTransfer(peer, files) {
     path: f.fullPath || f.path || f.name,
     name: f.name || undefined,
     file_id: f.id || undefined,
+    relative_path: f.relativePath || f.relative_path || undefined,
   }));
   return await callInvoke("start_transfer", {
     peer,

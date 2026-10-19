@@ -61,6 +61,7 @@ export function addFiles(files) {
       const size = Number(item.size) || 0;
       const fullPath = item.path || item.fullPath || item.filePath || name;
       const id = item.id || item.file_id || generateFileId();
+      const relativePath = item.relativePath || item.relative_path || undefined;
 
       fileObj = {
         id,
@@ -68,6 +69,7 @@ export function addFiles(files) {
         size,
         fullPath,
         path: fullPath,
+        relativePath,
       };
     }
 
@@ -77,7 +79,8 @@ export function addFiles(files) {
         (existing) =>
           existing.fullPath === fileObj.fullPath &&
           existing.name === fileObj.name &&
-          existing.size === fileObj.size
+          existing.size === fileObj.size &&
+          existing.relativePath === fileObj.relativePath
       );
 
       if (!duplicate) {

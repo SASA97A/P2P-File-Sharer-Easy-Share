@@ -144,4 +144,78 @@ test("files module - unique ID assignment and removal by ID", async (t) => {
       globalThis.document.createElement = origCreateElement;
     }
   });
+
+  await t.test("addFiles retains relativePath property", () => {
+    clearFiles();
+    addFiles([
+      {
+        fullPath: "C:/projects/app/src/index.js",
+        name: "index.js",
+        size: 512,
+        relativePath: "app/src/index.js",
+      },
+    ]);
+
+    const staged = getFiles();
+    assert.equal(staged.length, 1);
+    assert.equal(staged[0].relativePath, "app/src/index.js");
+  });
+
+  await t.test("updateFileList displays relativePath in file-detail", () => {
+    const container = {
+      innerHTML: "",
+      children: [],
+      appendChild(child) {
+        this.children.push(child);
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+
+    const mockFiles = [
+      {
+        id: "rel-id-1",
+        name: "main.rs",
+        size: 1024,
+        relativePath: "Project/src/main.rs",
+      },
+    ];
+
+    const origGetElementById = globalThis.document.getElementById;
+    const origCreateElement = globalThis.document.createElement;
+
+    let renderedHtml = "";
+    globalThis.document.getElementById = (id) => (id === "fileList" ? container : null);
+    globalThis.document.createElement = (tag) => {
+      const el = {
+        tagName: tag,
+        dataset: {},
+        style: { setProperty() {} },
+        addEventListener() {},
+      };
+      if (tag === "div") {
+        Object.defineProperty(el, "innerHTML", {
+          set(val) {
+            renderedHtml = val;
+          },
+          get() {
+            return renderedHtml;
+          },
+        });
+      }
+      return el;
+    };
+
+    try {
+      updateFileList(mockFiles, () => {});
+      assert.ok(
+        renderedHtml.includes("Project/src/main.rs"),
+        `rendered html must contain relative path: ${renderedHtml}`
+      );
+    } finally {
+      globalThis.document.getElementById = origGetElementById;
+      globalThis.document.createElement = origCreateElement;
+    }
+  });
 });

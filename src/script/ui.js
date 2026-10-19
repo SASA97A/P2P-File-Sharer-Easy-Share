@@ -235,8 +235,8 @@ export function updateFileList(files, removeFileCb) {
     item.innerHTML = `
       ${renderTypeBadge(file.name)}
       <div class="file-main">
-        <span class="file-name" title="${escapeHtml(file.fullPath || file.name)}">${escapeHtml(file.name)}</span>
-        <span class="file-detail">${escapeHtml(type.label)}</span>
+        <span class="file-name" title="${escapeHtml(file.relativePath || file.fullPath || file.name)}">${escapeHtml(file.name)}</span>
+        <span class="file-detail">${escapeHtml(type.label)}${file.relativePath ? ` · ${escapeHtml(file.relativePath)}` : ""}</span>
         <div class="file-bar"><div class="file-bar-fill"></div></div>
       </div>
       <span class="file-size mono">${formatFileSize(file.size)}</span>

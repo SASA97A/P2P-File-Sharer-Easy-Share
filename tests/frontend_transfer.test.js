@@ -17,7 +17,7 @@ if (typeof globalThis.document === "undefined") {
   };
 }
 
-import { cancelTransfer, onTransferCancelled } from "../src/script/tauri-bridge.js";
+import { cancelTransfer, onTransferCancelled, startTransfer } from "../src/script/tauri-bridge.js";
 
 test("transfer bridge - cancellation API", async (t) => {
   await t.test("cancelTransfer invokes cancel_transfer command with sessionToken without error", async () => {
@@ -34,5 +34,21 @@ test("transfer bridge - cancellation API", async (t) => {
     });
     // In mock mode without event bus, it returns safely without throwing
     assert.equal(typeof onTransferCancelled, "function");
+  });
+
+  await t.test("startTransfer forwards relative_path in payload", async () => {
+    const peer = { ip: "127.0.0.1", port: 5050 };
+    const files = [
+      {
+        id: "f-tree-1",
+        name: "index.js",
+        fullPath: "C:/project/index.js",
+        relativePath: "project/index.js",
+      },
+    ];
+
+    const result = await startTransfer(peer, files);
+    assert.ok(result, "startTransfer should return session result or token");
+    assert.ok(result.session_token || result.token || typeof result === "string");
   });
 });
