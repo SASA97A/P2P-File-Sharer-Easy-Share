@@ -25,6 +25,8 @@ fn test_save_and_load_settings() {
         device_name: Some("Work-Laptop-Pro".to_string()),
         download_dir: Some(dir.join("MyDownloads").to_string_lossy().to_string()),
         speed_limit_bps: Some(5_242_880),
+        minimize_to_tray: None,
+        notifications_enabled: None,
     };
 
     let save_res = save_settings(&dir, &settings);
@@ -136,6 +138,55 @@ async fn test_app_state_set_device_name_validations_and_persists() {
     // 3. Verify persisted in settings
     let settings = load_settings(&dir);
     assert_eq!(settings.device_name, Some("Safar's PC".to_string()));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn test_settings_tray_and_notifications_defaults_and_persistence() {
+    use easy_share_lib::app_state::AppState;
+    use easy_share_lib::models::peer::DeviceInfo;
+    use easy_share_lib::server::state::ServerState;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    let dir = setup_test_dir("tray_notifications_settings");
+    let download_dir = dir.join("downloads");
+    fs::create_dir_all(&download_dir).unwrap();
+
+    // 1. Defaults should be true when missing from settings.json
+    let settings = load_settings(&dir);
+    assert!(settings.minimize_to_tray());
+    assert!(settings.notifications_enabled());
+
+    let info = DeviceInfo::new("Test-Device", "desktop", "windows", "2.0.0", 5050);
+    let server_state = Arc::new(ServerState::new(info, download_dir.clone()));
+    let pending_consents = Arc::new(RwLock::new(HashMap::new()));
+    let app_state = AppState::with_config_dir(
+        server_state.clone(),
+        None,
+        download_dir.clone(),
+        dir.clone(),
+        pending_consents,
+    );
+
+    let (min_to_tray, notifs) = app_state.get_tray_settings().await;
+    assert!(min_to_tray);
+    assert!(notifs);
+
+    // 2. Set to false and verify persistence
+    app_state.set_tray_settings(false, false).await.unwrap();
+
+    let (min_to_tray2, notifs2) = app_state.get_tray_settings().await;
+    assert!(!min_to_tray2);
+    assert!(!notifs2);
+
+    let loaded = load_settings(&dir);
+    assert_eq!(loaded.minimize_to_tray, Some(false));
+    assert_eq!(loaded.notifications_enabled, Some(false));
+    assert!(!loaded.minimize_to_tray());
+    assert!(!loaded.notifications_enabled());
 
     let _ = fs::remove_dir_all(&dir);
 }

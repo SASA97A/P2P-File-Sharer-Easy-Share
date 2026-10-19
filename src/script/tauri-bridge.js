@@ -58,6 +58,8 @@ const mockState = {
   },
   download_dir: "C:\\Users\\MockUser\\Downloads",
   speed_limit_bps: 0,
+  minimize_to_tray: true,
+  notifications_enabled: true,
   peers: [],
   history: [
     {
@@ -226,6 +228,27 @@ async function callInvoke(command, args = {}) {
     case "open_download_dir":
       console.log("[Mock] Opened download directory");
       return;
+
+    case "get_tray_settings":
+      return {
+        minimize_to_tray: mockState.minimize_to_tray ?? true,
+        minimizeToTray: mockState.minimize_to_tray ?? true,
+        notifications_enabled: mockState.notifications_enabled ?? true,
+        notificationsEnabled: mockState.notifications_enabled ?? true,
+      };
+
+    case "set_tray_settings": {
+      const min = args.minimizeToTray ?? args.minimize_to_tray ?? true;
+      const notif = args.notificationsEnabled ?? args.notifications_enabled ?? true;
+      mockState.minimize_to_tray = min;
+      mockState.notifications_enabled = notif;
+      return {
+        minimize_to_tray: min,
+        minimizeToTray: min,
+        notifications_enabled: notif,
+        notificationsEnabled: notif,
+      };
+    }
 
     case "inspect_paths": {
       const paths = args.paths || [];
@@ -529,6 +552,38 @@ export async function setDownloadDir(path) {
  */
 export async function setDeviceName(name) {
   return await callInvoke("set_device_name", { name });
+}
+
+/**
+ * Retrieves the current system tray and desktop notification settings
+ * @returns {Promise<{ minimizeToTray: boolean, notificationsEnabled: boolean }>}
+ */
+export async function getTraySettings() {
+  const res = await callInvoke("get_tray_settings");
+  return {
+    minimizeToTray: res.minimizeToTray ?? res.minimize_to_tray ?? true,
+    notificationsEnabled: res.notificationsEnabled ?? res.notifications_enabled ?? true,
+  };
+}
+
+/**
+ * Updates system tray and desktop notification preferences
+ * @param {{ minimizeToTray?: boolean, notificationsEnabled?: boolean }} settings
+ * @returns {Promise<{ minimizeToTray: boolean, notificationsEnabled: boolean }>}
+ */
+export async function setTraySettings(settings) {
+  const minimizeToTray = settings.minimizeToTray ?? settings.minimize_to_tray ?? true;
+  const notificationsEnabled = settings.notificationsEnabled ?? settings.notifications_enabled ?? true;
+  const res = await callInvoke("set_tray_settings", {
+    minimizeToTray,
+    minimize_to_tray: minimizeToTray,
+    notificationsEnabled,
+    notifications_enabled: notificationsEnabled,
+  });
+  return {
+    minimizeToTray: res.minimizeToTray ?? res.minimize_to_tray ?? true,
+    notificationsEnabled: res.notificationsEnabled ?? res.notifications_enabled ?? true,
+  };
 }
 
 /**

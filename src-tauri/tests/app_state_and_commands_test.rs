@@ -268,6 +268,52 @@ fn test_transfer_batch_completed_payload_serialization() {
     assert_eq!(deserialized.total_bytes, 10485760);
 }
 
+#[test]
+fn test_tray_settings_payload_serialization() {
+    use easy_share_lib::commands::TraySettingsPayload;
+
+    let payload = TraySettingsPayload {
+        minimize_to_tray: true,
+        notifications_enabled: false,
+    };
+
+    let serialized = serde_json::to_string(&payload).expect("should serialize tray settings payload");
+    let deserialized: TraySettingsPayload =
+        serde_json::from_str(&serialized).expect("should deserialize tray settings payload");
+
+    assert_eq!(deserialized, payload);
+
+    // Test camelCase alias deserialization from frontend
+    let json_camel = r#"{"minimizeToTray": false, "notificationsEnabled": true}"#;
+    let des_camel: TraySettingsPayload = serde_json::from_str(json_camel).unwrap();
+    assert!(!des_camel.minimize_to_tray);
+    assert!(des_camel.notifications_enabled);
+}
+
+#[test]
+fn test_format_transfer_tooltip_formatting() {
+    use easy_share_lib::tray::format_transfer_tooltip;
+
+    let tip1 = format_transfer_tooltip("Receiving", 45, Some(14_889_779), Some("project.zip"));
+    assert_eq!(tip1, "Easy Share - Receiving (45% · 14.2 MB/s) (project.zip)");
+
+    let tip2 = format_transfer_tooltip("Sending", 90, Some(512_000), None);
+    assert_eq!(tip2, "Easy Share - Sending (90% · 500 KB/s)");
+
+    let tip3 = format_transfer_tooltip("Receiving", 10, None, None);
+    assert_eq!(tip3, "Easy Share - Receiving (10%)");
+}
+
+#[test]
+fn test_format_bytes_for_notifications() {
+    use easy_share_lib::notifications::format_bytes;
+
+    assert_eq!(format_bytes(512), "512 B");
+    assert_eq!(format_bytes(1024), "1.0 KB");
+    assert_eq!(format_bytes(10 * 1024 * 1024), "10.0 MB");
+    assert_eq!(format_bytes(2 * 1024 * 1024 * 1024), "2.0 GB");
+}
+
 #[tokio::test]
 async fn test_build_pairing_payload_and_regeneration() {
     let temp_dir = setup_test_dir("pairing_payload");

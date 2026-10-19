@@ -13,6 +13,8 @@ import {
   onDeviceInfoUpdated,
   getSpeedLimit,
   setSpeedLimit,
+  getTraySettings,
+  setTraySettings,
 } from "./tauri-bridge.js";
 import { showToast } from "./ui.js";
 
@@ -42,6 +44,16 @@ export async function openSettingsView() {
     const speedSelect = document.getElementById("settingsSpeedLimitSelect");
     if (speedSelect) {
       speedSelect.value = String(speedLimit || 0);
+    }
+
+    const traySettings = await getTraySettings();
+    const minToggle = document.getElementById("settingsMinimizeToTrayToggle");
+    if (minToggle) {
+      minToggle.checked = Boolean(traySettings.minimizeToTray);
+    }
+    const notifToggle = document.getElementById("settingsNotificationsToggle");
+    if (notifToggle) {
+      notifToggle.checked = Boolean(traySettings.notificationsEnabled);
     }
   } catch (err) {
     console.error("Failed to load settings data:", err);
@@ -189,6 +201,52 @@ export function setupSettings() {
       } catch (err) {
         console.error("Failed to update speed limit:", err);
         showToast(`Failed to update speed limit: ${err}`, "error");
+      }
+    });
+  }
+
+  // Minimize to Tray Toggle Handler
+  const minToggle = document.getElementById("settingsMinimizeToTrayToggle");
+  if (minToggle) {
+    minToggle.addEventListener("change", async (e) => {
+      try {
+        const notifToggle = document.getElementById("settingsNotificationsToggle");
+        await setTraySettings({
+          minimizeToTray: e.target.checked,
+          notificationsEnabled: notifToggle ? notifToggle.checked : true,
+        });
+        showToast(
+          e.target.checked
+            ? "Closing window will minimize to system tray"
+            : "Closing window will exit application",
+          "info"
+        );
+      } catch (err) {
+        console.error("Failed to update tray setting:", err);
+        showToast(`Failed to update setting: ${err}`, "error");
+      }
+    });
+  }
+
+  // Desktop Notifications Toggle Handler
+  const notifToggle = document.getElementById("settingsNotificationsToggle");
+  if (notifToggle) {
+    notifToggle.addEventListener("change", async (e) => {
+      try {
+        const minToggle = document.getElementById("settingsMinimizeToTrayToggle");
+        await setTraySettings({
+          minimizeToTray: minToggle ? minToggle.checked : true,
+          notificationsEnabled: e.target.checked,
+        });
+        showToast(
+          e.target.checked
+            ? "Desktop notifications enabled"
+            : "Desktop notifications disabled",
+          "info"
+        );
+      } catch (err) {
+        console.error("Failed to update notification setting:", err);
+        showToast(`Failed to update setting: ${err}`, "error");
       }
     });
   }

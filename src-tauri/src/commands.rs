@@ -545,6 +545,15 @@ pub async fn start_transfer(
                                         eta_seconds,
                                     },
                                 );
+                                crate::tray::update_tray_tooltip(
+                                    &app_cb,
+                                    &crate::tray::format_transfer_tooltip(
+                                        "Sending",
+                                        percent,
+                                        Some(speed_bps),
+                                        Some(&fname_cb),
+                                    ),
+                                );
                             },
                         )
                         .await;
@@ -569,6 +578,7 @@ pub async fn start_transfer(
                                 crate::storage::history::HistoryStatus::Cancelled,
                                 Some("Transfer cancelled by user".to_string()),
                             );
+                            crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
                             tokens_registry.write().await.remove(&token_clone);
                             controls_registry.write().await.remove(&token_clone);
                             return;
@@ -588,6 +598,7 @@ pub async fn start_transfer(
                             crate::storage::history::HistoryStatus::Failed,
                             Some(err_msg),
                         );
+                        crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
                         tokens_registry.write().await.remove(&token_clone);
                         controls_registry.write().await.remove(&token_clone);
                         return;
@@ -612,6 +623,7 @@ pub async fn start_transfer(
                             crate::storage::history::HistoryStatus::Cancelled,
                             Some("Transfer cancelled by user".to_string()),
                         );
+                        crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
                         tokens_registry.write().await.remove(&token_clone);
                         controls_registry.write().await.remove(&token_clone);
                         return;
@@ -648,6 +660,7 @@ pub async fn start_transfer(
                                 crate::storage::history::HistoryStatus::Failed,
                                 Some(err_msg),
                             );
+                            crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
                             tokens_registry.write().await.remove(&token_clone);
                             controls_registry.write().await.remove(&token_clone);
                             return;
@@ -661,6 +674,14 @@ pub async fn start_transfer(
 
                 // Record successful batch completion in history
                 record_sender_history(crate::storage::history::HistoryStatus::Completed, None);
+
+                crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
+                crate::notifications::notify_transfer_completed(
+                    &app_handle,
+                    &peer_clone.device_name,
+                    total_files,
+                    false,
+                );
 
                 // Emit batch completion when all files finish successfully
                 let _ = app_handle.emit(
@@ -691,6 +712,7 @@ pub async fn start_transfer(
 /// Cancels an active transfer session.
 #[tauri::command]
 pub async fn cancel_transfer(
+    app: AppHandle,
     state: State<'_, AppState>,
     session_token: String,
     peer: Option<PeerInfo>,
@@ -712,6 +734,8 @@ pub async fn cancel_transfer(
         session.status = TransferStatus::Cancelled;
     }
 
+    crate::tray::update_tray_tooltip(&app, "Easy Share - Ready");
+
     Ok(())
 }
 
@@ -724,6 +748,7 @@ pub async fn pause_transfer(
 ) -> Result<bool, String> {
     let paused = state.pause_transfer(&session_token).await;
     if paused {
+        crate::tray::update_tray_tooltip(&app, "Easy Share - Paused");
         let _ = app.emit("transfer-paused", serde_json::json!({ "session_token": session_token }));
     }
     Ok(paused)
@@ -961,4 +986,39 @@ pub async fn open_file(path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Payload describing system tray and notification preferences.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TraySettingsPayload {
+    #[serde(alias = "minimizeToTray")]
+    pub minimize_to_tray: bool,
+    #[serde(alias = "notificationsEnabled")]
+    pub notifications_enabled: bool,
+}
+
+/// Returns the current system tray and desktop notification settings.
+#[tauri::command]
+pub async fn get_tray_settings(state: State<'_, AppState>) -> Result<TraySettingsPayload, String> {
+    let (minimize_to_tray, notifications_enabled) = state.get_tray_settings().await;
+    Ok(TraySettingsPayload {
+        minimize_to_tray,
+        notifications_enabled,
+    })
+}
+
+/// Updates and persists system tray and desktop notification settings.
+#[tauri::command]
+pub async fn set_tray_settings(
+    state: State<'_, AppState>,
+    minimize_to_tray: bool,
+    notifications_enabled: bool,
+) -> Result<TraySettingsPayload, String> {
+    let (min, notif) = state
+        .set_tray_settings(minimize_to_tray, notifications_enabled)
+        .await?;
+    Ok(TraySettingsPayload {
+        minimize_to_tray: min,
+        notifications_enabled: notif,
+    })
 }
