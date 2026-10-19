@@ -172,6 +172,7 @@ pub struct FileToSend {
     pub name: String,
     pub size: u64,
     pub blake3_hash: Option<String>,
+    pub relative_path: Option<String>,
 }
 
 impl FileToSend {
@@ -188,7 +189,14 @@ impl FileToSend {
             name: name.into(),
             size,
             blake3_hash,
+            relative_path: None,
         }
+    }
+
+    /// Sets the relative folder path for directory tree preservation.
+    pub fn with_relative_path(mut self, rel_path: impl Into<String>) -> Self {
+        self.relative_path = Some(rel_path.into());
+        self
     }
 
     /// Creates a `FileToSend` instance by inspecting the file at `path` on disk
@@ -222,6 +230,7 @@ impl FileToSend {
             name,
             size,
             blake3_hash: Some(hash),
+            relative_path: None,
         })
     }
 
@@ -261,17 +270,22 @@ impl FileToSend {
             name,
             size,
             blake3_hash: Some(hash),
+            relative_path: None,
         })
     }
 
     /// Converts this file description to wire metadata (`FileMetadata`).
     pub fn to_metadata(&self) -> FileMetadata {
-        FileMetadata::new(
+        let mut meta = FileMetadata::new(
             self.file_id.clone(),
             self.name.clone(),
             self.size,
             self.blake3_hash.clone(),
-        )
+        );
+        if let Some(rel) = &self.relative_path {
+            meta = meta.with_relative_path(rel.clone());
+        }
+        meta
     }
 }
 

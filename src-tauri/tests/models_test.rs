@@ -88,12 +88,14 @@ fn test_transfer_request_with_multiple_files_roundtrip() {
             name: "archive.zip".to_string(),
             size: 1073741824,
             blake3_hash: Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string()),
+            relative_path: None,
         },
         FileMetadata {
             file_id: "f2-def".to_string(),
             name: "image.png".to_string(),
             size: 2048576,
             blake3_hash: None,
+            relative_path: None,
         },
     ];
 
@@ -211,4 +213,22 @@ fn test_cancel_request_roundtrip() {
 
     let des: CancelRequest = serde_json::from_str(&json_str).unwrap();
     assert_eq!(cancel_req, des);
+}
+
+#[test]
+fn test_file_metadata_relative_path_serialization() {
+    let meta_with_rel = FileMetadata::new("f1", "main.rs", 1024, None)
+        .with_relative_path("MyProject/src/main.rs");
+    let json = serde_json::to_string(&meta_with_rel).unwrap();
+    assert!(json.contains("\"relative_path\":\"MyProject/src/main.rs\""));
+
+    let deserialized: FileMetadata = serde_json::from_str(&json).unwrap();
+    assert_eq!(
+        deserialized.relative_path,
+        Some("MyProject/src/main.rs".to_string())
+    );
+
+    let meta_without_rel = FileMetadata::new("f2", "main.rs", 1024, None);
+    let json_no_rel = serde_json::to_string(&meta_without_rel).unwrap();
+    assert!(!json_no_rel.contains("relative_path"));
 }

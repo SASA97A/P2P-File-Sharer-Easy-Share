@@ -23,6 +23,8 @@ pub struct FileMetadata {
     pub size: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blake3_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub relative_path: Option<String>,
 }
 
 impl FileMetadata {
@@ -37,7 +39,14 @@ impl FileMetadata {
             name: name.into(),
             size,
             blake3_hash,
+            relative_path: None,
         }
+    }
+
+    /// Sets the relative folder path for directory tree preservation.
+    pub fn with_relative_path(mut self, rel_path: impl Into<String>) -> Self {
+        self.relative_path = Some(rel_path.into());
+        self
     }
 
     /// Derives the deterministic file key for cross-session resumption.
