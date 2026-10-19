@@ -390,12 +390,25 @@ pub async fn start_transfer(
     let request_id = uuid::Uuid::new_v4().to_string();
     let metadata_vec = files_to_send.iter().map(|f| f.to_metadata()).collect();
 
-    let transfer_request = TransferRequest::new(
-        request_id,
+    let encryption_enabled = state.is_encryption_enabled().await;
+    let mut ephemeral_secret_opt = None;
+
+    let mut transfer_request = TransferRequest::new(
+        request_id.clone(),
         my_info.device_name,
         my_info.os,
         metadata_vec,
     );
+
+    if encryption_enabled {
+        let (sender_secret, sender_pub) = crate::crypto::generate_ephemeral_keypair();
+        transfer_request.encryption_mode = Some("ChaCha20Poly1305".to_string());
+        transfer_request.ephemeral_public_key = Some(crate::crypto::public_key_to_hex(&sender_pub));
+        if let Some(ref pin) = peer.pairing_pin {
+            transfer_request.pin_auth = Some(crate::crypto::compute_pin_auth(pin, &request_id));
+        }
+        ephemeral_secret_opt = Some(sender_secret);
+    }
 
     let response = state
         .transfer_client
@@ -409,10 +422,35 @@ pub async fn start_transfer(
                 "Receiver accepted transfer but did not return a session token".to_string()
             })?;
 
+            let mut session_key = None;
+            if response.encryption_mode.as_deref() == Some("ChaCha20Poly1305") {
+                if let (Some(sender_secret), Some(peer_pub_hex)) = (ephemeral_secret_opt, response.ephemeral_public_key.as_ref()) {
+                    if let Ok(peer_pub) = crate::crypto::public_key_from_hex(peer_pub_hex) {
+                        let pin_to_use = if response.pin_verified == Some(true) {
+                            peer.pairing_pin.as_deref().unwrap_or("")
+                        } else {
+                            ""
+                        };
+                        let key = crate::crypto::derive_session_key(
+                            sender_secret,
+                            &peer_pub,
+                            pin_to_use,
+                            &session_token,
+                        );
+                        state
+                            .transfer_client
+                            .register_session_key(&session_token, key.clone())
+                            .await;
+                        session_key = Some(key);
+                    }
+                }
+            }
+
             let cancel_token = tokio_util::sync::CancellationToken::new();
             let speed_limit = state.get_speed_limit().await;
             let transfer_control = crate::client::TransferControl::from_cancellation_token(cancel_token.clone())
-                .with_speed_limit(speed_limit);
+                .with_speed_limit(speed_limit)
+                .with_session_key(session_key);
             state
                 .register_cancellation_token(&session_token, cancel_token.clone())
                 .await;
@@ -1021,4 +1059,19 @@ pub async fn set_tray_settings(
         minimize_to_tray: min,
         notifications_enabled: notif,
     })
+}
+
+/// Returns whether end-to-end encryption is enabled.
+#[tauri::command]
+pub async fn get_encryption_settings(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state.is_encryption_enabled().await)
+}
+
+/// Updates and persists the end-to-end encryption preference.
+#[tauri::command]
+pub async fn set_encryption_settings(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    state.set_encryption_enabled(enabled).await
 }

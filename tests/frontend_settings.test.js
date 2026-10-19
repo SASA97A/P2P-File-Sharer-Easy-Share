@@ -87,4 +87,24 @@ test("settings bridge API", async (t) => {
     assert.equal(current.minimizeToTray, false);
     assert.equal(current.notificationsEnabled, false);
   });
+
+  await t.test("getEncryptionSettings returns default enabled (true)", async () => {
+    const { getEncryptionSettings } = await import("../src/script/tauri-bridge.js");
+    const enabled = await getEncryptionSettings();
+    assert.equal(typeof enabled, "boolean");
+    assert.equal(enabled, true);
+  });
+
+  await t.test("setEncryptionSettings updates and persists encryption setting", async () => {
+    const { getEncryptionSettings, setEncryptionSettings } = await import("../src/script/tauri-bridge.js");
+    const res = await setEncryptionSettings(false);
+    assert.equal(res, false);
+
+    const current = await getEncryptionSettings();
+    assert.equal(current, false);
+
+    // Reset back to true
+    await setEncryptionSettings(true);
+    assert.equal(await getEncryptionSettings(), true);
+  });
 });

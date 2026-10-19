@@ -105,6 +105,9 @@ fn test_transfer_request_with_multiple_files_roundtrip() {
         sender_os: "windows".to_string(),
         total_bytes: 1075790400,
         files,
+        encryption_mode: None,
+        ephemeral_public_key: None,
+        pin_auth: None,
     };
 
     let json_str = serde_json::to_string(&request).expect("failed to serialize TransferRequest");
@@ -115,6 +118,33 @@ fn test_transfer_request_with_multiple_files_roundtrip() {
     let deserialized: TransferRequest =
         serde_json::from_str(&json_str).expect("failed to deserialize TransferRequest");
     assert_eq!(request, deserialized);
+}
+
+#[test]
+fn test_transfer_request_and_response_with_encryption() {
+    let files = vec![FileMetadata::new("f1", "doc.pdf", 1024, None)];
+    let mut req = TransferRequest::new("req-enc-1", "Bob", "linux", files);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some("abcdef123456".to_string());
+    req.pin_auth = Some("pin-auth-hash".to_string());
+
+    let req_json = serde_json::to_string(&req).expect("serialize req");
+    assert!(req_json.contains("\"encryption_mode\":\"ChaCha20Poly1305\""));
+    assert!(req_json.contains("\"ephemeral_public_key\":\"abcdef123456\""));
+    assert!(req_json.contains("\"pin_auth\":\"pin-auth-hash\""));
+
+    let req_des: TransferRequest = serde_json::from_str(&req_json).expect("deserialize req");
+    assert_eq!(req, req_des);
+
+    let mut resp = TransferResponse::accepted("sess-1", HashMap::new());
+    resp.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    resp.ephemeral_public_key = Some("feedbeef99".to_string());
+    resp.pin_verified = Some(true);
+
+    let resp_json = serde_json::to_string(&resp).expect("serialize resp");
+    assert!(resp_json.contains("\"pin_verified\":true"));
+    let resp_des: TransferResponse = serde_json::from_str(&resp_json).expect("deserialize resp");
+    assert_eq!(resp, resp_des);
 }
 
 #[test]

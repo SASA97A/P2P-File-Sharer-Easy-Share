@@ -1,6 +1,7 @@
 pub mod app_state;
 pub mod client;
 pub mod commands;
+pub mod crypto;
 pub mod discovery;
 pub mod models;
 pub mod notifications;
@@ -341,6 +342,8 @@ pub fn run() {
             commands::open_download_dir,
             commands::get_tray_settings,
             commands::set_tray_settings,
+            commands::get_encryption_settings,
+            commands::set_encryption_settings,
             commands::inspect_paths,
             commands::pick_files,
             commands::pick_folder,

@@ -51,9 +51,9 @@ impl AppState {
         config_dir: PathBuf,
         pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     ) -> Self {
-        let initial_speed_limit = crate::storage::settings::load_settings(&config_dir)
-            .speed_limit_bps
-            .unwrap_or(0);
+        let settings = crate::storage::settings::load_settings(&config_dir);
+        let initial_speed_limit = settings.speed_limit_bps.unwrap_or(0);
+        server_state.set_encryption_enabled(settings.encryption_enabled());
         Self {
             server_state,
             discovery_handle: Arc::new(RwLock::new(discovery_handle)),
@@ -309,5 +309,20 @@ impl AppState {
         settings.notifications_enabled = Some(notifications_enabled);
         crate::storage::settings::save_settings(&self.config_dir, &settings)?;
         Ok((minimize_to_tray, notifications_enabled))
+    }
+
+    /// Returns whether end-to-end encryption is enabled. Defaults to `true`.
+    pub async fn is_encryption_enabled(&self) -> bool {
+        let settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.encryption_enabled()
+    }
+
+    /// Updates and persists the end-to-end encryption preference.
+    pub async fn set_encryption_enabled(&self, enabled: bool) -> Result<bool, String> {
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.encryption_enabled = Some(enabled);
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+        self.server_state.set_encryption_enabled(enabled);
+        Ok(enabled)
     }
 }

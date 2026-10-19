@@ -23,6 +23,7 @@ pub struct TransferControl {
     pub is_paused: Arc<AtomicBool>,
     pub pause_notify: Arc<Notify>,
     pub speed_limit_bps: Arc<AtomicU64>,
+    pub session_key: Option<crate::crypto::SessionKey>,
 }
 
 impl Default for TransferControl {
@@ -38,6 +39,7 @@ impl TransferControl {
             is_paused: Arc::new(AtomicBool::new(false)),
             pause_notify: Arc::new(Notify::new()),
             speed_limit_bps: Arc::new(AtomicU64::new(0)),
+            session_key: None,
         }
     }
 
@@ -48,7 +50,14 @@ impl TransferControl {
             is_paused: Arc::new(AtomicBool::new(false)),
             pause_notify: Arc::new(Notify::new()),
             speed_limit_bps: Arc::new(AtomicU64::new(0)),
+            session_key: None,
         }
+    }
+
+    /// Sets the optional authenticated session key for end-to-end encryption.
+    pub fn with_session_key(mut self, session_key: Option<crate::crypto::SessionKey>) -> Self {
+        self.session_key = session_key;
+        self
     }
 
     /// Builder method to set initial speed limit in bytes per second (0 = unlimited).
@@ -294,6 +303,7 @@ impl FileToSend {
 pub struct TransferClient {
     client: reqwest::Client,
     chunk_size: usize,
+    session_keys: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::crypto::SessionKey>>>,
 }
 
 impl Default for TransferClient {
@@ -308,6 +318,7 @@ impl TransferClient {
         Self {
             client: reqwest::Client::new(),
             chunk_size: DEFAULT_CHUNK_SIZE,
+            session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -316,6 +327,7 @@ impl TransferClient {
         Self {
             client: reqwest::Client::new(),
             chunk_size,
+            session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -324,6 +336,7 @@ impl TransferClient {
         Self {
             client,
             chunk_size: DEFAULT_CHUNK_SIZE,
+            session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -332,7 +345,21 @@ impl TransferClient {
         Self {
             client,
             chunk_size,
+            session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Registers an authenticated session encryption key for a transfer session.
+    pub async fn register_session_key(&self, session_token: &str, key: crate::crypto::SessionKey) {
+        self.session_keys
+            .write()
+            .await
+            .insert(session_token.to_string(), key);
+    }
+
+    /// Retrieves an authenticated session encryption key if present.
+    pub async fn get_session_key(&self, session_token: &str) -> Option<crate::crypto::SessionKey> {
+        self.session_keys.read().await.get(session_token).cloned()
     }
 
     /// Returns the configured chunk size in bytes.
@@ -539,16 +566,38 @@ impl TransferClient {
         offset: u64,
         data: Vec<u8>,
     ) -> Result<ChunkResponse, ClientError> {
+        self.send_chunk_url_indexed(base_url, session_token, file_id, offset, None, data)
+            .await
+    }
+
+    /// Sends an individual chunk with an optional chunk index for authenticated encryption.
+    pub async fn send_chunk_url_indexed(
+        &self,
+        base_url: &str,
+        session_token: &str,
+        file_id: &str,
+        offset: u64,
+        chunk_index: Option<u64>,
+        data: Vec<u8>,
+    ) -> Result<ChunkResponse, ClientError> {
         let url = format!("{}/api/v1/transfer/chunk", base_url.trim_end_matches('/'));
         let offset_str = offset.to_string();
+        let mut query_params = vec![
+            ("session_token", session_token.to_string()),
+            ("file_id", file_id.to_string()),
+            ("offset", offset_str),
+        ];
+
+        let idx_str;
+        if let Some(idx) = chunk_index {
+            idx_str = idx.to_string();
+            query_params.push(("chunk_index", idx_str));
+        }
+
         let resp = self
             .client
             .post(&url)
-            .query(&[
-                ("session_token", session_token),
-                ("file_id", file_id),
-                ("offset", &offset_str),
-            ])
+            .query(&query_params)
             .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
             .body(data)
             .send()
@@ -677,6 +726,16 @@ impl TransferClient {
         let mut current_offset = start_offset;
         let mut total_sent_in_call = 0u64;
 
+        let session_key = if let Some(ctrl) = control {
+            if ctrl.session_key.is_some() {
+                ctrl.session_key.clone()
+            } else {
+                self.get_session_key(session_token).await
+            }
+        } else {
+            self.get_session_key(session_token).await
+        };
+
         while current_offset < file.size {
             if let Some(ctrl) = control {
                 if ctrl.is_cancelled() {
@@ -713,9 +772,25 @@ impl TransferClient {
             let mut buffer = vec![0u8; chunk_len as usize];
             file_handle.read_exact(&mut buffer).await?;
 
+            let chunk_index = current_offset / (self.chunk_size as u64);
+            let (payload, query_chunk_index) = if let Some(ref key) = session_key {
+                let encrypted = crate::crypto::encrypt_chunk(key, chunk_index, &buffer)
+                    .map_err(|e| ClientError::Other(format!("Encryption error: {}", e)))?;
+                (encrypted, Some(chunk_index))
+            } else {
+                (buffer, None)
+            };
+
             let chunk_start = tokio::time::Instant::now();
             let chunk_resp = self
-                .send_chunk_url(base_url, session_token, &file.file_id, current_offset, buffer)
+                .send_chunk_url_indexed(
+                    base_url,
+                    session_token,
+                    &file.file_id,
+                    current_offset,
+                    query_chunk_index,
+                    payload,
+                )
                 .await?;
 
             let written = chunk_resp.bytes_written;

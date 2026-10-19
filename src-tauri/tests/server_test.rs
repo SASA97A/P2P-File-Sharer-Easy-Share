@@ -694,8 +694,10 @@ async fn test_server_session_pruning_ttl() {
         vec![FileMetadata::new("f2", "b.txt", 20, None)],
     );
 
-    let (token1, _) = state.create_session(req1).await;
-    let (token2, _) = state.create_session(req2).await;
+    let created1 = state.create_session(req1).await.expect("create session 1");
+    let created2 = state.create_session(req2).await.expect("create session 2");
+    let token1 = created1.token;
+    let token2 = created2.token;
 
     assert_eq!(state.sessions.read().await.len(), 2);
 
