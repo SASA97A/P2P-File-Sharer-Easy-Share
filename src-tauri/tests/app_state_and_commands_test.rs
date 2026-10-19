@@ -304,6 +304,16 @@ fn test_format_transfer_tooltip_formatting() {
     assert_eq!(tip3, "Easy Share - Receiving (10%)");
 }
 
+#[test]
+fn test_format_bytes_for_notifications() {
+    use easy_share_lib::notifications::format_bytes;
+
+    assert_eq!(format_bytes(512), "512 B");
+    assert_eq!(format_bytes(1024), "1.0 KB");
+    assert_eq!(format_bytes(10 * 1024 * 1024), "10.0 MB");
+    assert_eq!(format_bytes(2 * 1024 * 1024 * 1024), "2.0 GB");
+}
+
 #[tokio::test]
 async fn test_build_pairing_payload_and_regeneration() {
     let temp_dir = setup_test_dir("pairing_payload");

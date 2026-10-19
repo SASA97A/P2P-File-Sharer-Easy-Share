@@ -10,7 +10,7 @@ pub const TRAY_ID: &str = "main_tray";
 /// Formats a dynamic tray tooltip string based on transfer direction, percent, speed, and active count.
 pub fn format_transfer_tooltip(
     direction: &str,
-    percent: u8,
+    percent: u32,
     speed_bps: Option<u64>,
     file_name: Option<&str>,
 ) -> String {

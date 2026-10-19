@@ -3,6 +3,7 @@ pub mod client;
 pub mod commands;
 pub mod discovery;
 pub mod models;
+pub mod notifications;
 pub mod pairing;
 pub mod server;
 pub mod storage;
@@ -135,6 +136,12 @@ pub async fn setup_services(
             }
 
             let _ = app_consent.emit("transfer-requested", &req_payload);
+            notifications::notify_incoming_transfer(
+                &app_consent,
+                &req_payload.sender_name,
+                req_payload.files.len(),
+                req_payload.total_bytes,
+            );
         }
     });
 
@@ -151,6 +158,15 @@ pub async fn setup_services(
             match event {
                 ServerTransferEvent::Progress(progress) => {
                     let _ = app_server.emit("receive-progress", &progress);
+                    tray::update_tray_tooltip(
+                        &app_server,
+                        &tray::format_transfer_tooltip(
+                            "Receiving",
+                            progress.percent,
+                            Some(progress.speed_bps),
+                            Some(&progress.file_name),
+                        ),
+                    );
                 }
                 ServerTransferEvent::Completed(completed) => {
                     let _ = app_server.emit("receive-completed", &completed);
@@ -162,6 +178,13 @@ pub async fn setup_services(
                             });
                             if all_finished {
                                 recorded_tokens.insert(completed.session_token.clone());
+                                tray::update_tray_tooltip(&app_server, "Easy Share - Ready");
+                                notifications::notify_transfer_completed(
+                                    &app_server,
+                                    &session.request.sender_name,
+                                    session.request.files.len(),
+                                    true,
+                                );
                                 let dl_dir = s_state.download_dir();
                                 let record = storage::history::TransferHistoryRecord {
                                     id: uuid::Uuid::new_v4().to_string(),
@@ -197,6 +220,7 @@ pub async fn setup_services(
                 }
                 ServerTransferEvent::Cancelled(cancelled) => {
                     let _ = app_server.emit("receive-cancelled", &cancelled);
+                    tray::update_tray_tooltip(&app_server, "Easy Share - Ready");
 
                     if !recorded_tokens.contains(&cancelled.session_token) {
                         recorded_tokens.insert(cancelled.session_token.clone());
