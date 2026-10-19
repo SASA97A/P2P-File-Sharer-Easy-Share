@@ -21,20 +21,20 @@ Allow users to select or drop entire directory structures and recreate the compl
 
 ---
 
-## 2. End-to-End Encryption (E2EE) with PIN-Based Handshake
+## 2. End-to-End Encryption (E2EE) with PIN-Based Handshake [COMPLETED]
 
 ### Overview
 Upgrade local HTTP/TCP socket transfers with authenticated end-to-end encryption to prevent eavesdropping on untrusted or shared Wi-Fi networks.
 
 ### Key Capabilities
-- **Authenticated Key Exchange**: Derive ephemeral symmetric encryption keys using the existing 4-digit pairing PIN and Diffie-Hellman / HKDF exchange.
-- **Authenticated Encryption**: Encrypt streaming chunks in-flight using modern ciphers like **ChaCha20-Poly1305** or **AES-256-GCM**.
-- **Integrity & Verification**: Guarantee tamper-proof chunk delivery and authentication without relying on external certificate authorities.
-- **Security Badge**: Visual badge on the transfer card indicating encrypted transfer status.
+- **Authenticated Key Exchange**: Derive ephemeral symmetric encryption keys using the existing pairing PIN and HKDF-based key derivation.
+- **Authenticated Encryption**: Encrypt streaming chunks in-flight using **ChaCha20-Poly1305** AEAD encryption.
+- **Integrity & Verification**: Guarantee tamper-proof chunk delivery and authentication without external certificate authorities.
+- **Security Settings & Toggle**: User-configurable toggle in Settings view with persistent state.
 
 ### Technical Scope
-- **Rust Backend**: Integrate `ring` or `chacha20poly1305` in `src-tauri`; update sender streaming loop and receiver chunk endpoint to encrypt/decrypt buffers before writing.
-- **Frontend**: Display an "E2EE Secured" padlock badge on peer cards and the active progress cards.
+- **Rust Backend**: Implemented in `src-tauri/src/crypto.rs` using ChaCha20-Poly1305; integrated into `TransferClient`, `sender.rs`, and server chunk streaming routes (`routes.rs`); commands exposed in `commands.rs`.
+- **Frontend**: Settings toggle in `settings.js` with persistence via Tauri bridge.
 
 ---
 
@@ -54,7 +54,7 @@ Enable sending batches to multiple peers simultaneously or managing an orderly q
 
 ---
 
-## 4. Bandwidth Throttling / Speed Limiter
+## 4. Bandwidth Throttling / Speed Limiter [COMPLETED]
 
 ### Overview
 Provide user-configurable transfer speed caps to prevent saturating the local network during large file transfers.
@@ -65,8 +65,8 @@ Provide user-configurable transfer speed caps to prevent saturating the local ne
 - **Settings Default**: Configurable default cap in the Settings view.
 
 ### Technical Scope
-- **Rust Backend**: Token bucket / rate-limiter in `sender.rs` chunk loop (e.g. `governor` or manual sleep calculation based on EWMA tracker).
-- **Frontend**: Add a speed limiter dropdown/control in Settings and dynamically on `#sendProgressCard`.
+- **Rust Backend**: Token bucket / rate-limiter in `sender.rs` chunk loop via atomic speed limit tracker (`AtomicU64`); IPC commands `get_speed_limit` and `set_speed_limit` in `commands.rs`.
+- **Frontend**: Speed limiter dropdown and control in Settings and transfer progress card (`settings.js`, `transfer.js`, `metrics.js`).
 
 ---
 
@@ -85,3 +85,44 @@ Allow Easy Share to run smoothly in the background, minimizing to the system tra
 - **Frontend**: Add notification and minimize-to-tray toggles to the Settings view (`src/script/settings.js`).
 
 ---
+
+## 6. Native Tauri 2 Drag-and-Drop Staging with Directory Hierarchy [COMPLETED]
+
+### Overview
+Deliver native operating system drag-and-drop file and directory staging into the Easy Share window, bypassing browser webview file sandbox limitations and preserving full relative directory hierarchies.
+
+### Key Capabilities
+- **Tauri 2 Window Drop Integration**: Captures native window file drops using `getCurrentWebviewWindow().onDragDropEvent` across Windows, macOS, and Linux.
+- **Deep Recursive Directory Inspection**: Recursively unpacks folders dropped into the window, extracting metadata (relative paths, sizes, item counts) in background threads.
+- **Staging Area Visual Feedback**: Active drag hover styling and dynamic file/folder counter staging cards.
+- **Dual Fallbacks**: Robust fallback chain supporting `getCurrentWebviewWindow().onDragDropEvent`, legacy window event bridges, mock event bus for testing, and DOM DataTransfer fallback.
+
+### Technical Scope
+- **Rust Backend**: `inspect_file_paths` command in `src-tauri/src/commands.rs` recursively walks folder paths and preserves relative folder hierarchy.
+- **Frontend**: Tauri drag-drop handler in `src/script/tauri-bridge.js` and window event routing in `src/script/renderer.js` and `src/script/files.js`.
+- **Testing**: End-to-end unit test suite in `tests/frontend_drag_drop.test.js`.
+
+---
+
+## 7. Multi-Interface Subnet Scanning, Ethernet Prioritization & Device Deduplication [COMPLETED]
+
+### Overview
+Enable seamless multi-network peer discovery and PIN pairing across both Wi-Fi and Ethernet interfaces, prioritizing high-speed wired Ethernet connections for file transfers while avoiding duplicate peer cards in the UI.
+
+### Key Capabilities
+- **Physical Ethernet Prioritization**: Interface scoring awards physical Ethernet adapters (+50) higher priority over Wi-Fi (+20), ensuring high-speed LAN links are used whenever available.
+- **Deduplicated Multi-Subnet Sweeps**: Discovers and scans unique `/24` subnets across all active host interfaces (Ethernet first, then Wi-Fi) with immediate short-circuiting upon PIN match.
+- **Cross-Interface Device Deduplication**: Prevents duplicate peer cards when a single device is reachable over both Wi-Fi and Ethernet. Seamlessly updates existing cards to the preferred interface IP.
+- **Selection Preservation**: Preserves user's actively selected target peer in the UI even when the peer transitions between network interfaces or updates its IP.
+
+### Technical Scope
+- **Rust Backend**:
+  - `src-tauri/src/discovery/nic.rs`: Adapter scoring and `get_candidate_subnets()` resolution.
+  - `src-tauri/src/discovery/udp.rs`: `PeerTracker` deduplication by `device_name` with interface priority resolution.
+  - `src-tauri/src/pairing/scanner.rs`: `sweep_all_subnets_for_pin()` multi-subnet parallel sweep.
+  - `src-tauri/src/commands.rs`: Connected `connect_by_pin` to multi-subnet sweep.
+- **Frontend**:
+  - `src/script/peers.js`: `getPeerIdentityKey()`, deduplicated `setPeerList`, `upsertPeer`, and selection preservation.
+- **Testing**:
+  - `src-tauri/tests/discovery_test.rs` and `src-tauri/tests/scanner_test.rs` for Rust discovery and sweep logic.
+  - `tests/frontend_peers_dedup.test.js` for frontend peer identity deduplication and selection preservation.
