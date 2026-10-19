@@ -16,6 +16,12 @@ A high-performance, lightweight, and secure **local P2P file sharing desktop app
 - **Resumable Chunk Streaming**: 1 MB chunk streaming with seekable byte offsets. Interrupted transfers automatically resume from where they left off.
 - **BLAKE3 Cryptographic Integrity**: Fast streaming BLAKE3 hashing verifies every file before committing to the download directory.
 - **Interactive Consent Handshake**: Receivers inspect sender device name, operating system, and file list before accepting or declining incoming transfers.
+- **End-to-End Encryption (E2EE)**: Optional authenticated in-flight encryption using ChaCha20-Poly1305 with PIN-derived symmetric session keys.
+- **Directory Tree Preservation**: Transfer whole directory structures with recursive inspection, intermediate directory creation, and relative path integrity.
+- **Native OS Drag-and-Drop**: Drag files and folders directly from Explorer/Finder into the window with deep hierarchy inspection via Tauri 2 native window drop events.
+- **Bandwidth Throttling / Speed Limiter**: Real-time adjustable speed limits (5 MB/s, 10 MB/s, 25 MB/s, 50 MB/s, or Unlimited) without interrupting active transfers.
+- **System Tray & Native Notifications**: Minimize to tray with background operation and actionable desktop notifications for incoming transfers and completion events.
+- **Multi-Interface Subnet Scanning & Ethernet Prioritization**: Sweeps across all active physical interfaces (Ethernet first, then Wi-Fi), prioritizing gigabit wired links and deduplicating multi-homed devices.
 - **Atomic Storage & Safe Naming**: Safe path sanitization prevents directory traversal attacks; incoming files write to `.part` buffers and rename atomically with collision handling.
 - **Modern Responsive Dark UI**: Clean interface built with glassmorphism aesthetics, Lucide SVG icons, real-time transfer telemetry, and paired peer badges.
 
