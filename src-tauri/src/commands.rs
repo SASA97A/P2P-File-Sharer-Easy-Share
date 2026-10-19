@@ -1022,3 +1022,18 @@ pub async fn set_tray_settings(
         notifications_enabled: notif,
     })
 }
+
+/// Returns whether end-to-end encryption is enabled.
+#[tauri::command]
+pub async fn get_encryption_settings(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state.is_encryption_enabled().await)
+}
+
+/// Updates and persists the end-to-end encryption preference.
+#[tauri::command]
+pub async fn set_encryption_settings(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    state.set_encryption_enabled(enabled).await
+}

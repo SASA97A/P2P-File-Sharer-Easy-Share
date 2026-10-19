@@ -310,4 +310,18 @@ impl AppState {
         crate::storage::settings::save_settings(&self.config_dir, &settings)?;
         Ok((minimize_to_tray, notifications_enabled))
     }
+
+    /// Returns whether end-to-end encryption is enabled. Defaults to `true`.
+    pub async fn is_encryption_enabled(&self) -> bool {
+        let settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.encryption_enabled()
+    }
+
+    /// Updates and persists the end-to-end encryption preference.
+    pub async fn set_encryption_enabled(&self, enabled: bool) -> Result<bool, String> {
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.encryption_enabled = Some(enabled);
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+        Ok(enabled)
+    }
 }

@@ -27,6 +27,7 @@ fn test_save_and_load_settings() {
         speed_limit_bps: Some(5_242_880),
         minimize_to_tray: None,
         notifications_enabled: None,
+        encryption_enabled: None,
     };
 
     let save_res = save_settings(&dir, &settings);
@@ -187,6 +188,51 @@ async fn test_settings_tray_and_notifications_defaults_and_persistence() {
     assert_eq!(loaded.notifications_enabled, Some(false));
     assert!(!loaded.minimize_to_tray());
     assert!(!loaded.notifications_enabled());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn test_settings_encryption_default_and_persistence() {
+    use easy_share_lib::app_state::AppState;
+    use easy_share_lib::models::peer::DeviceInfo;
+    use easy_share_lib::server::state::ServerState;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    let dir = setup_test_dir("encryption_settings");
+    let download_dir = dir.join("downloads");
+    fs::create_dir_all(&download_dir).unwrap();
+
+    // 1. Default should be true when missing from settings.json
+    let settings = load_settings(&dir);
+    assert!(settings.encryption_enabled());
+
+    let info = DeviceInfo::new("Test-Device", "desktop", "windows", "2.0.0", 5050);
+    let server_state = Arc::new(ServerState::new(info, download_dir.clone()));
+    let pending_consents = Arc::new(RwLock::new(HashMap::new()));
+    let app_state = AppState::with_config_dir(
+        server_state.clone(),
+        None,
+        download_dir.clone(),
+        dir.clone(),
+        pending_consents,
+    );
+
+    assert!(app_state.is_encryption_enabled().await);
+
+    // 2. Set to false and verify persistence
+    app_state.set_encryption_enabled(false).await.unwrap();
+    assert!(!app_state.is_encryption_enabled().await);
+
+    let loaded = load_settings(&dir);
+    assert_eq!(loaded.encryption_enabled, Some(false));
+    assert!(!loaded.encryption_enabled());
+
+    // 3. Set back to true
+    app_state.set_encryption_enabled(true).await.unwrap();
+    assert!(app_state.is_encryption_enabled().await);
 
     let _ = fs::remove_dir_all(&dir);
 }

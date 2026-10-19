@@ -17,6 +17,8 @@ pub struct AppSettings {
     pub minimize_to_tray: Option<bool>,
     #[serde(default)]
     pub notifications_enabled: Option<bool>,
+    #[serde(default)]
+    pub encryption_enabled: Option<bool>,
 }
 
 impl AppSettings {
@@ -28,6 +30,11 @@ impl AppSettings {
     /// Returns whether desktop notifications are enabled. Defaults to `true`.
     pub fn notifications_enabled(&self) -> bool {
         self.notifications_enabled.unwrap_or(true)
+    }
+
+    /// Returns whether end-to-end encryption is enabled. Defaults to `true`.
+    pub fn encryption_enabled(&self) -> bool {
+        self.encryption_enabled.unwrap_or(true)
     }
 }
 
