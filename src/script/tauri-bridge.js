@@ -60,6 +60,7 @@ const mockState = {
   speed_limit_bps: 0,
   minimize_to_tray: true,
   notifications_enabled: true,
+  encryption_enabled: true,
   peers: [],
   history: [
     {
@@ -248,6 +249,15 @@ async function callInvoke(command, args = {}) {
         notifications_enabled: notif,
         notificationsEnabled: notif,
       };
+    }
+
+    case "get_encryption_settings":
+      return mockState.encryption_enabled ?? true;
+
+    case "set_encryption_settings": {
+      const enabled = args.enabled ?? true;
+      mockState.encryption_enabled = enabled;
+      return enabled;
     }
 
     case "inspect_paths": {
@@ -584,6 +594,26 @@ export async function setTraySettings(settings) {
     minimizeToTray: res.minimizeToTray ?? res.minimize_to_tray ?? true,
     notificationsEnabled: res.notificationsEnabled ?? res.notifications_enabled ?? true,
   };
+}
+
+/**
+ * Retrieves whether end-to-end encryption is enabled
+ * @returns {Promise<boolean>}
+ */
+export async function getEncryptionSettings() {
+  const res = await callInvoke("get_encryption_settings");
+  return typeof res === "boolean" ? res : true;
+}
+
+/**
+ * Updates the end-to-end encryption preference
+ * @param {boolean | { enabled: boolean }} enabled
+ * @returns {Promise<boolean>}
+ */
+export async function setEncryptionSettings(enabled) {
+  const isEnabled = typeof enabled === "object" ? !!enabled.enabled : !!enabled;
+  const res = await callInvoke("set_encryption_settings", { enabled: isEnabled });
+  return typeof res === "boolean" ? res : isEnabled;
 }
 
 /**

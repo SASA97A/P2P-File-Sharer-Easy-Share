@@ -15,6 +15,8 @@ import {
   setSpeedLimit,
   getTraySettings,
   setTraySettings,
+  getEncryptionSettings,
+  setEncryptionSettings,
 } from "./tauri-bridge.js";
 import { showToast } from "./ui.js";
 
@@ -54,6 +56,12 @@ export async function openSettingsView() {
     const notifToggle = document.getElementById("settingsNotificationsToggle");
     if (notifToggle) {
       notifToggle.checked = Boolean(traySettings.notificationsEnabled);
+    }
+
+    const encryptionEnabled = await getEncryptionSettings();
+    const encToggle = document.getElementById("settingsEncryptionToggle");
+    if (encToggle) {
+      encToggle.checked = Boolean(encryptionEnabled);
     }
   } catch (err) {
     console.error("Failed to load settings data:", err);
@@ -247,6 +255,25 @@ export function setupSettings() {
       } catch (err) {
         console.error("Failed to update notification setting:", err);
         showToast(`Failed to update setting: ${err}`, "error");
+      }
+    });
+  }
+
+  // End-to-End Encryption Toggle Handler
+  const encToggle = document.getElementById("settingsEncryptionToggle");
+  if (encToggle) {
+    encToggle.addEventListener("change", async (e) => {
+      try {
+        const enabled = await setEncryptionSettings(e.target.checked);
+        showToast(
+          enabled
+            ? "End-to-end encryption enabled (X25519 + ChaCha20-Poly1305)"
+            : "End-to-end encryption disabled (transfers in plaintext)",
+          "info"
+        );
+      } catch (err) {
+        console.error("Failed to update encryption setting:", err);
+        showToast(`Failed to update encryption setting: ${err}`, "error");
       }
     });
   }

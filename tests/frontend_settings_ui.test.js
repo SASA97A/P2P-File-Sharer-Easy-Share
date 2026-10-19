@@ -69,6 +69,7 @@ test("settings UI controller", async (t) => {
 
   const minToggle = createMockElement("settingsMinimizeToTrayToggle", "input");
   const notifToggle = createMockElement("settingsNotificationsToggle", "input");
+  const encToggle = createMockElement("settingsEncryptionToggle", "input");
 
   setupSettings();
 
@@ -83,6 +84,7 @@ test("settings UI controller", async (t) => {
     assert.equal(speedSelect.value, String(currentLimit));
     assert.equal(minToggle.checked, true);
     assert.equal(notifToggle.checked, true);
+    assert.equal(encToggle.checked, true);
   });
 
   await t.test("changing minimize to tray toggle invokes setTraySettings", async () => {
@@ -103,6 +105,16 @@ test("settings UI controller", async (t) => {
 
     const current = await getTraySettings();
     assert.equal(current.notificationsEnabled, false);
+  });
+
+  await t.test("changing encryption toggle invokes setEncryptionSettings", async () => {
+    const { getEncryptionSettings } = await import("../src/script/tauri-bridge.js");
+    encToggle.checked = false;
+    encToggle.dispatchEvent({ type: "change", target: { checked: false } });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const current = await getEncryptionSettings();
+    assert.equal(current, false);
   });
 
   await t.test("changing speed limit dropdown invokes setSpeedLimit", async () => {
