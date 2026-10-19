@@ -118,14 +118,19 @@ pub fn score_interface(name: &str, ip: &IpAddr) -> i32 {
     }
 
     let lower = name.to_lowercase();
-    if lower.contains("wi-fi")
-        || lower.contains("wifi")
-        || lower.contains("wlan")
-        || lower.contains("ethernet")
+    if lower.contains("ethernet")
         || lower.contains("eth")
         || lower.contains("en")
-        || lower.contains("wl")
         || lower.contains("lan")
+        || lower.contains("gigabit")
+        || lower.contains("pcie")
+    {
+        score += 50;
+    } else if lower.contains("wi-fi")
+        || lower.contains("wifi")
+        || lower.contains("wlan")
+        || lower.contains("wl")
+        || lower.contains("wireless")
     {
         score += 20;
     }
@@ -171,5 +176,48 @@ pub fn list_candidate_ips() -> Vec<IpAddr> {
         scored.into_iter().map(|(ip, _)| ip).collect()
     } else {
         local_ip_address::local_ip().ok().into_iter().collect()
+    }
+}
+
+/// Extracts deduplicated /24 candidate subnets sorted by adapter priority (Ethernet first).
+pub fn get_candidate_subnets_from_list(ifaces: &[(String, IpAddr)]) -> Vec<std::net::Ipv4Addr> {
+    let mut scored: Vec<(std::net::Ipv4Addr, i32)> = ifaces
+        .iter()
+        .filter(|(name, ip)| is_usable_ip(ip) && !is_virtual_adapter(name))
+        .filter_map(|(name, ip)| match ip {
+            IpAddr::V4(v4) => {
+                let score = score_interface(name, ip);
+                let octets = v4.octets();
+                let subnet = std::net::Ipv4Addr::new(octets[0], octets[1], octets[2], 0);
+                Some((subnet, score))
+            }
+            IpAddr::V6(_) => None,
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut result = Vec::new();
+    for (subnet, _) in scored {
+        if !result.contains(&subnet) {
+            result.push(subnet);
+        }
+    }
+    result
+}
+
+/// Returns all candidate /24 subnets on the host system, prioritized with Ethernet subnets first.
+pub fn get_candidate_subnets() -> Vec<std::net::Ipv4Addr> {
+    if let Ok(netifas) = local_ip_address::list_afinet_netifas() {
+        let subnets = get_candidate_subnets_from_list(&netifas);
+        if !subnets.is_empty() {
+            return subnets;
+        }
+    }
+    if let Ok(IpAddr::V4(v4)) = local_ip_address::local_ip() {
+        let octets = v4.octets();
+        vec![std::net::Ipv4Addr::new(octets[0], octets[1], octets[2], 0)]
+    } else {
+        vec![std::net::Ipv4Addr::new(127, 0, 0, 0)]
     }
 }

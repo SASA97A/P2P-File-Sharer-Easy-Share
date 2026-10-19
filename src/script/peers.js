@@ -24,6 +24,18 @@ export function getPeerKey(peer) {
 }
 
 /**
+ * Returns a unique identity key for a device (deduplicating across Wi-Fi and Ethernet)
+ * @param {Object} peer
+ * @returns {string}
+ */
+export function getPeerIdentityKey(peer) {
+  if (!peer) return "";
+  if (peer.device_id) return `id:${peer.device_id}`;
+  if (peer.device_name && peer.device_name.trim()) return `name:${peer.device_name.trim().toLowerCase()}`;
+  return getPeerKey(peer);
+}
+
+/**
  * Returns all discovered peers
  * @returns {Array<Object>}
  */
@@ -53,7 +65,7 @@ export function setSelectedPeer(peer) {
  * @param {Object} peer
  */
 export function handlePeerSelect(peer) {
-  if (selectedPeer && getPeerKey(selectedPeer) === getPeerKey(peer)) {
+  if (selectedPeer && getPeerIdentityKey(selectedPeer) === getPeerIdentityKey(peer)) {
     // Toggle off selection if clicked again
     selectedPeer = null;
   } else {
@@ -63,16 +75,30 @@ export function handlePeerSelect(peer) {
 }
 
 /**
- * Replaces entire peer list while preserving active selection
+ * Replaces entire peer list while preserving active selection and deduplicating physical devices
  * @param {Array<Object>} peers
  */
 export function setPeerList(peers) {
-  discoveredPeers = Array.isArray(peers) ? [...peers] : [];
+  const list = Array.isArray(peers) ? peers : [];
+  const deduped = [];
+  const seenIdentities = new Set();
+
+  for (const peer of list) {
+    if (!peer) continue;
+    const ident = getPeerIdentityKey(peer);
+    if (!seenIdentities.has(ident)) {
+      seenIdentities.add(ident);
+      deduped.push(peer);
+    }
+  }
+
+  discoveredPeers = deduped;
 
   // Preserve selection if the selected peer still exists in the new list
   if (selectedPeer) {
+    const selectedIdent = getPeerIdentityKey(selectedPeer);
     const matching = discoveredPeers.find(
-      (p) => getPeerKey(p) === getPeerKey(selectedPeer)
+      (p) => getPeerIdentityKey(p) === selectedIdent
     );
     selectedPeer = matching || null;
   }
@@ -81,26 +107,28 @@ export function setPeerList(peers) {
 }
 
 /**
- * Adds or updates a single peer in the list while preserving active selection
+ * Adds or updates a single peer in the list while preserving active selection and avoiding duplicates
  * @param {Object} peer
  */
 export function upsertPeer(peer) {
   if (!peer) return;
 
-  const key = getPeerKey(peer);
-  const existingIdx = discoveredPeers.findIndex((p) => getPeerKey(p) === key);
+  const ident = getPeerIdentityKey(peer);
+  const existingIdx = discoveredPeers.findIndex(
+    (p) => getPeerIdentityKey(p) === ident || getPeerKey(p) === getPeerKey(peer)
+  );
 
   if (existingIdx !== -1) {
     discoveredPeers[existingIdx] = {
       ...discoveredPeers[existingIdx],
       ...peer,
     };
-    if (selectedPeer && getPeerKey(selectedPeer) === key) {
+    if (selectedPeer && getPeerIdentityKey(selectedPeer) === ident) {
       selectedPeer = discoveredPeers[existingIdx];
     }
   } else {
     discoveredPeers.push(peer);
-    if (selectedPeer && getPeerKey(selectedPeer) === key) {
+    if (selectedPeer && getPeerIdentityKey(selectedPeer) === ident) {
       selectedPeer = peer;
     }
   }
@@ -115,10 +143,16 @@ export function upsertPeer(peer) {
 export function removePeer(peer) {
   if (!peer) return;
 
+  const ident = getPeerIdentityKey(peer);
   const key = getPeerKey(peer);
-  discoveredPeers = discoveredPeers.filter((p) => getPeerKey(p) !== key);
+  discoveredPeers = discoveredPeers.filter(
+    (p) => getPeerIdentityKey(p) !== ident && getPeerKey(p) !== key
+  );
 
-  if (selectedPeer && getPeerKey(selectedPeer) === key) {
+  if (
+    selectedPeer &&
+    (getPeerIdentityKey(selectedPeer) === ident || getPeerKey(selectedPeer) === key)
+  ) {
     selectedPeer = null;
   }
 

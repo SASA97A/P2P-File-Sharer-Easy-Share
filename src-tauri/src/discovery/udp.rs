@@ -107,6 +107,19 @@ impl PeerTracker {
         format!("{}:{}", peer.ip, peer.port)
     }
 
+    fn ip_priority(ip_str: &str, candidate_subnets: &[std::net::Ipv4Addr]) -> usize {
+        if let Ok(ip) = ip_str.parse::<std::net::Ipv4Addr>() {
+            let octets = ip.octets();
+            let peer_subnet = std::net::Ipv4Addr::new(octets[0], octets[1], octets[2], 0);
+            for (idx, subnet) in candidate_subnets.iter().enumerate() {
+                if &peer_subnet == subnet {
+                    return idx; // 0 is highest priority (Ethernet)
+                }
+            }
+        }
+        usize::MAX
+    }
+
     pub fn record_seen(&mut self, peer: PeerInfo) -> Option<PeerEvent> {
         self.record_seen_with_source(peer, PeerSource::Udp)
     }
@@ -118,26 +131,63 @@ impl PeerTracker {
     ) -> Option<PeerEvent> {
         let key = Self::key_for_peer(&peer);
         let now = Instant::now();
+
+        // 1. Exact match on IP:port
         if let Some(tracked) = self.peers.get_mut(&key) {
             tracked.last_seen = now;
             tracked.source = source;
             if tracked.peer != peer {
                 tracked.peer = peer.clone();
-                Some(PeerEvent::Discovered(peer))
+                return Some(PeerEvent::Updated(peer));
+            } else {
+                return None;
+            }
+        }
+
+        // 2. Match on device_name across different IP addresses (e.g. Wi-Fi vs Ethernet)
+        let matching_key = self.peers.iter().find_map(|(k, v)| {
+            if !peer.device_name.is_empty() && v.peer.device_name == peer.device_name {
+                Some(k.clone())
             } else {
                 None
             }
-        } else {
-            self.peers.insert(
-                key,
-                TrackedPeer {
-                    peer: peer.clone(),
-                    last_seen: now,
-                    source,
-                },
-            );
-            Some(PeerEvent::Discovered(peer))
+        });
+
+        if let Some(old_key) = matching_key {
+            let subnets = crate::discovery::nic::get_candidate_subnets();
+            let old_priority = Self::ip_priority(&self.peers[&old_key].peer.ip, &subnets);
+            let new_priority = Self::ip_priority(&peer.ip, &subnets);
+
+            if new_priority < old_priority || (new_priority == old_priority && new_priority == usize::MAX) {
+                // The new address is higher priority (or both are unknown, adopt newer address)
+                self.peers.remove(&old_key);
+                self.peers.insert(
+                    key,
+                    TrackedPeer {
+                        peer: peer.clone(),
+                        last_seen: now,
+                        source,
+                    },
+                );
+                return Some(PeerEvent::Updated(peer));
+            } else {
+                // Existing address has equal or higher priority (e.g. Ethernet vs Wi-Fi)
+                let tracked = self.peers.get_mut(&old_key).unwrap();
+                tracked.last_seen = now;
+                return None;
+            }
         }
+
+        // 3. Brand new peer
+        self.peers.insert(
+            key,
+            TrackedPeer {
+                peer: peer.clone(),
+                last_seen: now,
+                source,
+            },
+        );
+        Some(PeerEvent::Discovered(peer))
     }
 
     pub fn prune_expired(&mut self) -> Vec<PeerEvent> {

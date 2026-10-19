@@ -1,7 +1,7 @@
 use easy_share_lib::client::TransferClient;
 use easy_share_lib::models::peer::DeviceInfo;
 use easy_share_lib::pairing::scanner::{
-    parse_address_or_url, resolve_peer_by_address, sweep_subnet_for_pin,
+    parse_address_or_url, resolve_peer_by_address, sweep_all_subnets_for_pin, sweep_subnet_for_pin,
     sweep_subnet_for_pin_ports,
 };
 use easy_share_lib::server::{start_server, ServerState};
@@ -228,6 +228,27 @@ async fn test_sweep_subnet_for_pin_fallback_range_discovery() {
         assert_eq!(peer.ip, "127.0.0.1");
         assert_eq!(peer.port, port);
     }
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_sweep_all_subnets_for_pin_discovery() {
+    let temp_dir = setup_test_dir("sweep_all_subnets");
+    let target_pin = "334455";
+    let device = sample_device_info("Multi-Subnet-Target", target_pin);
+    let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+
+    let (port, _server_handle) = start_server(state.clone(), 0).await.expect("failed to start test server");
+    let client = TransferClient::new();
+
+    // In a test environment, loopback 127.0.0.0/24 is one of the candidate subnets
+    let peer = sweep_all_subnets_for_pin(&client, target_pin, port, 50, 500)
+        .await
+        .expect("should discover device across candidate subnets");
+
+    assert_eq!(peer.device_name, "Multi-Subnet-Target");
+    assert_eq!(peer.port, port);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

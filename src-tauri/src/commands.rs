@@ -237,16 +237,12 @@ pub async fn connect_by_pin(
         }
     }
 
-    // 3. Fall back to sweeping the local subnet for matching PIN
+    // 3. Fall back to sweeping all candidate subnets (Ethernet first, then Wi-Fi) for matching PIN
     let peer = match matching_peer {
         Some(p) => p,
         None => {
-            let local_ip = crate::discovery::nic::get_best_physical_ip()
-                .map(|ip| ip.to_string())
-                .unwrap_or_else(|| "127.0.0.1".to_string());
-            crate::pairing::scanner::sweep_subnet_for_pin(
+            crate::pairing::scanner::sweep_all_subnets_for_pin(
                 &state.transfer_client,
-                &local_ip,
                 &normalized,
                 5050,
                 50,

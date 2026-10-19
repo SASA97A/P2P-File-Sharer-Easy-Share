@@ -60,16 +60,18 @@ fn test_nic_ip_usability_and_scoring() {
 
     // Scoring tests
     let physical_score = score_interface("Wi-Fi", &lan_192);
+    let ethernet_score = score_interface("Ethernet", &lan_192);
     let virtual_score = score_interface("vEthernet (WSL)", &lan_192);
     let apipa_score = score_interface("Ethernet", &apipa);
     let loopback_score = score_interface("Loopback", &loopback);
 
     assert!(physical_score > 0);
+    assert!(ethernet_score > physical_score, "Ethernet must be scored higher than Wi-Fi for maximum throughput");
     assert!(physical_score > virtual_score);
     assert!(physical_score > apipa_score);
     assert!(physical_score > loopback_score);
 
-    // Test selection from list
+    // Test selection from list preferring Ethernet over Wi-Fi
     let ifaces = vec![
         ("Software Loopback 1".to_string(), loopback),
         ("vEthernet (Default Switch)".to_string(), IpAddr::V4(Ipv4Addr::new(172, 28, 16, 1))),
@@ -77,10 +79,32 @@ fn test_nic_ip_usability_and_scoring() {
         ("tailscale0".to_string(), IpAddr::V4(Ipv4Addr::new(100, 64, 1, 5))),
         ("Ethernet 2 (APIPA)".to_string(), apipa),
         ("Wi-Fi".to_string(), lan_192),
+        ("Ethernet".to_string(), lan_10),
     ];
 
     let best_ip = get_best_physical_ip_from_list(&ifaces);
-    assert_eq!(best_ip, Some(lan_192));
+    assert_eq!(best_ip, Some(lan_10), "Ethernet interface must be preferred over Wi-Fi");
+}
+
+#[test]
+fn test_nic_get_candidate_subnets_deduplication_and_sorting() {
+    use easy_share_lib::discovery::nic::get_candidate_subnets_from_list;
+
+    let ifaces = vec![
+        ("Wi-Fi".to_string(), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 50))),
+        ("Ethernet".to_string(), IpAddr::V4(Ipv4Addr::new(10, 0, 0, 12))),
+        // Duplicate subnet on another interface (e.g. Wi-Fi bridge or second IP)
+        ("Wi-Fi Secondary".to_string(), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 99))),
+        // Virtual interface should be ignored
+        ("vEthernet (WSL)".to_string(), IpAddr::V4(Ipv4Addr::new(172, 20, 0, 1))),
+    ];
+
+    let subnets = get_candidate_subnets_from_list(&ifaces);
+
+    // Ethernet (10.0.0.0) must come before Wi-Fi (192.168.1.0), and 192.168.1.0 should only appear once
+    assert_eq!(subnets.len(), 2, "Should have 2 unique candidate subnets");
+    assert_eq!(subnets[0], Ipv4Addr::new(10, 0, 0, 0), "Ethernet subnet must be prioritized first");
+    assert_eq!(subnets[1], Ipv4Addr::new(192, 168, 1, 0), "Wi-Fi subnet must come after");
 }
 
 #[tokio::test]
@@ -185,6 +209,48 @@ async fn test_peer_tracker_deduplication_and_expiration() {
     let lost_b = PeerEvent::Lost(peer_b);
     assert!(expired.contains(&lost_a));
     assert!(expired.contains(&lost_b));
+}
+
+#[tokio::test]
+async fn test_peer_tracker_deduplicates_same_device_across_ips() {
+    let mut tracker = PeerTracker::new(Duration::from_millis(500));
+
+    let peer_wifi = PeerInfo {
+        device_name: "MacBook-Pro".to_string(),
+        device_type: "laptop".to_string(),
+        os: "macos".to_string(),
+        ip: "192.168.1.150".to_string(),
+        port: 5050,
+        pairing_pin: Some("839421".to_string()),
+    };
+
+    let peer_ethernet = PeerInfo {
+        device_name: "MacBook-Pro".to_string(),
+        device_type: "laptop".to_string(),
+        os: "macos".to_string(),
+        ip: "10.0.0.150".to_string(),
+        port: 5050,
+        pairing_pin: Some("839421".to_string()),
+    };
+
+    // 1. First announcement arrives over Wi-Fi
+    let evt1 = tracker.record_seen(peer_wifi.clone());
+    assert_eq!(evt1, Some(PeerEvent::Discovered(peer_wifi.clone())));
+    assert_eq!(tracker.len(), 1);
+
+    // 2. Second announcement arrives from the same device over Ethernet
+    let evt2 = tracker.record_seen(peer_ethernet.clone());
+    // Should NOT create a second peer (remains len == 1)
+    assert_eq!(tracker.len(), 1, "Duplicate device across different IP must be deduplicated to 1 peer");
+
+    // Must emit Updated with preferred/updated IP
+    assert_eq!(evt2, Some(PeerEvent::Updated(peer_ethernet.clone())));
+
+    // The active peer list must contain exactly one peer with the latest/preferred address
+    let peers = tracker.get_peers();
+    assert_eq!(peers.len(), 1);
+    assert_eq!(peers[0].device_name, "MacBook-Pro");
+    assert_eq!(peers[0].ip, "10.0.0.150");
 }
 
 #[tokio::test]

@@ -281,3 +281,43 @@ pub async fn sweep_subnet_for_pin(
         .await
     }
 }
+
+/// Sweeps all candidate physical subnets (Ethernet subnets first, then Wi-Fi).
+/// Short-circuits immediately upon discovering a matching peer.
+pub async fn sweep_all_subnets_for_pin(
+    client: &TransferClient,
+    target_pin: &str,
+    default_port: u16,
+    concurrency_limit: usize,
+    timeout_ms: u64,
+) -> Result<PeerInfo, String> {
+    let mut candidate_subnets = crate::discovery::nic::get_candidate_subnets();
+    let loopback_subnet = std::net::Ipv4Addr::new(127, 0, 0, 0);
+    if !candidate_subnets.contains(&loopback_subnet) {
+        candidate_subnets.push(loopback_subnet);
+    }
+
+    let normalized = normalize_pin(target_pin)
+        .ok_or_else(|| format!("Invalid 6-digit pairing PIN: '{}'", target_pin))?;
+
+    for subnet in candidate_subnets {
+        let base_ip = format!("{}.{}.{}.0", subnet.octets()[0], subnet.octets()[1], subnet.octets()[2]);
+        if let Ok(peer) = sweep_subnet_for_pin(
+            client,
+            &base_ip,
+            &normalized,
+            default_port,
+            concurrency_limit,
+            timeout_ms,
+        )
+        .await
+        {
+            return Ok(peer);
+        }
+    }
+
+    Err(format!(
+        "No device found with pairing PIN {} on any active local subnet",
+        normalized
+    ))
+}
