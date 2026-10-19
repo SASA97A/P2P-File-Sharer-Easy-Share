@@ -466,3 +466,57 @@ async fn test_send_file_non_existent() {
         other => panic!("expected FileNotFound or Io error, got {:?}", other),
     }
 }
+
+#[tokio::test]
+async fn test_send_file_with_relative_path_directory_tree_preserved() {
+    let server_dir = setup_test_dir("tree_server");
+    let client_dir = setup_test_dir("tree_client");
+
+    let source_dir = client_dir.join("MyProject").join("src");
+    fs::create_dir_all(&source_dir).expect("failed to create client nested dir");
+    let file_path = source_dir.join("nested_doc.txt");
+    let expected_hash = create_test_file(&file_path, 2048);
+
+    let file_to_send = FileToSend::from_path("f-nested-1", &file_path)
+        .expect("failed to create FileToSend")
+        .with_relative_path("MyProject/src/nested_doc.txt");
+
+    let state = Arc::new(ServerState::new(
+        sample_device_info(0),
+        server_dir.clone(),
+    ));
+
+    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let req = TransferRequest::new(
+        "req-tree",
+        "Sender",
+        "windows",
+        vec![file_to_send.to_metadata()],
+    );
+    let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
+    let token = resp.session_token.expect("expected session token");
+
+    client
+        .send_file_resumable(&peer, &token, &file_to_send, |_, _| {})
+        .await
+        .expect("upload chunks failed");
+
+    let finish_resp = client
+        .finish_transfer(&peer, &token, &file_to_send.file_id)
+        .await
+        .expect("finish failed");
+
+    let expected_dest = server_dir.join("MyProject").join("src").join("nested_doc.txt");
+    assert_eq!(PathBuf::from(&finish_resp.saved_path), expected_dest);
+    assert!(expected_dest.exists(), "Preserved nested file must exist on disk");
+
+    let actual_hash = FileManager::calculate_blake3_file(&expected_dest)
+        .expect("failed to calculate saved file blake3");
+    assert_eq!(actual_hash, expected_hash);
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}

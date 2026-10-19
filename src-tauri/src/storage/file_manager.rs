@@ -136,6 +136,59 @@ impl FileManager {
         downloads_dir.join(format!("{}.{}.part", sanitized, file_key))
     }
 
+    /// Sanitizes an incoming relative folder path against directory traversal,
+    /// absolute prefixes, and invalid characters, preserving safe nested components.
+    pub fn sanitize_relative_path(raw_rel: &str) -> Option<PathBuf> {
+        let normalized = raw_rel.replace('\\', "/");
+        let mut path_buf = PathBuf::new();
+        let mut count = 0;
+
+        for segment in normalized.split('/') {
+            let trimmed = segment.trim();
+            if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+                continue;
+            }
+            // Strip drive letters (e.g. "C:")
+            if trimmed.len() == 2 && trimmed.ends_with(':') {
+                continue;
+            }
+            let sanitized_seg = Self::sanitize_filename(trimmed);
+            if !sanitized_seg.is_empty() && sanitized_seg != "unnamed_file" {
+                path_buf.push(sanitized_seg);
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            Some(path_buf)
+        } else {
+            None
+        }
+    }
+
+    /// Resolves the destination path inside `downloads_dir`, preserving relative directory hierarchy
+    /// if `relative_path` is provided, and handling name collisions safely.
+    pub fn resolve_destination_path(
+        downloads_dir: &Path,
+        file_name: &str,
+        relative_path: Option<&str>,
+    ) -> PathBuf {
+        if let Some(raw_rel) = relative_path {
+            if let Some(safe_rel) = Self::sanitize_relative_path(raw_rel) {
+                let target_parent = match safe_rel.parent() {
+                    Some(parent) if !parent.as_os_str().is_empty() => downloads_dir.join(parent),
+                    _ => downloads_dir.to_path_buf(),
+                };
+                let target_name = safe_rel
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(file_name);
+                return Self::get_unique_dest_path(&target_parent, target_name);
+            }
+        }
+        Self::get_unique_dest_path(downloads_dir, file_name)
+    }
+
     /// Generates a unique destination path in `downloads_dir`, incrementing a suffix
     /// (`file(1).ext`, `file(2).ext`) if collisions exist.
     pub fn get_unique_dest_path(downloads_dir: &Path, file_name: &str) -> PathBuf {

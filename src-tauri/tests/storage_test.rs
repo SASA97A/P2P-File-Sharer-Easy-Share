@@ -265,3 +265,38 @@ fn test_get_downloads_dir() {
     let downloads_dir = FileManager::get_downloads_dir();
     assert!(!downloads_dir.as_os_str().is_empty());
 }
+
+#[test]
+fn test_resolve_destination_path_sanitization_and_hierarchy() {
+    let temp_dir = std::env::temp_dir().join("easy_share_test_dest_hierarchy");
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    // 1. Valid nested relative path
+    let p1 = FileManager::resolve_destination_path(&temp_dir, "main.rs", Some("MyProject/src/main.rs"));
+    assert_eq!(p1, temp_dir.join("MyProject").join("src").join("main.rs"));
+
+    // 2. Traversal attack neutralization
+    let p2 = FileManager::resolve_destination_path(&temp_dir, "passwd", Some("../../etc/passwd"));
+    assert_eq!(p2, temp_dir.join("etc").join("passwd"));
+
+    // 3. Drive letter and absolute prefix neutralization
+    let p3 = FileManager::resolve_destination_path(&temp_dir, "boot.ini", Some("C:\\Windows\\boot.ini"));
+    assert_eq!(p3, temp_dir.join("Windows").join("boot.ini"));
+
+    // 4. Fallback to filename when None or empty
+    let p4 = FileManager::resolve_destination_path(&temp_dir, "notes.txt", None);
+    assert_eq!(p4, temp_dir.join("notes.txt"));
+
+    let p5 = FileManager::resolve_destination_path(&temp_dir, "notes.txt", Some(""));
+    assert_eq!(p5, temp_dir.join("notes.txt"));
+
+    // 5. Collision handling when file already exists
+    fs::create_dir_all(temp_dir.join("MyProject").join("src")).unwrap();
+    File::create(&p1).unwrap();
+
+    let p1_col = FileManager::resolve_destination_path(&temp_dir, "main.rs", Some("MyProject/src/main.rs"));
+    assert_eq!(p1_col, temp_dir.join("MyProject").join("src").join("main(1).rs"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

@@ -414,7 +414,11 @@ pub async fn handle_transfer_finish(
         }
     }
 
-    let dest_path = FileManager::get_unique_dest_path(&state.download_dir(), &file.name);
+    let dest_path = FileManager::resolve_destination_path(
+        &state.download_dir(),
+        &file.name,
+        file.relative_path.as_deref(),
+    );
     let part_path_clone = part_path.clone();
     let dest_path_clone = dest_path.clone();
     tokio::task::spawn_blocking(move || {
