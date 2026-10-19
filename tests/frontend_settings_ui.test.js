@@ -65,14 +65,28 @@ test("settings UI controller", async (t) => {
   const openDirBtn = createMockElement("openDownloadFolderBtn", "button");
   const sidebarOpenDirBtn = createMockElement("openDownloadsBtn", "button");
   const myDeviceNameBadge = createMockElement("myDeviceName", "span");
+  const speedSelect = createMockElement("settingsSpeedLimitSelect", "select");
 
   setupSettings();
 
   await t.test("openSettingsView populates inputs with current configuration", async () => {
+    const { getSpeedLimit } = await import("../src/script/tauri-bridge.js");
+    const currentLimit = await getSpeedLimit();
     await openSettingsView();
     assert.equal(view.classList._classes.has("hidden"), false);
     assert.ok(nameInput.value.length > 0);
     assert.ok(dirDisplay.textContent.length > 0);
+    assert.equal(speedSelect.value, String(currentLimit));
+  });
+
+  await t.test("changing speed limit dropdown invokes setSpeedLimit", async () => {
+    const { getSpeedLimit } = await import("../src/script/tauri-bridge.js");
+    speedSelect.value = "10485760";
+    speedSelect.dispatchEvent({ type: "change" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const current = await getSpeedLimit();
+    assert.equal(current, 10485760);
   });
 
   await t.test("save device name updates device and badge", async () => {

@@ -57,6 +57,7 @@ const mockState = {
     pairing_pin: "839421",
   },
   download_dir: "C:\\Users\\MockUser\\Downloads",
+  speed_limit_bps: 0,
   peers: [],
   history: [
     {
@@ -203,6 +204,15 @@ async function callInvoke(command, args = {}) {
     case "set_download_dir": {
       mockState.download_dir = args.path;
       return args.path;
+    }
+
+    case "get_speed_limit":
+      return mockState.speed_limit_bps || 0;
+
+    case "set_speed_limit": {
+      const limit = Number(args.limitBps ?? args.limit_bps ?? 0);
+      mockState.speed_limit_bps = limit;
+      return limit;
     }
 
     case "set_device_name": {
@@ -479,6 +489,24 @@ export async function resumeTransfer(sessionToken) {
  */
 export async function getDownloadDir() {
   return await callInvoke("get_download_dir");
+}
+
+/**
+ * Returns the current global outbound speed limit in bytes per second (0 = unlimited)
+ */
+export async function getSpeedLimit() {
+  return await callInvoke("get_speed_limit");
+}
+
+/**
+ * Updates the global outbound speed limit in bytes per second (0 = unlimited)
+ * @param {number} limitBps
+ */
+export async function setSpeedLimit(limitBps) {
+  return await callInvoke("set_speed_limit", {
+    limitBps,
+    limit_bps: limitBps,
+  });
 }
 
 /**

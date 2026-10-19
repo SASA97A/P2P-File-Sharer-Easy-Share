@@ -1430,6 +1430,32 @@ input:focus-visible,
   font-size: 13px;
 }
 
+.settings-select {
+  height: 34px;
+  width: 200px;
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border-3);
+  background: var(--surface-1);
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.settings-select:focus,
+.settings-select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+
+.settings-select option {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
 .settings-controls .btn-primary {
   height: 34px;
 }

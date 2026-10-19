@@ -8,9 +8,25 @@ import {
   openDownloadDir,
   onDeviceInfoUpdated,
   getMyDeviceInfo,
+  getSpeedLimit,
+  setSpeedLimit,
 } from "../src/script/tauri-bridge.js";
 
 test("settings bridge API", async (t) => {
+  await t.test("getSpeedLimit returns default 0 (unlimited)", async () => {
+    const limit = await getSpeedLimit();
+    assert.equal(typeof limit, "number");
+    assert.equal(limit, 0);
+  });
+
+  await t.test("setSpeedLimit updates speed limit", async () => {
+    const res = await setSpeedLimit(5242880);
+    assert.equal(res, 5242880);
+
+    const current = await getSpeedLimit();
+    assert.equal(current, 5242880);
+  });
+
   await t.test("getDownloadDir returns current download folder path", async () => {
     const dir = await getDownloadDir();
     assert.equal(typeof dir, "string");

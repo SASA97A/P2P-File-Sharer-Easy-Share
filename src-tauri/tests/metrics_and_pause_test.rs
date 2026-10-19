@@ -179,6 +179,64 @@ async fn test_sender_chunk_streaming_pauses_and_resumes() {
 }
 
 #[tokio::test]
+async fn test_sender_chunk_streaming_respects_speed_limit() {
+    use std::fs;
+    use std::sync::Arc;
+    use std::time::Instant;
+    use easy_share_lib::client::sender::{FileToSend, TransferClient, TransferControl};
+    use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
+    use easy_share_lib::models::transfer::TransferRequest;
+    use easy_share_lib::server::routes::start_server;
+    use easy_share_lib::server::state::ServerState;
+
+    let test_dir = std::env::temp_dir().join("easy_share_test_speed_limit_streaming");
+    let _ = fs::remove_dir_all(&test_dir);
+    fs::create_dir_all(&test_dir).unwrap();
+
+    let rx_info = DeviceInfo::new("Receiver-Throttle", "desktop", "windows", "2.0.0", 0);
+    let rx_state = Arc::new(ServerState::new(rx_info, test_dir.join("rx")));
+    let (rx_port, _rx_task) = start_server(rx_state.clone(), 0).await.unwrap();
+
+    let peer = PeerInfo::new("Receiver-Throttle", "desktop", "windows", "127.0.0.1", rx_port);
+
+    // 256 KB file sent in 64 KB chunks (4 chunks)
+    let src_file = test_dir.join("throttled.bin");
+    let data = vec![0xBBu8; 256 * 1024];
+    fs::write(&src_file, &data).unwrap();
+
+    let file_to_send = FileToSend::from_path("f_throttle", &src_file).unwrap();
+    let req = TransferRequest::new("req_t", "Sender-Throttle", "desktop", vec![file_to_send.to_metadata()]);
+
+    let client = TransferClient::with_chunk_size(64 * 1024);
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    let token = resp.session_token.unwrap();
+
+    // 400 KB/s: 256 KB should take at least ~500ms
+    let ctrl = TransferControl::new().with_speed_limit(400 * 1024);
+
+    let start_time = Instant::now();
+    let res = client
+        .send_file_resumable_controlled(
+            &peer,
+            &token,
+            &file_to_send,
+            Some(&ctrl),
+            |_sent, _total| {},
+        )
+        .await;
+
+    let elapsed = start_time.elapsed();
+    assert!(res.is_ok(), "Transfer should succeed with throttling: {:?}", res);
+    assert!(
+        elapsed >= std::time::Duration::from_millis(400),
+        "Expected elapsed time >= 400ms due to speed limit, got {:?}",
+        elapsed
+    );
+
+    let _ = fs::remove_dir_all(&test_dir);
+}
+
+#[tokio::test]
 async fn test_app_state_pause_and_resume_lifecycle() {
     use easy_share_lib::app_state::AppState;
     use easy_share_lib::client::TransferControl;
@@ -217,5 +275,52 @@ async fn test_app_state_pause_and_resume_lifecycle() {
     assert!(cancelled);
     assert!(!app_state.is_transfer_paused(token).await);
 }
+
+#[test]
+fn test_transfer_control_speed_limit_get_set() {
+    use easy_share_lib::client::sender::TransferControl;
+
+    let ctrl = TransferControl::new();
+    assert_eq!(ctrl.speed_limit(), 0);
+
+    ctrl.set_speed_limit(10_000_000);
+    assert_eq!(ctrl.speed_limit(), 10_000_000);
+
+    let ctrl2 = TransferControl::new().with_speed_limit(5_000_000);
+    assert_eq!(ctrl2.speed_limit(), 5_000_000);
+}
+
+#[tokio::test]
+async fn test_app_state_speed_limit_updates_active_controls() {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use easy_share_lib::app_state::AppState;
+    use easy_share_lib::client::sender::TransferControl;
+    use easy_share_lib::models::peer::DeviceInfo;
+    use easy_share_lib::server::state::ServerState;
+
+    let test_dir = std::env::temp_dir().join("easy_share_test_app_state_speed_limit");
+    let info = DeviceInfo::new("TestNode", "desktop", "windows", "2.0.0", 5050);
+    let server_state = Arc::new(ServerState::new(info, test_dir.clone()));
+
+    let app_state = AppState::new(
+        server_state,
+        None,
+        test_dir.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+
+    assert_eq!(app_state.get_speed_limit().await, 0);
+
+    let token = "session-speed-limit-123";
+    let ctrl = TransferControl::new();
+    app_state.register_transfer_control(token, ctrl.clone()).await;
+
+    app_state.set_speed_limit(5_242_880).await;
+    assert_eq!(app_state.get_speed_limit().await, 5_242_880);
+    assert_eq!(ctrl.speed_limit(), 5_242_880);
+}
+
 
 

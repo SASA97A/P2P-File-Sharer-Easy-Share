@@ -11,6 +11,8 @@ import {
   openDownloadDir,
   pickFolder,
   onDeviceInfoUpdated,
+  getSpeedLimit,
+  setSpeedLimit,
 } from "./tauri-bridge.js";
 import { showToast } from "./ui.js";
 
@@ -34,6 +36,12 @@ export async function openSettingsView() {
     if (dirDisplay) {
       dirDisplay.textContent = downloadDir || "Default Downloads";
       dirDisplay.title = downloadDir || "";
+    }
+
+    const speedLimit = await getSpeedLimit();
+    const speedSelect = document.getElementById("settingsSpeedLimitSelect");
+    if (speedSelect) {
+      speedSelect.value = String(speedLimit || 0);
     }
   } catch (err) {
     console.error("Failed to load settings data:", err);
@@ -168,6 +176,21 @@ export function setupSettings() {
 
   if (sidebarOpenDirBtn) {
     sidebarOpenDirBtn.addEventListener("click", handleOpenDownloads);
+  }
+
+  // Speed Limit Selection Handler
+  const speedSelect = document.getElementById("settingsSpeedLimitSelect");
+  if (speedSelect) {
+    speedSelect.addEventListener("change", async () => {
+      try {
+        const val = Number(speedSelect.value) || 0;
+        await setSpeedLimit(val);
+        showToast("Upload speed limit updated", "success");
+      } catch (err) {
+        console.error("Failed to update speed limit:", err);
+        showToast(`Failed to update speed limit: ${err}`, "error");
+      }
+    });
   }
 
   // Listen for device info updates

@@ -7,7 +7,7 @@ use crate::storage::file_manager::FileManager;
 use std::fmt;
 use std::io::SeekFrom;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::sync::Notify;
@@ -22,6 +22,7 @@ pub struct TransferControl {
     pub cancel_token: CancellationToken,
     pub is_paused: Arc<AtomicBool>,
     pub pause_notify: Arc<Notify>,
+    pub speed_limit_bps: Arc<AtomicU64>,
 }
 
 impl Default for TransferControl {
@@ -36,6 +37,7 @@ impl TransferControl {
             cancel_token: CancellationToken::new(),
             is_paused: Arc::new(AtomicBool::new(false)),
             pause_notify: Arc::new(Notify::new()),
+            speed_limit_bps: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -45,7 +47,24 @@ impl TransferControl {
             cancel_token,
             is_paused: Arc::new(AtomicBool::new(false)),
             pause_notify: Arc::new(Notify::new()),
+            speed_limit_bps: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Builder method to set initial speed limit in bytes per second (0 = unlimited).
+    pub fn with_speed_limit(self, limit_bps: u64) -> Self {
+        self.set_speed_limit(limit_bps);
+        self
+    }
+
+    /// Set or update the speed limit in bytes per second (0 = unlimited).
+    pub fn set_speed_limit(&self, limit_bps: u64) {
+        self.speed_limit_bps.store(limit_bps, Ordering::SeqCst);
+    }
+
+    /// Retrieve the current speed limit in bytes per second (0 = unlimited).
+    pub fn speed_limit(&self) -> u64 {
+        self.speed_limit_bps.load(Ordering::SeqCst)
     }
 
     /// Pause the transfer stream.
@@ -678,6 +697,7 @@ impl TransferClient {
             let mut buffer = vec![0u8; chunk_len as usize];
             file_handle.read_exact(&mut buffer).await?;
 
+            let chunk_start = tokio::time::Instant::now();
             let chunk_resp = self
                 .send_chunk_url(base_url, session_token, &file.file_id, current_offset, buffer)
                 .await?;
@@ -687,6 +707,25 @@ impl TransferClient {
             total_sent_in_call += written;
 
             progress_cb(current_offset, file.size);
+
+            if let Some(ctrl) = control {
+                let limit = ctrl.speed_limit();
+                if limit > 0 && written > 0 {
+                    let expected_micros = (written as u128 * 1_000_000) / limit as u128;
+                    let elapsed = chunk_start.elapsed();
+                    let target_dur = std::time::Duration::from_micros(expected_micros as u64);
+                    if target_dur > elapsed {
+                        let sleep_dur = target_dur - elapsed;
+                        tokio::select! {
+                            _ = tokio::time::sleep(sleep_dur) => {},
+                            _ = ctrl.cancel_token.cancelled() => {
+                                return Err(ClientError::Cancelled);
+                            }
+                            _ = ctrl.pause_notify.notified() => {}
+                        }
+                    }
+                }
+            }
         }
 
         Ok(total_sent_in_call)

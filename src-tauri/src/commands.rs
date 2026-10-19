@@ -387,7 +387,9 @@ pub async fn start_transfer(
             })?;
 
             let cancel_token = tokio_util::sync::CancellationToken::new();
-            let transfer_control = crate::client::TransferControl::from_cancellation_token(cancel_token.clone());
+            let speed_limit = state.get_speed_limit().await;
+            let transfer_control = crate::client::TransferControl::from_cancellation_token(cancel_token.clone())
+                .with_speed_limit(speed_limit);
             state
                 .register_cancellation_token(&session_token, cancel_token.clone())
                 .await;
@@ -772,6 +774,22 @@ pub async fn open_download_dir(state: State<'_, AppState>) -> Result<(), String>
             .map_err(|e| format!("Failed to open directory: {}", e))?;
     }
     Ok(())
+}
+
+/// Returns the current global upload speed limit in bytes per second (0 = unlimited).
+#[tauri::command]
+pub async fn get_speed_limit(state: State<'_, AppState>) -> Result<u64, String> {
+    Ok(state.get_speed_limit().await)
+}
+
+/// Updates the global upload speed limit in bytes per second and updates active transfers.
+#[tauri::command]
+pub async fn set_speed_limit(
+    state: State<'_, AppState>,
+    limit_bps: u64,
+) -> Result<u64, String> {
+    state.set_speed_limit(limit_bps).await;
+    Ok(limit_bps)
 }
 
 /// Inspects an array of absolute filesystem paths (e.g. from native window drag-drop)

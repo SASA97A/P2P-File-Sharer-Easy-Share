@@ -291,6 +291,8 @@ pub fn run() {
             commands::cancel_transfer,
             commands::get_download_dir,
             commands::set_download_dir,
+            commands::get_speed_limit,
+            commands::set_speed_limit,
             commands::set_device_name,
             commands::open_download_dir,
             commands::inspect_paths,

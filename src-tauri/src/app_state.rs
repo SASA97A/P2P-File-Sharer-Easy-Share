@@ -6,6 +6,7 @@ use crate::models::peer::{DeviceInfo, PeerInfo};
 use crate::server::state::ServerState;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, RwLock};
@@ -21,6 +22,7 @@ pub struct AppState {
     pub pending_consents: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     pub cancellation_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
     pub transfer_controls: Arc<RwLock<HashMap<String, TransferControl>>>,
+    pub speed_limit_bps: Arc<AtomicU64>,
 }
 
 impl AppState {
@@ -58,6 +60,7 @@ impl AppState {
             pending_consents,
             cancellation_tokens: Arc::new(RwLock::new(HashMap::new())),
             transfer_controls: Arc::new(RwLock::new(HashMap::new())),
+            speed_limit_bps: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -127,6 +130,21 @@ impl AppState {
             ctrl.is_paused()
         } else {
             false
+        }
+    }
+
+    /// Retrieves the current global outbound speed limit in bytes per second (0 = unlimited).
+    pub async fn get_speed_limit(&self) -> u64 {
+        self.speed_limit_bps.load(Ordering::SeqCst)
+    }
+
+    /// Sets the global outbound speed limit in bytes per second (0 = unlimited),
+    /// and dynamically propagates the new limit to all active transfer sessions.
+    pub async fn set_speed_limit(&self, limit_bps: u64) {
+        self.speed_limit_bps.store(limit_bps, Ordering::SeqCst);
+        let controls = self.transfer_controls.read().await;
+        for control in controls.values() {
+            control.set_speed_limit(limit_bps);
         }
     }
 
