@@ -93,6 +93,7 @@ pub struct TrackedPeer {
 pub struct PeerTracker {
     peers: HashMap<String, TrackedPeer>,
     ttl: Duration,
+    candidate_subnets: Option<Vec<std::net::Ipv4Addr>>,
 }
 
 impl PeerTracker {
@@ -100,7 +101,17 @@ impl PeerTracker {
         Self {
             peers: HashMap::new(),
             ttl,
+            candidate_subnets: None,
         }
+    }
+
+    pub fn with_candidate_subnets(mut self, subnets: Vec<std::net::Ipv4Addr>) -> Self {
+        self.candidate_subnets = Some(subnets);
+        self
+    }
+
+    pub fn set_candidate_subnets(&mut self, subnets: Vec<std::net::Ipv4Addr>) {
+        self.candidate_subnets = Some(subnets);
     }
 
     pub fn key_for_peer(peer: &PeerInfo) -> String {
@@ -154,12 +165,19 @@ impl PeerTracker {
         });
 
         if let Some(old_key) = matching_key {
-            let subnets = crate::discovery::nic::get_candidate_subnets();
-            let old_priority = Self::ip_priority(&self.peers[&old_key].peer.ip, &subnets);
-            let new_priority = Self::ip_priority(&peer.ip, &subnets);
+            let default_subnets;
+            let subnets = match &self.candidate_subnets {
+                Some(subs) => subs.as_slice(),
+                None => {
+                    default_subnets = crate::discovery::nic::get_candidate_subnets();
+                    default_subnets.as_slice()
+                }
+            };
+            let old_priority = Self::ip_priority(&self.peers[&old_key].peer.ip, subnets);
+            let new_priority = Self::ip_priority(&peer.ip, subnets);
 
-            if new_priority < old_priority || (new_priority == old_priority && new_priority == usize::MAX) {
-                // The new address is higher priority (or both are unknown, adopt newer address)
+            if new_priority <= old_priority {
+                // The new address is higher or equal priority -> adopt new address
                 self.peers.remove(&old_key);
                 self.peers.insert(
                     key,
@@ -171,7 +189,7 @@ impl PeerTracker {
                 );
                 return Some(PeerEvent::Updated(peer));
             } else {
-                // Existing address has equal or higher priority (e.g. Ethernet vs Wi-Fi)
+                // Existing address has strictly higher priority (e.g. current is Ethernet, new is Wi-Fi)
                 let tracked = self.peers.get_mut(&old_key).unwrap();
                 tracked.last_seen = now;
                 return None;

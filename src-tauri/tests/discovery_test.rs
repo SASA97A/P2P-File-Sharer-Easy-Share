@@ -213,7 +213,8 @@ async fn test_peer_tracker_deduplication_and_expiration() {
 
 #[tokio::test]
 async fn test_peer_tracker_deduplicates_same_device_across_ips() {
-    let mut tracker = PeerTracker::new(Duration::from_millis(500));
+    let mut tracker = PeerTracker::new(Duration::from_millis(500))
+        .with_candidate_subnets(vec![Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(192, 168, 1, 0)]);
 
     let peer_wifi = PeerInfo {
         device_name: "MacBook-Pro".to_string(),
@@ -243,10 +244,15 @@ async fn test_peer_tracker_deduplicates_same_device_across_ips() {
     // Should NOT create a second peer (remains len == 1)
     assert_eq!(tracker.len(), 1, "Duplicate device across different IP must be deduplicated to 1 peer");
 
-    // Must emit Updated with preferred/updated IP
+    // Must emit Updated with preferred/updated Ethernet IP
     assert_eq!(evt2, Some(PeerEvent::Updated(peer_ethernet.clone())));
 
-    // The active peer list must contain exactly one peer with the latest/preferred address
+    // 3. Subsequent announcement from Wi-Fi should NOT downgrade the preferred Ethernet IP
+    let evt3 = tracker.record_seen(peer_wifi.clone());
+    assert_eq!(evt3, None, "Lower-priority Wi-Fi packet must not downgrade active Ethernet address");
+    assert_eq!(tracker.len(), 1);
+
+    // The active peer list must maintain the preferred Ethernet address
     let peers = tracker.get_peers();
     assert_eq!(peers.len(), 1);
     assert_eq!(peers[0].device_name, "MacBook-Pro");

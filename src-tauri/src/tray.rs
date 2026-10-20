@@ -37,6 +37,19 @@ pub fn format_transfer_tooltip(
     )
 }
 
+/// Shows, unminimizes, and focuses the main application window.
+pub fn restore_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    } else if let Some((_, window)) = app.webview_windows().iter().next() {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 /// Sets up the cross-platform system tray icon, context menu, and click events.
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show_item = MenuItemBuilder::with_id("show", "Show Easy Share").build(app)?;
@@ -62,11 +75,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     builder
         .on_menu_event(move |app_handle, event| match event.id.as_ref() {
             "show" => {
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
+                restore_main_window(app_handle);
             }
             "open_downloads" => {
                 if let Some(state) = app_handle.try_state::<crate::app_state::AppState>() {
