@@ -21,6 +21,7 @@ A high-performance, lightweight, and secure **local P2P file sharing desktop app
 - **Native OS Drag-and-Drop**: Drag files and folders directly from Explorer/Finder into the window with deep hierarchy inspection via Tauri 2 native window drop events.
 - **Bandwidth Throttling / Speed Limiter**: Real-time adjustable speed limits (5 MB/s, 10 MB/s, 25 MB/s, 50 MB/s, or Unlimited) without interrupting active transfers.
 - **System Tray & Native Notifications**: Minimize to tray with background operation and actionable desktop notifications for incoming transfers and completion events.
+- **Single-Instance Enforcement**: Native process singleton preventing duplicate instances, port conflicts, or redundant heartbeats; secondary launches automatically bring the existing window to the foreground.
 - **Multi-Interface Subnet Scanning & Ethernet Prioritization**: Sweeps across all active physical interfaces (Ethernet first, then Wi-Fi), prioritizing gigabit wired links and deduplicating multi-homed devices.
 - **Atomic Storage & Safe Naming**: Safe path sanitization prevents directory traversal attacks; incoming files write to `.part` buffers and rename atomically with collision handling.
 - **Modern Responsive Dark UI**: Clean interface built with glassmorphism aesthetics, Lucide SVG icons, real-time transfer telemetry, and paired peer badges.

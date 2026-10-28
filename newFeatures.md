@@ -124,6 +124,21 @@ Enables seamless multi-network peer discovery and PIN pairing across both Wi-Fi 
 
 ---
 
+## 7. Single-Instance Application Enforcement & Window Focus Handshake
+
+### Overview
+Guarantees that only a single instance of Easy Share runs at any given time, preventing port binding collisions, duplicate network heartbeats, and user confusion when the app is minimized to the system tray.
+
+### Delivered Capabilities
+- **Duplicate Process Termination**: Secondary launch attempts detect the existing running process and terminate immediately.
+- **Window Restore & Focus Handshake**: When a second instance attempt occurs, the primary instance automatically unhides/shows, unminimizes, and brings the existing window to the foreground.
+- **Tray-Aware Restoration**: Shared `restore_main_window` helper seamlessly un-hides the app whether launched from the system tray menu or desktop shortcut.
+
+### Technical Implementation
+- **Rust Backend**: Integrated `tauri-plugin-single-instance` (v2) in `src-tauri/Cargo.toml` and registered in `tauri::Builder` chain in `src-tauri/src/lib.rs`; centralized window restore logic in `src-tauri/src/tray.rs`.
+
+---
+
 # Part 2: Upcoming Roadmap Candidates
 
 The following features represent prospective roadmap items under consideration for future releases.
