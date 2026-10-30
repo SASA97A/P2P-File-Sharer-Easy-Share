@@ -184,10 +184,12 @@ pub async fn get_my_device_info(state: State<'_, AppState>) -> Result<DeviceInfo
 }
 
 /// Returns the local device's pairing info including 6-digit PIN, QR SVG, and direct URL.
+/// Showing the PIN opens pairing on this device (or extends the open window).
 #[tauri::command]
 pub async fn get_my_pairing_info(
     state: State<'_, AppState>,
 ) -> Result<PairingInfoPayload, String> {
+    state.server_state.set_pairing_open(true);
     build_pairing_payload(&state).await
 }
 
@@ -197,7 +199,15 @@ pub async fn regenerate_pairing_pin(
     state: State<'_, AppState>,
 ) -> Result<PairingInfoPayload, String> {
     state.regenerate_pairing_pin().await;
+    state.server_state.set_pairing_open(true);
     build_pairing_payload(&state).await
+}
+
+/// Closes pairing on this device once the PIN is no longer on screen.
+#[tauri::command]
+pub async fn close_pairing(state: State<'_, AppState>) -> Result<(), String> {
+    state.server_state.set_pairing_open(false);
+    Ok(())
 }
 
 /// Connects to a remote peer on the local network by scanning for a matching 6-digit PIN.
@@ -212,32 +222,39 @@ pub async fn connect_by_pin(
 
     let peers = state.get_peers().await;
 
-    // 1. Check if any cached peer already has this PIN explicitly (e.g. from QR scan)
-    let mut matching_peer = peers
-        .iter()
-        .find(|p| {
-            p.pairing_pin
-                .as_deref()
-                .and_then(crate::pairing::pin::normalize_pin)
-                .map(|p_pin| p_pin == normalized)
-                .unwrap_or(false)
-        })
-        .cloned();
-
-    // 2. Try authenticating directly against discovered peers via /api/v1/pair
-    if matching_peer.is_none() {
-        for p in &peers {
-            if let Ok(info) = state.transfer_client.pair_peer(p, &normalized).await {
+    // 1. Find discovered peers that are showing a PIN right now (pairing dialog open), then run
+    //    the SPAKE2 pairing only with those. The PIN is never sent, and devices that are not
+    //    pairing are never sent an attempt.
+    let mut matching_peer = None;
+    let mut mismatched_device = None;
+    for p in &peers {
+        match state.transfer_client.pair_open_peer(p, &normalized).await {
+            Ok(info) => {
                 let mut paired = p.clone();
                 paired.device_name = info.device_name;
-                paired.pairing_pin = Some(normalized.clone());
+                paired.pairing_pin = None;
                 matching_peer = Some(paired);
                 break;
             }
+            Err(crate::client::ClientError::Other(msg)) if msg == "Pairing PIN does not match" => {
+                mismatched_device = Some(p.device_name.clone());
+            }
+            Err(_) => {}
         }
     }
 
-    // 3. Fall back to sweeping all candidate subnets (Ethernet first, then Wi-Fi) for matching PIN
+    // A nearby device is pairing but rejected the PIN: most likely a typo, so stop here
+    // instead of sweeping the network.
+    if matching_peer.is_none() {
+        if let Some(name) = mismatched_device {
+            return Err(format!(
+                "The PIN does not match {}. Check the PIN shown on that device.",
+                name
+            ));
+        }
+    }
+
+    // 2. Fall back to sweeping all candidate subnets (Ethernet first, then Wi-Fi) for matching PIN
     let peer = match matching_peer {
         Some(p) => p,
         None => {
@@ -246,7 +263,7 @@ pub async fn connect_by_pin(
                 &normalized,
                 5050,
                 50,
-                250,
+                400,
             )
             .await?
         }
@@ -264,8 +281,18 @@ pub async fn connect_by_address(
     state: State<'_, AppState>,
     address: String,
 ) -> Result<PeerInfo, String> {
-    let peer =
+    let mut peer =
         crate::pairing::scanner::resolve_peer_by_address(&state.transfer_client, &address).await?;
+
+    // A QR code carries the PIN: pair right away so the PIN is never kept or sent onwards.
+    if let Some(pin) = peer.pairing_pin.take() {
+        state
+            .transfer_client
+            .pair_peer(&peer, &pin)
+            .await
+            .map_err(|e| format!("Pairing with {} failed: {}", peer.device_name, e))?;
+    }
+
     state.add_manual_peer(peer.clone()).await;
     let _ = app.emit("peer-found", &peer);
     Ok(peer)
@@ -398,21 +425,50 @@ pub async fn start_transfer(
         metadata_vec,
     );
 
+    let mut pairing = None;
     if encryption_enabled {
-        let (sender_secret, sender_pub) = crate::crypto::generate_ephemeral_keypair();
-        transfer_request.encryption_mode = Some("ChaCha20Poly1305".to_string());
-        transfer_request.ephemeral_public_key = Some(crate::crypto::public_key_to_hex(&sender_pub));
-        if let Some(ref pin) = peer.pairing_pin {
-            transfer_request.pin_auth = Some(crate::crypto::compute_pin_auth(pin, &request_id));
+        pairing = state.transfer_client.get_pairing(&peer.base_url()).await;
+        if pairing.is_none() {
+            if let Some(ref pin) = peer.pairing_pin {
+                state
+                    .transfer_client
+                    .pair_peer(&peer, pin)
+                    .await
+                    .map_err(|e| format!("Pairing with {} failed: {}", peer.device_name, e))?;
+                pairing = state.transfer_client.get_pairing(&peer.base_url()).await;
+            }
         }
+
+        let (sender_secret, sender_pub) = crate::crypto::generate_ephemeral_keypair();
+        let sender_pub_hex = crate::crypto::public_key_to_hex(&sender_pub);
+        transfer_request.encryption_mode = Some("ChaCha20Poly1305".to_string());
+        if let Some(ref p) = pairing {
+            transfer_request.pair_id = Some(p.pair_id.clone());
+            transfer_request.pair_auth = Some(crate::pairing::pake::request_auth(
+                &p.key,
+                &request_id,
+                &sender_pub_hex,
+            ));
+        }
+        transfer_request.ephemeral_public_key = Some(sender_pub_hex);
         ephemeral_secret_opt = Some(sender_secret);
     }
 
-    let response = state
+    let response = match state
         .transfer_client
         .request_transfer(&peer, &transfer_request)
         .await
-        .map_err(|e| format!("Transfer handshake failed: {}", e))?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            let msg = e.to_string();
+            // The peer restarted and no longer knows this pairing; drop ours so it can re-pair
+            if pairing.is_some() && msg.contains("Unknown pairing") {
+                state.transfer_client.remove_pairing(&peer.base_url()).await;
+            }
+            return Err(format!("Transfer handshake failed: {}", msg));
+        }
+    };
 
     match response.status {
         TransferStatus::Accepted => {
@@ -424,15 +480,42 @@ pub async fn start_transfer(
             if response.encryption_mode.as_deref() == Some("ChaCha20Poly1305") {
                 if let (Some(sender_secret), Some(peer_pub_hex)) = (ephemeral_secret_opt, response.ephemeral_public_key.as_ref()) {
                     if let Ok(peer_pub) = crate::crypto::public_key_from_hex(peer_pub_hex) {
-                        let pin_to_use = if response.pin_verified == Some(true) {
-                            peer.pairing_pin.as_deref().unwrap_or("")
-                        } else {
-                            ""
-                        };
+                        // A paired receiver must prove it holds the pairing key for this exact
+                        // session and ephemeral key; otherwise someone substituted the key.
+                        if let Some(ref p) = pairing {
+                            let proven = response.pin_verified == Some(true)
+                                && response.pair_auth.as_deref().is_some_and(|auth| {
+                                    crate::pairing::pake::verify_response_auth(
+                                        &p.key,
+                                        &request_id,
+                                        &session_token,
+                                        peer_pub_hex,
+                                        auth,
+                                    )
+                                });
+                            if !proven {
+                                let _ = state
+                                    .transfer_client
+                                    .cancel_transfer(
+                                        &peer,
+                                        &session_token,
+                                        Some("Pairing verification failed".to_string()),
+                                    )
+                                    .await;
+                                return Err(format!(
+                                    "{} could not prove the pairing; pair with it again",
+                                    peer.device_name
+                                ));
+                            }
+                        }
+                        let salt: &[u8] = pairing
+                            .as_ref()
+                            .map(|p| &p.key.as_bytes()[..])
+                            .unwrap_or(&[]);
                         let key = crate::crypto::derive_session_key(
                             sender_secret,
                             &peer_pub,
-                            pin_to_use,
+                            salt,
                             &session_token,
                         );
                         state

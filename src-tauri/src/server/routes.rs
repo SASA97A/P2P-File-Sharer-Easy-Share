@@ -47,8 +47,24 @@ pub async fn handle_info(State(state): State<Arc<ServerState>>) -> Json<DeviceIn
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PairRequest {
-    pub pin: String,
+pub struct PairStartRequest {
+    /// Hex-encoded SPAKE2 message from the client
+    pub msg_a: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairStartResponse {
+    pub pair_id: String,
+    /// Hex-encoded SPAKE2 message from this device
+    pub msg_b: String,
+    /// Proof that this device derived the key; a wrong PIN fails to verify on the client
+    pub confirm_b: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairFinishRequest {
+    pub pair_id: String,
+    pub confirm_a: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,39 +75,56 @@ pub struct PairResponse {
     pub message: Option<String>,
 }
 
-/// POST /api/v1/pair
-pub async fn handle_pair(
+/// POST /api/v1/pair/start
+///
+/// First half of a SPAKE2 PIN pairing. The PIN itself is never sent over the network.
+pub async fn handle_pair_start(
     State(state): State<Arc<ServerState>>,
-    Json(payload): Json<PairRequest>,
+    Json(payload): Json<PairStartRequest>,
+) -> Result<Json<PairStartResponse>, (StatusCode, String)> {
+    let msg_a = hex::decode(&payload.msg_a)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid pairing message".to_string()))?;
+
+    match state.pair_start(&msg_a).await {
+        Ok((pair_id, msg_b, confirm_b)) => Ok(Json(PairStartResponse {
+            pair_id,
+            msg_b: hex::encode(msg_b),
+            confirm_b,
+        })),
+        Err(crate::server::state::PairError::NotOpen) => Err((
+            StatusCode::FORBIDDEN,
+            "Pairing is not open on this device".to_string(),
+        )),
+        Err(crate::server::state::PairError::RateLimited) => Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many pairing attempts; try again in a minute".to_string(),
+        )),
+        Err(crate::server::state::PairError::Invalid(msg)) => Err((StatusCode::BAD_REQUEST, msg)),
+    }
+}
+
+/// POST /api/v1/pair/finish
+///
+/// Second half of a SPAKE2 PIN pairing: the client proves it derived the same key.
+pub async fn handle_pair_finish(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<PairFinishRequest>,
 ) -> Result<Json<PairResponse>, (StatusCode, Json<PairResponse>)> {
-    let host_pin = state.get_pairing_pin().await;
-    let normalized_input = crate::pairing::pin::normalize_pin(&payload.pin);
-    let normalized_host = host_pin
-        .as_deref()
-        .and_then(crate::pairing::pin::normalize_pin);
-
-    let matches = match (normalized_input, normalized_host) {
-        (Some(a), Some(b)) => a == b,
-        _ => false,
-    };
-
     let pub_info = state.get_public_device_info().await;
-
-    if matches {
-        Ok(Json(PairResponse {
+    match state.pair_finish(&payload.pair_id, &payload.confirm_a) {
+        Ok(()) => Ok(Json(PairResponse {
             success: true,
             device_info: pub_info,
             message: None,
-        }))
-    } else {
-        Err((
+        })),
+        Err(msg) => Err((
             StatusCode::FORBIDDEN,
             Json(PairResponse {
                 success: false,
                 device_info: pub_info,
-                message: Some("Invalid pairing PIN".to_string()),
+                message: Some(msg),
             }),
-        ))
+        )),
     }
 }
 
@@ -108,6 +141,7 @@ pub async fn handle_transfer_request(
                     resp.encryption_mode = created.encryption_mode;
                     resp.ephemeral_public_key = created.ephemeral_public_key;
                     resp.pin_verified = created.pin_verified;
+                    resp.pair_auth = created.pair_auth;
                     Ok(Json(resp))
                 }
                 Err(reason) => Err((
@@ -583,7 +617,8 @@ pub async fn handle_transfer_cancel(
 pub fn create_router(state: Arc<ServerState>) -> Router {
     Router::new()
         .route("/api/v1/info", get(handle_info))
-        .route("/api/v1/pair", post(handle_pair))
+        .route("/api/v1/pair/start", post(handle_pair_start))
+        .route("/api/v1/pair/finish", post(handle_pair_finish))
         .route("/api/v1/transfer/request", post(handle_transfer_request))
         .route("/api/v1/transfer/status", get(handle_transfer_status))
         .route("/api/v1/transfer/chunk", post(handle_transfer_chunk))

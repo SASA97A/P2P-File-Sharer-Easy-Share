@@ -71,8 +71,12 @@ pub struct TransferRequest {
     pub encryption_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub ephemeral_public_key: Option<String>,
+    /// Identifies a PIN pairing established earlier through `/api/v1/pair/*`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub pin_auth: Option<String>,
+    pub pair_id: Option<String>,
+    /// Tag over request_id and ephemeral_public_key keyed with that pairing key.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pair_auth: Option<String>,
 }
 
 impl TransferRequest {
@@ -91,7 +95,8 @@ impl TransferRequest {
             files,
             encryption_mode: None,
             ephemeral_public_key: None,
-            pin_auth: None,
+            pair_id: None,
+            pair_auth: None,
         }
     }
 }
@@ -112,6 +117,10 @@ pub struct TransferResponse {
     pub ephemeral_public_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub pin_verified: Option<bool>,
+    /// Receiver's tag over request_id, session token and its ephemeral key, keyed with the
+    /// pairing key, so the sender can detect a substituted key.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pair_auth: Option<String>,
 }
 
 impl TransferResponse {
@@ -124,6 +133,7 @@ impl TransferResponse {
             encryption_mode: None,
             ephemeral_public_key: None,
             pin_verified: None,
+            pair_auth: None,
         }
     }
 
@@ -136,6 +146,7 @@ impl TransferResponse {
             encryption_mode: None,
             ephemeral_public_key: None,
             pin_verified: None,
+            pair_auth: None,
         }
     }
 }

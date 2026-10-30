@@ -2,7 +2,7 @@ use crate::models::peer::DeviceInfo;
 use crate::models::transfer::{TransferRequest, TransferStatus};
 use crate::storage::file_manager::FileManager;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -86,6 +86,54 @@ pub struct SessionState {
     pub session_key: Option<crate::crypto::SessionKey>,
 }
 
+/// Maximum `/pair/start` attempts accepted per rolling minute, across all clients.
+pub const PAIR_ATTEMPTS_PER_MINUTE: u32 = 5;
+/// Unconfirmed pairing attempts after which the PIN is replaced with a fresh one.
+pub const PAIR_ATTEMPTS_BEFORE_PIN_ROTATION: u32 = 10;
+/// How long a started pairing run waits for its confirmation.
+const PAIR_PENDING_TTL: Duration = Duration::from_secs(60);
+const MAX_PENDING_PAIRS: usize = 64;
+const MAX_STORED_PAIRINGS: usize = 256;
+/// How long pairing stays open after the PIN was last shown, if the dialog is never closed.
+pub const PAIRING_OPEN_WINDOW: Duration = Duration::from_secs(600);
+
+/// Why a pairing run was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PairError {
+    /// This device is not showing its PIN, so it takes no pairing attempts at all.
+    NotOpen,
+    RateLimited,
+    Invalid(String),
+}
+
+/// PIN pairing bookkeeping: completed pairings, runs awaiting confirmation, and attempt limits.
+#[derive(Debug)]
+pub struct PairingRegistry {
+    keys: HashMap<String, crate::pairing::pake::PairingKey>,
+    order: VecDeque<String>,
+    pending: HashMap<String, (crate::pairing::pake::ServerPending, Instant)>,
+    window_start: Instant,
+    attempts_in_window: u32,
+    unconfirmed_attempts: u32,
+    open_until: Option<Instant>,
+    attempts_per_minute: u32,
+}
+
+impl PairingRegistry {
+    fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+            order: VecDeque::new(),
+            pending: HashMap::new(),
+            window_start: Instant::now(),
+            attempts_in_window: 0,
+            unconfirmed_attempts: 0,
+            open_until: None,
+            attempts_per_minute: PAIR_ATTEMPTS_PER_MINUTE,
+        }
+    }
+}
+
 /// Metadata result returned when creating a session on the receiver.
 #[derive(Debug, Clone)]
 pub struct SessionCreated {
@@ -94,6 +142,7 @@ pub struct SessionCreated {
     pub encryption_mode: Option<String>,
     pub ephemeral_public_key: Option<String>,
     pub pin_verified: Option<bool>,
+    pub pair_auth: Option<String>,
 }
 
 /// Shared server state across all Axum handlers.
@@ -104,6 +153,7 @@ pub struct ServerState {
     pub sessions: Arc<RwLock<HashMap<String, SessionState>>>,
     pub event_tx: broadcast::Sender<ServerTransferEvent>,
     pub encryption_enabled: Arc<std::sync::atomic::AtomicBool>,
+    pub pairing: Arc<std::sync::Mutex<PairingRegistry>>,
 }
 
 impl ServerState {
@@ -128,6 +178,7 @@ impl ServerState {
             consent_policy,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             event_tx,
+            pairing: Arc::new(std::sync::Mutex::new(PairingRegistry::new())),
             encryption_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
@@ -162,6 +213,7 @@ impl ServerState {
     pub async fn get_public_device_info(&self) -> DeviceInfo {
         let mut info = self.device_info.read().await.clone();
         info.pairing_pin = None;
+        info.pairing_open = self.is_pairing_open();
         info
     }
 
@@ -189,6 +241,110 @@ impl ServerState {
     pub async fn get_pairing_pin(&self) -> Option<String> {
         let info = self.device_info.read().await;
         info.pairing_pin.clone()
+    }
+
+    fn pairing_registry(&self) -> std::sync::MutexGuard<'_, PairingRegistry> {
+        self.pairing.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Answers a SPAKE2 pairing run started by a client typing this device's PIN.
+    /// Every start counts as a failed attempt until the client confirms it, because a client
+    /// that guessed wrong simply never calls `/pair/finish`.
+    /// Returns `(pair_id, msg_b, confirm_b_hex)`.
+    pub async fn pair_start(&self, msg_a: &[u8]) -> Result<(String, Vec<u8>, String), PairError> {
+        let rotate_pin = {
+            let mut reg = self.pairing_registry();
+            if !reg.open_until.is_some_and(|until| Instant::now() < until) {
+                return Err(PairError::NotOpen);
+            }
+            if reg.window_start.elapsed() >= Duration::from_secs(60) {
+                reg.window_start = Instant::now();
+                reg.attempts_in_window = 0;
+            }
+            if reg.attempts_in_window >= reg.attempts_per_minute {
+                return Err(PairError::RateLimited);
+            }
+            reg.attempts_in_window += 1;
+            reg.unconfirmed_attempts += 1;
+            if reg.unconfirmed_attempts > PAIR_ATTEMPTS_BEFORE_PIN_ROTATION {
+                reg.unconfirmed_attempts = 1;
+                true
+            } else {
+                false
+            }
+        };
+        if rotate_pin {
+            self.regenerate_pairing_pin().await;
+        }
+
+        let pin = self
+            .get_pairing_pin()
+            .await
+            .ok_or_else(|| PairError::Invalid("Pairing is not available".to_string()))?;
+        let (pending, msg_b, confirm_b) =
+            crate::pairing::pake::server_respond(&pin, msg_a).map_err(PairError::Invalid)?;
+
+        let pair_id = format!("pair-{}", uuid::Uuid::new_v4());
+        let mut reg = self.pairing_registry();
+        reg.pending.retain(|_, (_, at)| at.elapsed() < PAIR_PENDING_TTL);
+        if reg.pending.len() >= MAX_PENDING_PAIRS {
+            if let Some(oldest) = reg
+                .pending
+                .iter()
+                .min_by_key(|(_, (_, at))| *at)
+                .map(|(id, _)| id.clone())
+            {
+                reg.pending.remove(&oldest);
+            }
+        }
+        reg.pending.insert(pair_id.clone(), (pending, Instant::now()));
+        Ok((pair_id, msg_b, confirm_b))
+    }
+
+    /// Completes a pairing run once the client proves it knew the PIN, and stores the key.
+    pub fn pair_finish(&self, pair_id: &str, confirm_a_hex: &str) -> Result<(), String> {
+        let mut reg = self.pairing_registry();
+        let (pending, started) = reg
+            .pending
+            .remove(pair_id)
+            .ok_or_else(|| "Unknown or expired pairing attempt".to_string())?;
+        if started.elapsed() >= PAIR_PENDING_TTL {
+            return Err("Unknown or expired pairing attempt".to_string());
+        }
+        let key = crate::pairing::pake::server_verify(&pending, confirm_a_hex)?;
+
+        reg.unconfirmed_attempts = 0;
+        if reg.order.len() >= MAX_STORED_PAIRINGS {
+            if let Some(oldest) = reg.order.pop_front() {
+                reg.keys.remove(&oldest);
+            }
+        }
+        reg.order.push_back(pair_id.to_string());
+        reg.keys.insert(pair_id.to_string(), key);
+        Ok(())
+    }
+
+    /// Opens pairing (the PIN is on screen) for `PAIRING_OPEN_WINDOW`, or closes it.
+    /// Opening again extends the window.
+    pub fn set_pairing_open(&self, open: bool) {
+        self.pairing_registry().open_until = open.then(|| Instant::now() + PAIRING_OPEN_WINDOW);
+    }
+
+    /// Overrides the per-minute pairing attempt limit (default `PAIR_ATTEMPTS_PER_MINUTE`).
+    pub fn set_pair_attempts_per_minute(&self, limit: u32) {
+        self.pairing_registry().attempts_per_minute = limit;
+    }
+
+    /// Whether this device currently accepts pairing runs.
+    pub fn is_pairing_open(&self) -> bool {
+        self.pairing_registry()
+            .open_until
+            .is_some_and(|until| Instant::now() < until)
+    }
+
+    /// Returns the pairing key for a completed pairing.
+    pub fn pairing_key(&self, pair_id: &str) -> Option<crate::pairing::pake::PairingKey> {
+        self.pairing_registry().keys.get(pair_id).cloned()
     }
 
     /// Returns the download directory.
@@ -258,6 +414,7 @@ impl ServerState {
         let mut encryption_mode = None;
         let mut ephemeral_public_key = None;
         let mut pin_verified = None;
+        let mut pair_auth = None;
 
         if self.is_encryption_enabled()
             && request.encryption_mode.as_deref() == Some("ChaCha20Poly1305")
@@ -267,37 +424,44 @@ impl ServerState {
             let sender_pub = crate::crypto::public_key_from_hex(sender_pub_hex)
                 .map_err(|e| format!("Invalid sender ephemeral public key: {}", e))?;
 
-            let my_pin = self
-                .device_info
-                .read()
-                .await
-                .pairing_pin
-                .clone()
-                .unwrap_or_default();
-
-            let pin_to_use = if let Some(ref auth) = request.pin_auth {
-                if crate::crypto::verify_pin_auth(&my_pin, &request.request_id, auth) {
+            let pairing_key = match request.pair_id.as_deref() {
+                Some(pair_id) => {
+                    let key = self.pairing_key(pair_id).ok_or_else(|| {
+                        "Unknown pairing; pair with this device again".to_string()
+                    })?;
+                    let auth = request.pair_auth.as_deref().unwrap_or("");
+                    if !crate::pairing::pake::verify_request_auth(
+                        &key,
+                        &request.request_id,
+                        sender_pub_hex,
+                        auth,
+                    ) {
+                        return Err("Pairing verification failed".to_string());
+                    }
                     pin_verified = Some(true);
-                    my_pin.clone()
-                } else {
-                    return Err("PIN verification failed".to_string());
+                    Some(key)
                 }
-            } else {
-                pin_verified = Some(false);
-                String::new()
+                None => {
+                    pin_verified = Some(false);
+                    None
+                }
             };
 
             let (receiver_secret, receiver_pub) = crate::crypto::generate_ephemeral_keypair();
+            let receiver_pub_hex = crate::crypto::public_key_to_hex(&receiver_pub);
             let key = crate::crypto::derive_session_key(
                 receiver_secret,
                 &sender_pub,
-                &pin_to_use,
+                pairing_key.as_ref().map(|k| &k.as_bytes()[..]).unwrap_or(&[]),
                 &token,
             );
+            pair_auth = pairing_key.as_ref().map(|k| {
+                crate::pairing::pake::response_auth(k, &request.request_id, &token, &receiver_pub_hex)
+            });
 
             session_key = Some(key);
             encryption_mode = Some("ChaCha20Poly1305".to_string());
-            ephemeral_public_key = Some(crate::crypto::public_key_to_hex(&receiver_pub));
+            ephemeral_public_key = Some(receiver_pub_hex);
         }
 
         let session = SessionState {
@@ -320,6 +484,7 @@ impl ServerState {
             encryption_mode,
             ephemeral_public_key,
             pin_verified,
+            pair_auth,
         })
     }
 

@@ -87,6 +87,10 @@ async fn test_resolve_peer_by_address_formats() {
     let temp_dir = setup_test_dir("resolve_peer");
     let device = sample_device_info("Resolve-Target", "123456");
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+    state.set_pairing_open(true);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
+    // attempt per address; a real LAN device sees one attempt per search.
+    state.set_pair_attempts_per_minute(1000);
 
     let (port, _server_handle) = start_server(state.clone(), 0)
         .await
@@ -132,6 +136,10 @@ async fn test_sweep_subnet_for_pin_success_and_short_circuit() {
     let target_pin = "839421";
     let device = sample_device_info("Subnet-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+    state.set_pairing_open(true);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
+    // attempt per address; a real LAN device sees one attempt per search.
+    state.set_pair_attempts_per_minute(1000);
 
     // Server listens on 127.0.0.1:{port}
     let (port, _server_handle) = start_server(state.clone(), 0)
@@ -141,14 +149,14 @@ async fn test_sweep_subnet_for_pin_success_and_short_circuit() {
     let client = TransferClient::new();
 
     // Local IP is 127.0.0.2, so candidate IPs will include 127.0.0.1 (where our server is listening)
-    let peer = sweep_subnet_for_pin(&client, "127.0.0.2", "839 - 421", port, 50, 500)
+    let peer = sweep_subnet_for_pin(&client, "127.0.0.2", "839 - 421", port, 50, 3000)
         .await
         .expect("should discover device on subnet with formatted PIN");
 
     assert_eq!(peer.device_name, "Subnet-Target");
     assert_eq!(peer.ip, "127.0.0.1");
     assert_eq!(peer.port, port);
-    assert_eq!(peer.pairing_pin, Some("839421".to_string()));
+    assert_eq!(peer.pairing_pin, None, "the PIN is not kept after pairing");
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -158,6 +166,10 @@ async fn test_sweep_subnet_for_pin_rejections() {
     let temp_dir = setup_test_dir("sweep_rejections");
     let device = sample_device_info("Subnet-Target-2", "654321");
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+    state.set_pairing_open(true);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
+    // attempt per address; a real LAN device sees one attempt per search.
+    state.set_pair_attempts_per_minute(1000);
 
     let (port, _server_handle) = start_server(state.clone(), 0)
         .await
@@ -178,7 +190,7 @@ async fn test_sweep_subnet_for_pin_rejections() {
     // Non-matching PIN on subnet
     let not_found_err = sweep_subnet_for_pin(&client, "127.0.0.2", "999999", port, 50, 100).await;
     assert!(not_found_err.is_err());
-    assert!(not_found_err.unwrap_err().contains("No device found"));
+    assert!(not_found_err.unwrap_err().contains("No nearby device"));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -189,6 +201,10 @@ async fn test_sweep_subnet_for_pin_ports_fallback() {
     let target_pin = "334455";
     let device = sample_device_info("Fallback-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+    state.set_pairing_open(true);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
+    // attempt per address; a real LAN device sees one attempt per search.
+    state.set_pair_attempts_per_minute(1000);
 
     // Server listens on ephemeral port (not 5050)
     let (port, _server_handle) = start_server(state.clone(), 0)
@@ -198,7 +214,7 @@ async fn test_sweep_subnet_for_pin_ports_fallback() {
     let client = TransferClient::new();
 
     // Probing [5050, port]: port 5050 is not this device, so it falls back to port
-    let peer = sweep_subnet_for_pin_ports(&client, "127.0.0.2", target_pin, &[5050, port], 50, 500)
+    let peer = sweep_subnet_for_pin_ports(&client, "127.0.0.2", target_pin, &[5050, port], 50, 3000)
         .await
         .expect("should discover device on fallback port");
 
@@ -215,12 +231,16 @@ async fn test_sweep_subnet_for_pin_fallback_range_discovery() {
     let target_pin = "778899";
     let device = sample_device_info("Fallback-Range-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+    state.set_pairing_open(true);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
+    // attempt per address; a real LAN device sees one attempt per search.
+    state.set_pair_attempts_per_minute(1000);
 
     // Try binding to 5051 (one of the fallback ports in 5051..=5055)
     if let Ok((port, _server_handle)) = start_server(state.clone(), 5051).await {
         let client = TransferClient::new();
         // Probe with default port 5050; it should automatically fall back and find it on 5051!
-        let peer = sweep_subnet_for_pin(&client, "127.0.0.2", target_pin, 5050, 50, 500)
+        let peer = sweep_subnet_for_pin(&client, "127.0.0.2", target_pin, 5050, 50, 3000)
             .await
             .expect("should discover device on fallback port 5051");
 
@@ -238,12 +258,16 @@ async fn test_sweep_all_subnets_for_pin_discovery() {
     let target_pin = "334455";
     let device = sample_device_info("Multi-Subnet-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
+    state.set_pairing_open(true);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
+    // attempt per address; a real LAN device sees one attempt per search.
+    state.set_pair_attempts_per_minute(1000);
 
     let (port, _server_handle) = start_server(state.clone(), 0).await.expect("failed to start test server");
     let client = TransferClient::new();
 
     // In a test environment, loopback 127.0.0.0/24 is one of the candidate subnets
-    let peer = sweep_all_subnets_for_pin(&client, target_pin, port, 50, 500)
+    let peer = sweep_all_subnets_for_pin(&client, target_pin, port, 50, 3000)
         .await
         .expect("should discover device across candidate subnets");
 

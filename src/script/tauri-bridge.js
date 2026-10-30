@@ -658,6 +658,10 @@ export async function regeneratePairingPin() {
   return await callInvoke("regenerate_pairing_pin");
 }
 
+export async function closePairing() {
+  return await callInvoke("close_pairing");
+}
+
 /**
  * Connects to a remote peer by scanning the local subnet with its 6-digit PIN
  */

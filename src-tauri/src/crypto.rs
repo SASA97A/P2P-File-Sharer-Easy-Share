@@ -56,18 +56,18 @@ pub fn public_key_from_hex(hex_str: &str) -> Result<PublicKey, String> {
     Ok(PublicKey::from(arr))
 }
 
-/// Derives a 32-byte authenticated session key from an ephemeral Diffie-Hellman shared secret,
-/// salted with the pairing PIN and expanded with the session token.
+/// Derives a 32-byte session key from an ephemeral Diffie-Hellman shared secret, salted with
+/// the pairing key (empty for unpaired peers) and expanded with the session token.
 pub fn derive_session_key(
     our_secret: EphemeralSecret,
     peer_public: &PublicKey,
-    pin: &str,
+    pairing_salt: &[u8],
     session_token: &str,
 ) -> SessionKey {
     let shared_secret = our_secret.diffie_hellman(peer_public);
 
-    // HKDF-Extract using the PIN as salt and Diffie-Hellman output as IKM
-    let hk = Hkdf::<Sha256>::new(Some(pin.as_bytes()), shared_secret.as_bytes());
+    // HKDF-Extract using the pairing key as salt and Diffie-Hellman output as IKM
+    let hk = Hkdf::<Sha256>::new(Some(pairing_salt), shared_secret.as_bytes());
 
     let mut key_bytes = [0u8; KEY_SIZE];
     // HKDF-Expand using session_token as info context
@@ -136,20 +136,4 @@ pub fn decrypt_chunk(
     cipher
         .decrypt(&nonce, ciphertext)
         .map_err(|e| format!("Decryption authentication failed: {}", e))
-}
-
-/// Computes a Blake3 HMAC/keyed authentication tag for PIN verification during handshake.
-pub fn compute_pin_auth(pin: &str, request_id: &str) -> String {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"EASY_SHARE_PIN_AUTH:");
-    hasher.update(pin.as_bytes());
-    hasher.update(b":");
-    hasher.update(request_id.as_bytes());
-    hasher.finalize().to_hex().to_string()
-}
-
-/// Verifies whether the provided PIN authentication tag matches the expected PIN and request ID.
-pub fn verify_pin_auth(pin: &str, request_id: &str, auth_hex: &str) -> bool {
-    let expected = compute_pin_auth(pin, request_id);
-    expected.eq_ignore_ascii_case(auth_hex)
 }

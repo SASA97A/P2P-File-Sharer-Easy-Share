@@ -371,7 +371,8 @@ async fn test_connect_by_address_and_pin_matching() {
     target_info.pairing_pin = Some("482910".to_string());
 
     let target_server_state = Arc::new(ServerState::new(target_info, temp_dir.clone()));
-    let (target_port, _target_task) = start_server(target_server_state, 0)
+    target_server_state.set_pairing_open(true);
+    let (target_port, _target_task) = start_server(target_server_state.clone(), 0)
         .await
         .expect("target server must start");
 
@@ -398,26 +399,21 @@ async fn test_connect_by_address_and_pin_matching() {
     assert_eq!(peer_qr.port, target_port);
     assert_eq!(peer_qr.pairing_pin, Some("482910".to_string()));
 
-    // 3. Connect by PIN matching against QR-paired peer
-    let cached_peers = vec![peer_qr.clone()];
+    // 3. A wrong PIN does not pair
+    let normalized_wrong =
+        easy_share_lib::pairing::pin::normalize_pin("111 - 222").expect("should normalize");
+    assert!(client.pair_open_peer(&peer, &normalized_wrong).await.is_err());
+    assert!(client.get_pairing(&peer.base_url()).await.is_none());
+
+    // 4. The right PIN pairs over SPAKE2 with the device that is showing it
     let normalized_input =
         easy_share_lib::pairing::pin::normalize_pin("482 - 910").expect("should normalize");
-    let matched = cached_peers.into_iter().find(|p| {
-        p.pairing_pin
-            .as_deref()
-            .and_then(easy_share_lib::pairing::pin::normalize_pin)
-            .map(|p_pin| p_pin == normalized_input)
-            .unwrap_or(false)
-    });
-    assert!(matched.is_some());
-    assert_eq!(matched.unwrap().device_name, "Direct-Target");
-
-    // 4. Authenticate directly via pairing endpoint using the PIN
     let authenticated = client
-        .pair_peer(&peer, "482910")
+        .pair_open_peer(&peer, &normalized_input)
         .await
-        .expect("pair_peer should succeed with correct PIN");
+        .expect("pairing should succeed with correct PIN");
     assert_eq!(authenticated.device_name, "Direct-Target");
+    assert!(client.get_pairing(&peer.base_url()).await.is_some());
 }
 
 #[tokio::test]

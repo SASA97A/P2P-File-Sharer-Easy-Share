@@ -355,6 +355,7 @@ pub fn run() {
             commands::get_my_device_info,
             commands::get_my_pairing_info,
             commands::regenerate_pairing_pin,
+            commands::close_pairing,
             commands::connect_by_pin,
             commands::connect_by_address,
             commands::get_discovered_peers,

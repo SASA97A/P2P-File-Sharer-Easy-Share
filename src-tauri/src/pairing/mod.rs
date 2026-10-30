@@ -1,3 +1,4 @@
+pub mod pake;
 pub mod pin;
 pub mod qr;
 pub mod scanner;

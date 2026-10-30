@@ -25,6 +25,31 @@ fn sample_device_info(port: u16) -> DeviceInfo {
     )
 }
 
+/// Opens pairing on the receiver, pairs with it over SPAKE2 and returns the stored pairing.
+async fn pair_with(
+    state: &ServerState,
+    client: &TransferClient,
+    peer: &PeerInfo,
+    pin: &str,
+) -> easy_share_lib::client::PeerPairing {
+    state.set_pairing_open(true);
+    client.pair_peer(peer, pin).await.expect("pairing failed");
+    client
+        .get_pairing(&peer.base_url())
+        .await
+        .expect("pairing was not stored")
+}
+
+/// Adds the pairing id and request tag to an encrypted handshake request.
+fn attach_pairing(req: &mut TransferRequest, pairing: &easy_share_lib::client::PeerPairing) {
+    req.pair_id = Some(pairing.pair_id.clone());
+    req.pair_auth = Some(easy_share_lib::pairing::pake::request_auth(
+        &pairing.key,
+        &req.request_id,
+        req.ephemeral_public_key.as_deref().expect("ephemeral key must be set first"),
+    ));
+}
+
 fn create_test_file(path: &PathBuf, size_bytes: usize) -> String {
     let mut data = Vec::with_capacity(size_bytes);
     for i in 0..size_bytes {
@@ -42,7 +67,7 @@ async fn test_probe_peer_success() {
         temp_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
 
@@ -62,7 +87,7 @@ async fn test_request_transfer_accepted() {
         temp_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
 
@@ -85,7 +110,7 @@ async fn test_request_transfer_declined() {
         ConsentPolicy::AutoDecline("User is busy".to_string()),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver-Device", "desktop", "windows", "127.0.0.1", port);
 
@@ -118,7 +143,7 @@ async fn test_send_file_resumable_and_finish_full_flow() {
         server_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024); // 512 KB chunks
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -182,7 +207,7 @@ async fn test_resumption_after_partial_transfer() {
         server_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024); // 512 KB chunks
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -313,7 +338,7 @@ async fn test_progress_reporting_monotonically_increasing() {
         server_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024);
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -362,7 +387,7 @@ async fn test_cancel_transfer() {
         server_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(512 * 1024);
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -410,7 +435,7 @@ async fn test_finish_hash_mismatch_fails() {
         server_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -486,7 +511,7 @@ async fn test_send_file_with_relative_path_directory_tree_preserved() {
         server_dir.clone(),
     ));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -536,19 +561,19 @@ async fn test_end_to_end_encrypted_transfer_with_pin() {
     dev_info.pairing_pin = Some("654321".to_string());
     let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::with_chunk_size(256 * 1024);
     let mut peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
     peer.pairing_pin = Some("654321".to_string());
 
     // Prepare encrypted request
     let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
-    let pin_auth = easy_share_lib::crypto::compute_pin_auth("654321", "req-e2ee");
+    let pairing = pair_with(&state, &client, &peer, "654321").await;
 
     let mut req = TransferRequest::new("req-e2ee", "Sender", "windows", vec![file_to_send.to_metadata()]);
     req.encryption_mode = Some("ChaCha20Poly1305".to_string());
     req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
-    req.pin_auth = Some(pin_auth);
+    attach_pairing(&mut req, &pairing);
 
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     assert_eq!(resp.status, TransferStatus::Accepted);
@@ -558,8 +583,18 @@ async fn test_end_to_end_encrypted_transfer_with_pin() {
     let receiver_pub_hex = resp.ephemeral_public_key.expect("receiver pub key missing");
     let receiver_pub = easy_share_lib::crypto::public_key_from_hex(&receiver_pub_hex).expect("valid hex");
     let token = resp.session_token.expect("session token missing");
+    assert!(
+        easy_share_lib::pairing::pake::verify_response_auth(
+            &pairing.key,
+            "req-e2ee",
+            &token,
+            &receiver_pub_hex,
+            resp.pair_auth.as_deref().expect("receiver must prove the pairing"),
+        ),
+        "receiver's response tag must verify"
+    );
 
-    let session_key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, "654321", &token);
+    let session_key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, pairing.key.as_bytes(), &token);
     client.register_session_key(&token, session_key).await;
 
     // Send file chunks
@@ -597,25 +632,25 @@ async fn test_end_to_end_encrypted_transfer_tampered_chunk_rejected() {
     dev_info.pairing_pin = Some("999111".to_string());
     let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
 
-    let (port, _handle) = start_server(state, 0).await.expect("failed to start server");
+    let (port, _handle) = start_server(state.clone(), 0).await.expect("failed to start server");
     let client = TransferClient::new();
     let mut peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
     peer.pairing_pin = Some("999111".to_string());
 
     let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
-    let pin_auth = easy_share_lib::crypto::compute_pin_auth("999111", "req-tamper");
+    let pairing = pair_with(&state, &client, &peer, "999111").await;
 
     let mut req = TransferRequest::new("req-tamper", "Sender", "windows", vec![file_to_send.to_metadata()]);
     req.encryption_mode = Some("ChaCha20Poly1305".to_string());
     req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
-    req.pin_auth = Some(pin_auth);
+    attach_pairing(&mut req, &pairing);
 
     let resp = client.request_transfer(&peer, &req).await.expect("handshake failed");
     let receiver_pub_hex = resp.ephemeral_public_key.expect("receiver pub key missing");
     let receiver_pub = easy_share_lib::crypto::public_key_from_hex(&receiver_pub_hex).expect("valid hex");
     let token = resp.session_token.expect("session token missing");
 
-    let session_key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, "999111", &token);
+    let session_key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, pairing.key.as_bytes(), &token);
 
     // Encrypt chunk manually and tamper with 1 bit
     let raw_chunk = vec![0xAB; 1024];
@@ -645,22 +680,32 @@ async fn test_end_to_end_transfer_wrong_pin_auth_rejected() {
     dev_info.pairing_pin = Some("123456".to_string());
     let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
 
-    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
-    let (_, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
-    // Compute auth with WRONG pin "000000"
-    let wrong_pin_auth = easy_share_lib::crypto::compute_pin_auth("000000", "req-wrong");
+    // Pairing with the WRONG pin fails on the client and stores nothing
+    state.set_pairing_open(true);
+    let wrong = client.pair_peer(&peer, "000000").await;
+    assert!(wrong.is_err(), "pairing with a wrong PIN must fail");
+    assert!(client.get_pairing(&peer.base_url()).await.is_none());
 
+    // A handshake tag that does not match the pairing key is rejected
+    let pairing = pair_with(&state, &client, &peer, "123456").await;
+    let (_, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
     let mut req = TransferRequest::new("req-wrong", "Sender", "windows", vec![file_to_send.to_metadata()]);
     req.encryption_mode = Some("ChaCha20Poly1305".to_string());
     req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
-    req.pin_auth = Some(wrong_pin_auth);
+    req.pair_id = Some(pairing.pair_id.clone());
+    req.pair_auth = Some(easy_share_lib::pairing::pake::request_auth(
+        &pairing.key,
+        "a-different-request",
+        req.ephemeral_public_key.as_deref().unwrap(),
+    ));
 
     let resp = client.request_transfer(&peer, &req).await.unwrap();
     assert_eq!(resp.status, TransferStatus::Declined);
-    assert_eq!(resp.reason.as_deref(), Some("PIN verification failed"));
+    assert_eq!(resp.reason.as_deref(), Some("Pairing verification failed"));
 
     let _ = fs::remove_dir_all(&server_dir);
     let _ = fs::remove_dir_all(&client_dir);
@@ -681,7 +726,7 @@ async fn test_transfer_with_encryption_disabled_in_receiver_falls_back_to_plaint
     // Disable encryption on receiver
     state.set_encryption_enabled(false);
 
-    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -730,7 +775,7 @@ async fn test_zero_byte_file_in_batch_finishes_and_later_files_still_arrive() {
     let data_file = FileToSend::from_path("f-after", &data_path).unwrap();
 
     let state = Arc::new(ServerState::new(sample_device_info(0), server_dir.clone()));
-    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
     let client = TransferClient::new();
     let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
 
@@ -785,7 +830,7 @@ async fn test_end_to_end_encrypted_multi_file_transfer() {
     let mut dev_info = sample_device_info(0);
     dev_info.pairing_pin = Some("135790".to_string());
     let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
-    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
     let client = TransferClient::with_chunk_size(128 * 1024);
     let mut peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
     peer.pairing_pin = Some("135790".to_string());
@@ -799,13 +844,14 @@ async fn test_end_to_end_encrypted_multi_file_transfer() {
     );
     req.encryption_mode = Some("ChaCha20Poly1305".to_string());
     req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
-    req.pin_auth = Some(easy_share_lib::crypto::compute_pin_auth("135790", "req-e2ee-multi"));
+    let pairing = pair_with(&state, &client, &peer, "135790").await;
+    attach_pairing(&mut req, &pairing);
 
     let resp = client.request_transfer(&peer, &req).await.unwrap();
     let receiver_pub =
         easy_share_lib::crypto::public_key_from_hex(&resp.ephemeral_public_key.unwrap()).unwrap();
     let token = resp.session_token.unwrap();
-    let key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, "135790", &token);
+    let key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, pairing.key.as_bytes(), &token);
     client.register_session_key(&token, key).await;
 
     for (file, hash) in [(&file_a, &hash_a), (&file_b, &hash_b)] {

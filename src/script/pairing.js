@@ -7,6 +7,7 @@
 import {
   getMyPairingInfo,
   regeneratePairingPin,
+  closePairing,
   connectByPin,
   connectByAddress,
 } from "./tauri-bridge.js";
@@ -15,6 +16,9 @@ import { showToast } from "./ui.js";
 
 // Active pairing information payload cache
 let activePairingInfo = null;
+// Re-reads pairing info while the dialog is open: keeps pairing open and shows a rotated PIN
+let pairingRefreshTimer = null;
+const PAIRING_REFRESH_MS = 5000;
 
 /**
  * Updates the modal UI with current device pairing info
@@ -235,6 +239,18 @@ export function setupPairing() {
       console.error("Failed to load pairing info:", err);
       setPinStatus("Failed to retrieve local pairing information", "error");
     }
+
+    clearInterval(pairingRefreshTimer);
+    pairingRefreshTimer = setInterval(async () => {
+      try {
+        const info = await getMyPairingInfo();
+        if (!activePairingInfo || info.pin !== activePairingInfo.pin) {
+          renderPairingInfo(info);
+        }
+      } catch (_err) {
+        // Keep showing the last PIN
+      }
+    }, PAIRING_REFRESH_MS);
   }
 
   function closeModal() {
@@ -242,6 +258,9 @@ export function setupPairing() {
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
     clearAllStatus();
+    clearInterval(pairingRefreshTimer);
+    pairingRefreshTimer = null;
+    closePairing().catch((err) => console.error("Failed to close pairing:", err));
   }
 
   if (openBtn) {

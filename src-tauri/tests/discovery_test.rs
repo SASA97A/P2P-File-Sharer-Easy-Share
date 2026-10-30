@@ -151,7 +151,10 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
     assert_eq!(peer_info.device_name, "Alice-Laptop");
     assert_eq!(peer_info.ip, "127.0.0.1");
     assert_eq!(peer_info.port, 5050);
-    assert_eq!(peer_info.pairing_pin, Some("123456".to_string()));
+    assert_eq!(
+        peer_info.pairing_pin, None,
+        "A PIN inside a discovery announcement must never be trusted"
+    );
 }
 
 #[tokio::test]

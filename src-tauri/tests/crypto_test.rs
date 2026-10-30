@@ -24,8 +24,8 @@ fn test_key_exchange_and_chunk_encryption_roundtrip() {
     let (sender_secret, sender_pub) = generate_ephemeral_keypair();
     let (receiver_secret, receiver_pub) = generate_ephemeral_keypair();
 
-    let sender_key = derive_session_key(sender_secret, &receiver_pub, pin, session_token);
-    let receiver_key = derive_session_key(receiver_secret, &sender_pub, pin, session_token);
+    let sender_key = derive_session_key(sender_secret, &receiver_pub, pin.as_bytes(), session_token);
+    let receiver_key = derive_session_key(receiver_secret, &sender_pub, pin.as_bytes(), session_token);
 
     assert_eq!(sender_key.as_bytes(), receiver_key.as_bytes());
 
@@ -54,8 +54,8 @@ fn test_wrong_pin_fails_decryption() {
     let (sender_secret, sender_pub) = generate_ephemeral_keypair();
     let (receiver_secret, receiver_pub) = generate_ephemeral_keypair();
 
-    let sender_key = derive_session_key(sender_secret, &receiver_pub, correct_pin, session_token);
-    let receiver_key = derive_session_key(receiver_secret, &sender_pub, wrong_pin, session_token);
+    let sender_key = derive_session_key(sender_secret, &receiver_pub, correct_pin.as_bytes(), session_token);
+    let receiver_key = derive_session_key(receiver_secret, &sender_pub, wrong_pin.as_bytes(), session_token);
 
     let original_data = b"Sensitive payload protected by PIN";
     let encrypted = encrypt_chunk(&sender_key, "file-1", 0, original_data).unwrap();
@@ -72,8 +72,8 @@ fn test_tampered_ciphertext_fails_decryption() {
     let (sender_secret, sender_pub) = generate_ephemeral_keypair();
     let (receiver_secret, receiver_pub) = generate_ephemeral_keypair();
 
-    let sender_key = derive_session_key(sender_secret, &receiver_pub, pin, session_token);
-    let receiver_key = derive_session_key(receiver_secret, &sender_pub, pin, session_token);
+    let sender_key = derive_session_key(sender_secret, &receiver_pub, pin.as_bytes(), session_token);
+    let receiver_key = derive_session_key(receiver_secret, &sender_pub, pin.as_bytes(), session_token);
 
     let original_data = b"Important tamper-evident chunk";
     let mut encrypted = encrypt_chunk(&sender_key, "file-1", 5, original_data).unwrap();
@@ -93,8 +93,8 @@ fn test_chunk_index_replay_or_reorder_fails_decryption() {
     let (sender_secret, sender_pub) = generate_ephemeral_keypair();
     let (receiver_secret, receiver_pub) = generate_ephemeral_keypair();
 
-    let sender_key = derive_session_key(sender_secret, &receiver_pub, pin, session_token);
-    let receiver_key = derive_session_key(receiver_secret, &sender_pub, pin, session_token);
+    let sender_key = derive_session_key(sender_secret, &receiver_pub, pin.as_bytes(), session_token);
+    let receiver_key = derive_session_key(receiver_secret, &sender_pub, pin.as_bytes(), session_token);
 
     let original_data = b"Sequential chunk payload";
     // Encrypted at offset 0
@@ -116,7 +116,7 @@ fn test_same_offset_in_different_files_uses_different_keystream() {
 
     let (sender_secret, _) = generate_ephemeral_keypair();
     let (_, receiver_pub) = generate_ephemeral_keypair();
-    let key = derive_session_key(sender_secret, &receiver_pub, pin, session_token);
+    let key = derive_session_key(sender_secret, &receiver_pub, pin.as_bytes(), session_token);
 
     // Identical plaintext at offset 0 of two files must not produce identical ciphertext,
     // otherwise the session key and nonce are being reused across files.

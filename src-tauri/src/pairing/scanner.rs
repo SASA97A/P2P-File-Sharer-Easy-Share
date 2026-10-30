@@ -159,7 +159,7 @@ async fn sweep_ips_on_port(
         join_set.spawn(async move {
             let _permit = sem.acquire().await.ok()?;
             let base_url = format!("http://{}:{}", target_ip, port);
-            let pair_fut = client.pair_peer_url(&base_url, &pin);
+            let pair_fut = client.pair_open_peer_url(&base_url, &pin);
 
             match timeout(probe_timeout, pair_fut).await {
                 Ok(Ok(device_info)) => {
@@ -175,7 +175,8 @@ async fn sweep_ips_on_port(
                         os: device_info.os,
                         ip: target_ip,
                         port: resolved_port,
-                        pairing_pin: Some(pin),
+                        // The PAKE pairing key is stored in the client; the PIN is not kept
+                        pairing_pin: None,
                     })
                 }
                 _ => None,
@@ -240,7 +241,7 @@ pub async fn sweep_subnet_for_pin_ports(
     }
 
     Err(format!(
-        "No device found with pairing PIN {} on local subnet",
+        "No nearby device is showing PIN {}. Open Pair device on the other device and try again.",
         normalized_pin
     ))
 }
@@ -317,7 +318,7 @@ pub async fn sweep_all_subnets_for_pin(
     }
 
     Err(format!(
-        "No device found with pairing PIN {} on any active local subnet",
+        "No nearby device is showing PIN {}. Open Pair device on the other device and try again.",
         normalized
     ))
 }

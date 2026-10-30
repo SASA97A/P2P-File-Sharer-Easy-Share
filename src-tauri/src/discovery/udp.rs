@@ -55,7 +55,8 @@ impl HeartbeatMessage {
             os: self.os.clone(),
             ip: resolved_ip,
             port: self.port,
-            pairing_pin: self.pairing_pin.clone(),
+            // A PIN in an announcement is never trusted; pairing runs over SPAKE2
+            pairing_pin: None,
         }
     }
 }

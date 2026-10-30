@@ -304,6 +304,15 @@ pub struct TransferClient {
     client: reqwest::Client,
     chunk_size: usize,
     session_keys: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::crypto::SessionKey>>>,
+    /// Completed PIN pairings keyed by peer base URL.
+    pairings: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PeerPairing>>>,
+}
+
+/// A completed PIN pairing with a peer: its id on the peer and the shared pairing key.
+#[derive(Debug, Clone)]
+pub struct PeerPairing {
+    pub pair_id: String,
+    pub key: crate::pairing::pake::PairingKey,
 }
 
 impl Default for TransferClient {
@@ -319,6 +328,7 @@ impl TransferClient {
             client: reqwest::Client::new(),
             chunk_size: DEFAULT_CHUNK_SIZE,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -328,6 +338,7 @@ impl TransferClient {
             client: reqwest::Client::new(),
             chunk_size,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -337,6 +348,7 @@ impl TransferClient {
             client,
             chunk_size: DEFAULT_CHUNK_SIZE,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -346,6 +358,7 @@ impl TransferClient {
             client,
             chunk_size,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -355,6 +368,23 @@ impl TransferClient {
             .write()
             .await
             .insert(session_token.to_string(), key);
+    }
+
+    /// Returns the stored PIN pairing for a peer base URL, if any.
+    pub async fn get_pairing(&self, base_url: &str) -> Option<PeerPairing> {
+        self.pairings
+            .read()
+            .await
+            .get(base_url.trim_end_matches('/'))
+            .cloned()
+    }
+
+    /// Forgets a stored PIN pairing (for example after the peer restarted and lost it).
+    pub async fn remove_pairing(&self, base_url: &str) {
+        self.pairings
+            .write()
+            .await
+            .remove(base_url.trim_end_matches('/'));
     }
 
     /// Retrieves an authenticated session encryption key if present.
@@ -381,7 +411,12 @@ impl TransferClient {
         self.probe_peer_url(&peer.base_url()).await
     }
 
-    /// Verifies and pairs with a peer using a 6-digit PIN (`POST /api/v1/pair`).
+    /// Pairs only if the peer is currently showing its PIN; see `pair_open_peer_url`.
+    pub async fn pair_open_peer(&self, peer: &PeerInfo, pin: &str) -> Result<DeviceInfo, ClientError> {
+        self.pair_open_peer_url(&peer.base_url(), pin).await
+    }
+
+    /// Pairs with a peer using its 6-digit PIN over SPAKE2. See `pair_peer_url`.
     pub async fn pair_peer(&self, peer: &PeerInfo, pin: &str) -> Result<DeviceInfo, ClientError> {
         self.pair_peer_url(&peer.base_url(), pin).await
     }
@@ -493,19 +528,67 @@ impl TransferClient {
         Ok(info)
     }
 
-    /// Authenticates and pairs with a peer using its 6-digit PIN (`POST /api/v1/pair`).
-    pub async fn pair_peer_url(&self, base_url: &str, pin: &str) -> Result<DeviceInfo, ClientError> {
-        let url = format!("{}/api/v1/pair", base_url.trim_end_matches('/'));
-        let payload = serde_json::json!({ "pin": pin });
-        let resp = self.client.post(&url).json(&payload).send().await?;
+    /// Checks `/api/v1/info` first and runs the SPAKE2 pairing only when the peer reports that
+    /// its pairing dialog is open. Devices that are not pairing are never sent a pairing attempt,
+    /// so a PIN search cannot use up their attempt limits or rotate their PINs.
+    pub async fn pair_open_peer_url(&self, base_url: &str, pin: &str) -> Result<DeviceInfo, ClientError> {
+        let info = self.probe_peer_url(base_url).await?;
+        if !info.pairing_open {
+            return Err(ClientError::Other("Pairing is not open on this device".to_string()));
+        }
+        self.pair_peer_url(base_url, pin).await
+    }
 
+    /// Pairs with a peer using its 6-digit PIN over SPAKE2 (`/api/v1/pair/start` + `/finish`).
+    /// The PIN never leaves this device. On success the pairing key is stored for the peer.
+    pub async fn pair_peer_url(&self, base_url: &str, pin: &str) -> Result<DeviceInfo, ClientError> {
+        let base = base_url.trim_end_matches('/');
+        let (pake, msg_a) = crate::pairing::pake::client_start(pin);
+
+        let resp = self
+            .client
+            .post(format!("{}/api/v1/pair/start", base))
+            .json(&crate::server::routes::PairStartRequest {
+                msg_a: hex::encode(msg_a),
+            })
+            .send()
+            .await?;
         if !resp.status().is_success() {
             let status = resp.status();
             let message = resp.text().await.unwrap_or_default();
             return Err(ClientError::StatusError { status, message });
         }
+        let start = resp.json::<crate::server::routes::PairStartResponse>().await?;
+        let msg_b = hex::decode(&start.msg_b)
+            .map_err(|_| ClientError::Other("Invalid pairing reply".to_string()))?;
 
+        // A wrong PIN fails here, before anything else is sent
+        let (key, confirm_a) = crate::pairing::pake::client_finish(pake, &msg_b, &start.confirm_b)
+            .map_err(ClientError::Other)?;
+
+        let resp = self
+            .client
+            .post(format!("{}/api/v1/pair/finish", base))
+            .json(&crate::server::routes::PairFinishRequest {
+                pair_id: start.pair_id.clone(),
+                confirm_a,
+            })
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let message = resp.text().await.unwrap_or_default();
+            return Err(ClientError::StatusError { status, message });
+        }
         let body = resp.json::<crate::server::routes::PairResponse>().await?;
+
+        self.pairings.write().await.insert(
+            base.to_string(),
+            PeerPairing {
+                pair_id: start.pair_id,
+                key,
+            },
+        );
         Ok(body.device_info)
     }
 

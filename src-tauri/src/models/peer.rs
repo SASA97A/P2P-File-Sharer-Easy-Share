@@ -10,6 +10,9 @@ pub struct DeviceInfo {
     pub port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pairing_pin: Option<String>,
+    /// True while this device shows its PIN in the pairing dialog and accepts pairing runs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pairing_open: bool,
 }
 
 impl DeviceInfo {
@@ -27,6 +30,7 @@ impl DeviceInfo {
             version: version.into(),
             port,
             pairing_pin: None,
+            pairing_open: false,
         }
     }
 

@@ -84,23 +84,40 @@ async fn test_server_secure_pair_endpoint() {
     let info: DeviceInfo = info_res.json().await.unwrap();
     assert!(info.pairing_pin.is_none(), "PIN must not be exposed in public info");
 
-    // 2. Attempt pairing with incorrect PIN -> 403 Forbidden
-    let wrong_pair_res = client
-        .post(format!("http://127.0.0.1:{}/api/v1/pair", port))
-        .json(&serde_json::json!({ "pin": "000000" }))
+    // 2. Pairing is refused while the PIN is not on screen, and that costs no attempt
+    let tc = easy_share_lib::client::TransferClient::new();
+    let base = format!("http://127.0.0.1:{}", port);
+    assert!(tc.pair_peer_url(&base, "839421").await.is_err());
+    assert!(!info.pairing_open);
+
+    state.set_pairing_open(true);
+    let info: DeviceInfo = client
+        .get(format!("{}/api/v1/info", base))
         .send()
         .await
+        .unwrap()
+        .json()
+        .await
         .unwrap();
-    assert_eq!(wrong_pair_res.status(), 403);
+    assert!(info.pairing_open, "info must report that pairing is open");
 
-    // 3. Attempt pairing with correct PIN -> 200 OK
-    let correct_pair_res = client
-        .post(format!("http://127.0.0.1:{}/api/v1/pair", port))
+    // 3. Wrong PIN fails on the client, before anything is confirmed
+    assert!(tc.pair_peer_url(&base, "000000").await.is_err());
+    assert!(tc.get_pairing(&base).await.is_none());
+
+    // 4. Correct PIN pairs, and both sides end up with the same key
+    tc.pair_peer_url(&base, "839421").await.expect("pairing with correct PIN");
+    let pairing = tc.get_pairing(&base).await.expect("client keeps the pairing");
+    assert_eq!(state.pairing_key(&pairing.pair_id), Some(pairing.key.clone()));
+
+    // 5. The old plaintext endpoint is gone
+    let legacy = client
+        .post(format!("{}/api/v1/pair", base))
         .json(&serde_json::json!({ "pin": "839421" }))
         .send()
         .await
         .unwrap();
-    assert_eq!(correct_pair_res.status(), 200);
+    assert_eq!(legacy.status(), 404);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -141,14 +158,12 @@ async fn test_server_pairing_pin_regeneration_and_info_endpoint() {
     let updated_info: DeviceInfo = res_updated.json().await.expect("json parse error");
     assert_eq!(updated_info.pairing_pin, None);
 
-    // Verify pairing endpoint accepts the newly regenerated PIN
-    let pair_check = client
-        .post(format!("http://127.0.0.1:{}/api/v1/pair", port))
-        .json(&serde_json::json!({ "pin": new_pin }))
-        .send()
+    // Verify pairing works with the newly regenerated PIN
+    state.set_pairing_open(true);
+    easy_share_lib::client::TransferClient::new()
+        .pair_peer_url(&format!("http://127.0.0.1:{}", port), &new_pin)
         .await
-        .unwrap();
-    assert_eq!(pair_check.status(), 200);
+        .expect("pairing with regenerated PIN");
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -1161,6 +1176,56 @@ async fn test_server_session_pruning_keeps_long_running_active_sessions() {
         .await;
     assert_eq!(pruned, 0, "an active session must survive past its creation age");
     assert!(state.get_session(&token).await.is_some());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_pairing_rate_limit_and_pin_rotation() {
+    let temp_dir = setup_test_dir("pair_rate_limit");
+    let state = Arc::new(ServerState::new(
+        sample_device_info().with_pairing_pin("123123"),
+        temp_dir.clone(),
+    ));
+    state.set_pairing_open(true);
+
+    // Each start counts until confirmed; the 6th start within a minute is refused
+    for _ in 0..easy_share_lib::server::state::PAIR_ATTEMPTS_PER_MINUTE {
+        let (_, msg_a) = easy_share_lib::pairing::pake::client_start("000000");
+        state.pair_start(&msg_a).await.expect("attempt within limit");
+    }
+    let (_, msg_a) = easy_share_lib::pairing::pake::client_start("000000");
+    assert_eq!(
+        state.pair_start(&msg_a).await.unwrap_err(),
+        easy_share_lib::server::state::PairError::RateLimited
+    );
+    assert_eq!(state.get_pairing_pin().await.as_deref(), Some("123123"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_pairing_closed_device_takes_no_attempts() {
+    let temp_dir = setup_test_dir("pair_closed");
+    let state = Arc::new(ServerState::new(
+        sample_device_info().with_pairing_pin("456456"),
+        temp_dir.clone(),
+    ));
+
+    // Many searches while pairing is closed: all refused, none counted, PIN unchanged
+    for _ in 0..50 {
+        let (_, msg_a) = easy_share_lib::pairing::pake::client_start("000000");
+        assert_eq!(
+            state.pair_start(&msg_a).await.unwrap_err(),
+            easy_share_lib::server::state::PairError::NotOpen
+        );
+    }
+    assert_eq!(state.get_pairing_pin().await.as_deref(), Some("456456"));
+
+    // Opening pairing afterwards still has its full attempt budget
+    state.set_pairing_open(true);
+    let (_, msg_a) = easy_share_lib::pairing::pake::client_start("456456");
+    assert!(state.pair_start(&msg_a).await.is_ok());
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

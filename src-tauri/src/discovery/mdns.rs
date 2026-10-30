@@ -86,9 +86,8 @@ impl MdnsDiscovery {
                             .get_property_val_str("type")
                             .unwrap_or("desktop")
                             .to_string();
-                        let pairing_pin = properties
-                            .get_property_val_str("pin")
-                            .map(|s| s.to_string());
+                        // A PIN in an announcement is never trusted; pairing runs over SPAKE2
+                        let pairing_pin: Option<String> = None;
                         let port = info.get_port();
 
                         // Avoid discovering ourselves

@@ -52,6 +52,7 @@ fn test_device_info_serialization_roundtrip() {
         version: "2.0.0".to_string(),
         port: 5050,
         pairing_pin: None,
+        pairing_open: false,
     };
 
     let json_str = serde_json::to_string(&device).expect("failed to serialize DeviceInfo");
@@ -107,7 +108,8 @@ fn test_transfer_request_with_multiple_files_roundtrip() {
         files,
         encryption_mode: None,
         ephemeral_public_key: None,
-        pin_auth: None,
+        pair_id: None,
+        pair_auth: None,
     };
 
     let json_str = serde_json::to_string(&request).expect("failed to serialize TransferRequest");
@@ -126,12 +128,14 @@ fn test_transfer_request_and_response_with_encryption() {
     let mut req = TransferRequest::new("req-enc-1", "Bob", "linux", files);
     req.encryption_mode = Some("ChaCha20Poly1305".to_string());
     req.ephemeral_public_key = Some("abcdef123456".to_string());
-    req.pin_auth = Some("pin-auth-hash".to_string());
+    req.pair_id = Some("pair-1".to_string());
+    req.pair_auth = Some("pair-auth-tag".to_string());
 
     let req_json = serde_json::to_string(&req).expect("serialize req");
     assert!(req_json.contains("\"encryption_mode\":\"ChaCha20Poly1305\""));
     assert!(req_json.contains("\"ephemeral_public_key\":\"abcdef123456\""));
-    assert!(req_json.contains("\"pin_auth\":\"pin-auth-hash\""));
+    assert!(req_json.contains("\"pair_id\":\"pair-1\""));
+    assert!(req_json.contains("\"pair_auth\":\"pair-auth-tag\""));
 
     let req_des: TransferRequest = serde_json::from_str(&req_json).expect("deserialize req");
     assert_eq!(req, req_des);
