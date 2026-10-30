@@ -33,6 +33,8 @@ export async function openSettingsView() {
     const nameInput = document.getElementById("settingsDeviceNameInput");
     if (nameInput && devInfo) {
       nameInput.value = devInfo.device_name || "";
+      nameInput.dataset.saved = nameInput.value;
+      syncSaveNameVisibility();
     }
 
     const downloadDir = await getDownloadDir();
@@ -66,6 +68,16 @@ export async function openSettingsView() {
   } catch (err) {
     console.error("Failed to load settings data:", err);
   }
+}
+
+/**
+ * Shows the device-name Save button only while the input differs from the saved name.
+ */
+function syncSaveNameVisibility() {
+  const nameInput = document.getElementById("settingsDeviceNameInput");
+  const saveBtn = document.getElementById("saveDeviceNameBtn");
+  if (!nameInput || !saveBtn) return;
+  saveBtn.hidden = nameInput.value.trim() === (nameInput.dataset.saved || "");
 }
 
 /**
@@ -131,6 +143,9 @@ export function setupSettings() {
       if (myDeviceBadge) {
         myDeviceBadge.textContent = updated.device_name || trimmed;
       }
+      nameInput.value = updated.device_name || trimmed;
+      nameInput.dataset.saved = nameInput.value;
+      syncSaveNameVisibility();
       showToast("Device name updated!", "success");
     } catch (err) {
       console.error("Failed to update device name:", err);
@@ -143,10 +158,14 @@ export function setupSettings() {
   }
 
   if (nameInput) {
+    nameInput.addEventListener("input", syncSaveNameVisibility);
     nameInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         handleSaveDeviceName();
+      } else if (e.key === "Escape") {
+        nameInput.value = nameInput.dataset.saved || "";
+        syncSaveNameVisibility();
       }
     });
   }
@@ -287,6 +306,8 @@ export function setupSettings() {
     }
     if (nameInput && info.device_name && getCurrentView() !== "settings") {
       nameInput.value = info.device_name;
+      nameInput.dataset.saved = info.device_name;
+      syncSaveNameVisibility();
     }
   });
 }

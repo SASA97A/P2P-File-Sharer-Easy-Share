@@ -197,54 +197,50 @@
             </div>
           </div>
 
-          <section class="settings-section" aria-labelledby="sDevice">
-            <h2 class="eyebrow settings-heading" id="sDevice">Device</h2>
+          <section class="settings-section" aria-labelledby="sSharing">
+            <h2 class="settings-heading" id="sSharing">Sharing</h2>
             <div class="list-card">
-              <div class="settings-row wrap">
+              <div class="settings-row">
                 <label for="settingsDeviceNameInput" class="settings-label">
                   <span class="settings-label-title">Device name</span>
-                  <span class="settings-label-desc">How nearby devices see this computer. Up to 32 characters.</span>
+                  <span class="settings-label-desc">Shown to nearby devices.</span>
                 </label>
                 <div class="settings-controls">
+                  <button class="btn btn-primary btn-sm" id="saveDeviceNameBtn" type="button" hidden>Save</button>
                   <input type="text" id="settingsDeviceNameInput" class="input settings-input" maxlength="32" autocomplete="off" spellcheck="false" />
-                  <button class="btn btn-primary" id="saveDeviceNameBtn" type="button">Save</button>
                 </div>
               </div>
-            </div>
-          </section>
-
-          <section class="settings-section" aria-labelledby="sFiles">
-            <h2 class="eyebrow settings-heading" id="sFiles">Received files</h2>
-            <div class="list-card">
-              <div class="settings-row wrap">
-                <div class="settings-path-block">
-                  <div class="settings-label-title">Download folder</div>
-                  <div class="path-box mono" id="settingsDownloadDirDisplay">Detecting…</div>
-                </div>
-                <div class="settings-controls">
-                  <button class="btn btn-ghost" id="changeDownloadDirBtn" type="button">
-                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
-                    Change
-                  </button>
-                  <button class="btn btn-ghost" id="openDownloadFolderBtn" type="button">
-                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                    Open
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="settings-section" aria-labelledby="sTransfers">
-            <h2 class="eyebrow settings-heading" id="sTransfers">Transfers</h2>
-            <div class="list-card">
-              <div class="settings-row wrap">
+              <div class="settings-row">
                 <div class="settings-label">
-                  <span class="settings-label-title">Upload speed limit</span>
-                  <span class="settings-label-desc">Cap outgoing transfer speed to prevent network congestion.</span>
+                  <span class="settings-label-title">Download folder</span>
+                  <span class="settings-label-desc settings-path mono" id="settingsDownloadDirDisplay">Detecting…</span>
                 </div>
                 <div class="settings-controls">
-                  <select class="settings-select" id="settingsSpeedLimitSelect" aria-label="Upload speed limit">
+                  <button class="btn btn-ghost btn-sm" id="changeDownloadDirBtn" type="button">Change</button>
+                  <button class="btn btn-icon btn-icon-sm" id="openDownloadFolderBtn" type="button" aria-label="Open download folder" title="Open download folder">
+                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label for="settingsEncryptionToggle" class="settings-label">
+                  <span class="settings-label-title">End-to-end encryption</span>
+                  <span class="settings-label-desc">X25519 key exchange, ChaCha20-Poly1305.</span>
+                </label>
+                <div class="settings-controls">
+                  <label class="switch">
+                    <input type="checkbox" id="settingsEncryptionToggle" checked />
+                    <span class="switch-slider" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label for="settingsSpeedLimitSelect" class="settings-label">
+                  <span class="settings-label-title">Upload speed limit</span>
+                  <span class="settings-label-desc">Leave room for other traffic on your network.</span>
+                </label>
+                <div class="settings-controls">
+                  <select class="settings-select" id="settingsSpeedLimitSelect">
                     <option value="0">Unlimited</option>
                     <option value="5242880">5 MB/s</option>
                     <option value="10485760">10 MB/s</option>
@@ -256,16 +252,28 @@
             </div>
           </section>
 
-          <section class="settings-section" aria-labelledby="sSystem">
-            <h2 class="eyebrow settings-heading" id="sSystem">System & Notifications</h2>
+          <section class="settings-section" aria-labelledby="sApp">
+            <h2 class="settings-heading" id="sApp">App</h2>
             <div class="list-card">
               <div class="settings-row">
-                <div class="settings-label">
-                  <span class="settings-label-title">Minimize to system tray on close</span>
-                  <span class="settings-label-desc">Keep Easy Share running in the system tray when closing the window.</span>
-                </div>
+                <label for="settingsNotificationsToggle" class="settings-label">
+                  <span class="settings-label-title">Desktop notifications</span>
+                  <span class="settings-label-desc">For incoming requests and finished transfers.</span>
+                </label>
                 <div class="settings-controls">
-                  <label class="switch" for="settingsMinimizeToTrayToggle">
+                  <label class="switch">
+                    <input type="checkbox" id="settingsNotificationsToggle" checked />
+                    <span class="switch-slider" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label for="settingsMinimizeToTrayToggle" class="settings-label">
+                  <span class="settings-label-title">Keep running in the tray</span>
+                  <span class="settings-label-desc">Closing the window keeps Easy Share reachable.</span>
+                </label>
+                <div class="settings-controls">
+                  <label class="switch">
                     <input type="checkbox" id="settingsMinimizeToTrayToggle" checked />
                     <span class="switch-slider" aria-hidden="true"></span>
                   </label>
@@ -273,75 +281,36 @@
               </div>
               <div class="settings-row">
                 <div class="settings-label">
-                  <span class="settings-label-title">Desktop notifications</span>
-                  <span class="settings-label-desc">Show native OS notifications for incoming transfers and completions.</span>
+                  <span class="settings-label-title">Transfer history</span>
+                  <span class="settings-label-desc" id="settingsHistoryCount">No entries. Clearing removes the log, not the files.</span>
                 </div>
                 <div class="settings-controls">
-                  <label class="switch" for="settingsNotificationsToggle">
-                    <input type="checkbox" id="settingsNotificationsToggle" checked />
-                    <span class="switch-slider" aria-hidden="true"></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="settings-section" aria-labelledby="sSecurity">
-            <h2 class="eyebrow settings-heading" id="sSecurity">Security & Privacy</h2>
-            <div class="list-card">
-              <div class="settings-row">
-                <div class="settings-label">
-                  <span class="settings-label-title">End-to-end encryption</span>
-                  <span class="settings-label-desc">Encrypt transferred files using ephemeral X25519 key exchange and ChaCha20-Poly1305.</span>
-                </div>
-                <div class="settings-controls">
-                  <label class="switch" for="settingsEncryptionToggle">
-                    <input type="checkbox" id="settingsEncryptionToggle" checked />
-                    <span class="switch-slider" aria-hidden="true"></span>
-                  </label>
+                  <button class="btn btn-ghost btn-sm" id="settingsViewHistoryBtn" type="button">View</button>
+                  <button class="btn btn-ghost btn-sm btn-danger" id="settingsClearHistoryBtn" type="button">Clear</button>
                 </div>
               </div>
             </div>
           </section>
 
           <section class="settings-section" aria-labelledby="sNet">
-            <h2 class="eyebrow settings-heading" id="sNet">Network</h2>
-            <div class="list-card">
-              <div class="settings-row compact">
-                <span class="settings-row-label">Local address</span>
-                <span class="settings-row-value">
+            <h2 class="settings-heading" id="sNet">Network</h2>
+            <dl class="net-facts">
+              <div class="net-fact">
+                <dt>Address</dt>
+                <dd>
                   <span class="mono" id="settingsLocalAddress">—</span>
-                  <button class="btn btn-ghost btn-sm" id="settingsCopyAddressBtn" type="button">Copy</button>
-                </span>
+                  <button class="btn btn-link net-copy" id="settingsCopyAddressBtn" type="button">Copy</button>
+                </dd>
               </div>
-              <div class="settings-row compact">
-                <span class="settings-row-label">Transfer port</span>
-                <span class="mono settings-row-value" id="settingsPort">5050</span>
+              <div class="net-fact">
+                <dt>Port</dt>
+                <dd class="mono" id="settingsPort">5050</dd>
               </div>
-              <div class="settings-row compact">
-                <span class="settings-row-label">Discovery</span>
-                <span class="settings-row-value">
-                  <span class="status-dot"></span>
-                  mDNS + UDP broadcast <span class="mono text-subtle">:41234</span>
-                </span>
+              <div class="net-fact">
+                <dt>Discovery</dt>
+                <dd><span class="status-dot" aria-hidden="true"></span>mDNS + UDP <span class="mono text-subtle">:41234</span></dd>
               </div>
-            </div>
-          </section>
-
-          <section class="settings-section" aria-labelledby="sData">
-            <h2 class="eyebrow settings-heading" id="sData">Data</h2>
-            <div class="list-card">
-              <div class="settings-row wrap">
-                <div>
-                  <div class="settings-label-title">Transfer history</div>
-                  <div class="settings-label-desc" id="settingsHistoryCount">No entries. Clearing removes the log, not the files.</div>
-                </div>
-                <div class="settings-controls">
-                  <button class="btn btn-ghost" id="settingsViewHistoryBtn" type="button">View</button>
-                  <button class="btn btn-ghost btn-danger" id="settingsClearHistoryBtn" type="button">Clear history</button>
-                </div>
-              </div>
-            </div>
+            </dl>
           </section>
         </section>
       </main>
