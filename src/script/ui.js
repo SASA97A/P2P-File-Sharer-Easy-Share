@@ -553,6 +553,8 @@ export function setNavProgress(percent) {
 // Incoming transfer consent dialog
 // -------------------------------------------------------------
 let activeConsentResolver = null;
+let activeConsentRequestId = null;
+let activeConsentExpire = null;
 
 /**
  * Shows interactive consent dialog for incoming file transfer requests
@@ -646,6 +648,7 @@ export function showConsentModal(request) {
 
   return new Promise((resolve) => {
     activeConsentResolver = resolve;
+    activeConsentRequestId = request.request_id;
 
     const cleanup = () => {
       modal.classList.add("hidden");
@@ -655,6 +658,14 @@ export function showConsentModal(request) {
       if (changeDirBtn) changeDirBtn.removeEventListener("click", onChangeDir);
       window.removeEventListener("keydown", onKey);
       activeConsentResolver = null;
+      activeConsentRequestId = null;
+      activeConsentExpire = null;
+    };
+
+    // Resolves with null when the sender stopped waiting for an answer
+    activeConsentExpire = () => {
+      cleanup();
+      resolve(null);
     };
 
     const onAccept = () => {
@@ -678,6 +689,16 @@ export function showConsentModal(request) {
     if (changeDirBtn) changeDirBtn.addEventListener("click", onChangeDir);
     window.addEventListener("keydown", onKey);
   });
+}
+
+/**
+ * Closes the consent prompt for a request the sender is no longer waiting on.
+ * @param {string} requestId
+ */
+export function expireConsentModal(requestId) {
+  if (activeConsentExpire && activeConsentRequestId === requestId) {
+    activeConsentExpire();
+  }
 }
 
 /**

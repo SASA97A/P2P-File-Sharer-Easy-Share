@@ -619,7 +619,7 @@ async fn test_end_to_end_encrypted_transfer_tampered_chunk_rejected() {
 
     // Encrypt chunk manually and tamper with 1 bit
     let raw_chunk = vec![0xAB; 1024];
-    let mut encrypted = easy_share_lib::crypto::encrypt_chunk(&session_key, 0, &raw_chunk).unwrap();
+    let mut encrypted = easy_share_lib::crypto::encrypt_chunk(&session_key, &file_to_send.file_id, 0, &raw_chunk).unwrap();
     encrypted[10] ^= 0xFF; // Tamper
 
     let send_res = client
@@ -711,6 +711,151 @@ async fn test_transfer_with_encryption_disabled_in_receiver_falls_back_to_plaint
     assert!(saved_path.exists());
     let saved_hash = FileManager::calculate_blake3_file(&saved_path).unwrap();
     assert_eq!(saved_hash, expected_hash);
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_zero_byte_file_in_batch_finishes_and_later_files_still_arrive() {
+    let server_dir = setup_test_dir("zero_byte_server");
+    let client_dir = setup_test_dir("zero_byte_client");
+
+    let empty_path = client_dir.join(".gitkeep");
+    create_test_file(&empty_path, 0);
+    let data_path = client_dir.join("after.bin");
+    let data_hash = create_test_file(&data_path, 4096);
+
+    let empty_file = FileToSend::from_path("f-empty", &empty_path).unwrap();
+    let data_file = FileToSend::from_path("f-after", &data_path).unwrap();
+
+    let state = Arc::new(ServerState::new(sample_device_info(0), server_dir.clone()));
+    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let req = TransferRequest::new(
+        "req-zero",
+        "Sender",
+        "windows",
+        vec![empty_file.to_metadata(), data_file.to_metadata()],
+    );
+    let token = client
+        .request_transfer(&peer, &req)
+        .await
+        .unwrap()
+        .session_token
+        .unwrap();
+
+    for file in [&empty_file, &data_file] {
+        client
+            .send_file_resumable(&peer, &token, file, |_, _| {})
+            .await
+            .expect("send failed");
+    }
+
+    let empty_resp = client
+        .finish_transfer(&peer, &token, "f-empty")
+        .await
+        .expect("finishing a 0-byte file must succeed");
+    let empty_saved = PathBuf::from(&empty_resp.saved_path);
+    assert!(empty_saved.exists());
+    assert_eq!(FileManager::get_file_size(&empty_saved).unwrap(), 0);
+
+    let data_resp = client.finish_transfer(&peer, &token, "f-after").await.unwrap();
+    let data_saved = PathBuf::from(&data_resp.saved_path);
+    assert_eq!(FileManager::calculate_blake3_file(&data_saved).unwrap(), data_hash);
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_end_to_end_encrypted_multi_file_transfer() {
+    let server_dir = setup_test_dir("e2ee_multi_server");
+    let client_dir = setup_test_dir("e2ee_multi_client");
+
+    let path_a = client_dir.join("a.bin");
+    let path_b = client_dir.join("b.bin");
+    let hash_a = create_test_file(&path_a, 300 * 1024 + 7);
+    let hash_b = create_test_file(&path_b, 300 * 1024 + 7);
+    let file_a = FileToSend::from_path("f-a", &path_a).unwrap();
+    let file_b = FileToSend::from_path("f-b", &path_b).unwrap();
+
+    let mut dev_info = sample_device_info(0);
+    dev_info.pairing_pin = Some("135790".to_string());
+    let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
+    let (port, _handle) = start_server(state, 0).await.unwrap();
+    let client = TransferClient::with_chunk_size(128 * 1024);
+    let mut peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+    peer.pairing_pin = Some("135790".to_string());
+
+    let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let mut req = TransferRequest::new(
+        "req-e2ee-multi",
+        "Sender",
+        "windows",
+        vec![file_a.to_metadata(), file_b.to_metadata()],
+    );
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    req.pin_auth = Some(easy_share_lib::crypto::compute_pin_auth("135790", "req-e2ee-multi"));
+
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    let receiver_pub =
+        easy_share_lib::crypto::public_key_from_hex(&resp.ephemeral_public_key.unwrap()).unwrap();
+    let token = resp.session_token.unwrap();
+    let key = easy_share_lib::crypto::derive_session_key(sender_secret, &receiver_pub, "135790", &token);
+    client.register_session_key(&token, key).await;
+
+    for (file, hash) in [(&file_a, &hash_a), (&file_b, &hash_b)] {
+        client
+            .send_file_resumable(&peer, &token, file, |_, _| {})
+            .await
+            .expect("encrypted upload failed");
+        let finish = client.finish_transfer(&peer, &token, &file.file_id).await.unwrap();
+        let saved = PathBuf::from(&finish.saved_path);
+        assert_eq!(&FileManager::calculate_blake3_file(&saved).unwrap(), hash);
+    }
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_session_records_actual_saved_path_after_collision_rename() {
+    let server_dir = setup_test_dir("saved_path_server");
+    let client_dir = setup_test_dir("saved_path_client");
+
+    // A file with the same name already exists in the download folder
+    fs::write(server_dir.join("report.pdf"), b"old").unwrap();
+
+    let path = client_dir.join("report.pdf");
+    create_test_file(&path, 2048);
+    let file = FileToSend::from_path("f-report", &path).unwrap();
+
+    let state = Arc::new(ServerState::new(sample_device_info(0), server_dir.clone()));
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let req = TransferRequest::new("req-saved", "Sender", "windows", vec![file.to_metadata()]);
+    let token = client
+        .request_transfer(&peer, &req)
+        .await
+        .unwrap()
+        .session_token
+        .unwrap();
+    client.send_file_resumable(&peer, &token, &file, |_, _| {}).await.unwrap();
+    let finish = client.finish_transfer(&peer, &token, "f-report").await.unwrap();
+
+    assert_ne!(PathBuf::from(&finish.saved_path), server_dir.join("report.pdf"));
+    let session = state.get_session(&token).await.expect("session missing");
+    assert_eq!(
+        session.saved_paths.get("f-report"),
+        Some(&finish.saved_path),
+        "history must point at the renamed file, not the pre-existing one"
+    );
 
     let _ = fs::remove_dir_all(&server_dir);
     let _ = fs::remove_dir_all(&client_dir);

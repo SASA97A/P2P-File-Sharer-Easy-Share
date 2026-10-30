@@ -8,6 +8,7 @@ import { getFiles, formatFileSize } from "./files.js";
 import { getSelectedPeer, getPeerKey } from "./peers.js";
 import {
   showConsentModal,
+  expireConsentModal,
   showToast,
   updateReceiveProgress,
   hideReceiveProgress,
@@ -31,6 +32,7 @@ import {
   getDownloadDir,
   openDownloadDir,
   onTransferRequested,
+  onTransferRequestExpired,
   onTransferProgress,
   onTransferPaused,
   onTransferResumed,
@@ -286,6 +288,10 @@ export function setupTransfer() {
   onTransferRequested(async (request) => {
     try {
       const accepted = await showConsentModal(request);
+      if (accepted === null) {
+        showToast(`Request from ${request.sender_name} expired.`, "info");
+        return;
+      }
       if (accepted) {
         let saveDir = "";
         try {
@@ -302,7 +308,14 @@ export function setupTransfer() {
           saveDir,
         });
       }
-      await respondTransferRequest(request.request_id, accepted);
+      try {
+        await respondTransferRequest(request.request_id, accepted);
+      } catch (_err) {
+        // The sender gave up waiting before the answer arrived
+        if (accepted) setReceiveContext(null);
+        showToast(`Request from ${request.sender_name} expired.`, "info");
+        return;
+      }
 
       if (!accepted) {
         showToast(`Declined transfer from ${request.sender_name}.`, "info");
@@ -310,6 +323,10 @@ export function setupTransfer() {
     } catch (err) {
       console.error("Error processing transfer consent:", err);
     }
+  });
+
+  onTransferRequestExpired(({ request_id }) => {
+    expireConsentModal(request_id);
   });
 
   setReceiveCancelHandler(async (sessionToken) => {

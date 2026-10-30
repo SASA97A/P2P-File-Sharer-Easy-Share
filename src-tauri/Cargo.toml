@@ -39,3 +39,4 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }
 hkdf = "0.12"
 sha2 = "0.10"
 hex = "0.4"
+tauri-plugin-opener = "2"

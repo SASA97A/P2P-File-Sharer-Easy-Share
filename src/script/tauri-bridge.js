@@ -795,6 +795,10 @@ export async function onTransferRequested(cb) {
   return await subscribeEvent("transfer-requested", cb);
 }
 
+export async function onTransferRequestExpired(cb) {
+  return await subscribeEvent("transfer-request-expired", cb);
+}
+
 export async function onTransferProgress(cb) {
   return await subscribeEvent("transfer-progress", cb);
 }

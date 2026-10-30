@@ -200,7 +200,13 @@ impl AppState {
         // Subscribe to peer events and forward to frontend
         let mut sub = new_handle.subscribe();
         tokio::spawn(async move {
-            while let Ok(event) = sub.recv().await {
+            loop {
+                // A lagged receiver only missed events; keep forwarding instead of exiting for good.
+                let event = match sub.recv().await {
+                    Ok(event) => event,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                };
                 match event {
                     DiscoveryEvent::Peer(PeerEvent::Discovered(peer)) => {
                         let _ = app.emit("peer-found", &peer);

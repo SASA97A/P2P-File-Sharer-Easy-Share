@@ -77,25 +77,42 @@ pub fn derive_session_key(
     SessionKey::new(key_bytes)
 }
 
-/// Derives a deterministic 12-byte nonce for a specific chunk index in the transfer session.
-fn derive_chunk_nonce(chunk_index: u64) -> Nonce {
-    let mut nonce_bytes = [0u8; NONCE_SIZE];
-    // 4-byte domain separator prefix
-    nonce_bytes[0..4].copy_from_slice(b"EASY");
-    // 8-byte big-endian chunk counter
-    nonce_bytes[4..12].copy_from_slice(&chunk_index.to_be_bytes());
-    *Nonce::from_slice(&nonce_bytes)
+pub const TAG_SIZE: usize = 16;
+
+/// Derives a per-file subkey so chunks of different files never share a (key, nonce) pair.
+fn derive_file_key(key: &SessionKey, file_id: &str) -> [u8; KEY_SIZE] {
+    let mut input = Vec::with_capacity(32 + file_id.len());
+    input.extend_from_slice(b"EASY_SHARE_CHUNK_KEY_V2:");
+    input.extend_from_slice(file_id.as_bytes());
+    *blake3::keyed_hash(key.as_bytes(), &input).as_bytes()
 }
 
-/// Encrypts a chunk payload with ChaCha20-Poly1305 using the session key and chunk index.
+/// Derives a deterministic 12-byte nonce from the chunk's byte offset and plaintext length.
+///
+/// The offset alone is unique per chunk even when resumed or byte-limited sends produce chunks
+/// that are not aligned to the chunk size; the length keeps a resend of the same offset with a
+/// different length from reusing a nonce.
+fn derive_chunk_nonce(offset: u64, plaintext_len: usize) -> Result<Nonce, String> {
+    let len = u32::try_from(plaintext_len)
+        .map_err(|_| format!("Chunk too large to encrypt: {} bytes", plaintext_len))?;
+    let mut nonce_bytes = [0u8; NONCE_SIZE];
+    // 8-byte big-endian byte offset within the file
+    nonce_bytes[0..8].copy_from_slice(&offset.to_be_bytes());
+    // 4-byte big-endian plaintext length
+    nonce_bytes[8..12].copy_from_slice(&len.to_be_bytes());
+    Ok(*Nonce::from_slice(&nonce_bytes))
+}
+
+/// Encrypts a chunk payload with ChaCha20-Poly1305 using a per-file subkey and the chunk's offset.
 pub fn encrypt_chunk(
     key: &SessionKey,
-    chunk_index: u64,
+    file_id: &str,
+    offset: u64,
     plaintext: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let cipher = ChaCha20Poly1305::new_from_slice(key.as_bytes())
+    let cipher = ChaCha20Poly1305::new_from_slice(&derive_file_key(key, file_id))
         .map_err(|e| format!("Cipher init error: {}", e))?;
-    let nonce = derive_chunk_nonce(chunk_index);
+    let nonce = derive_chunk_nonce(offset, plaintext.len())?;
 
     cipher
         .encrypt(&nonce, plaintext)
@@ -105,12 +122,16 @@ pub fn encrypt_chunk(
 /// Decrypts a chunk payload with ChaCha20-Poly1305 and verifies its Poly1305 MAC tag.
 pub fn decrypt_chunk(
     key: &SessionKey,
-    chunk_index: u64,
+    file_id: &str,
+    offset: u64,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let cipher = ChaCha20Poly1305::new_from_slice(key.as_bytes())
+    if ciphertext.len() < TAG_SIZE {
+        return Err("Decryption authentication failed: ciphertext shorter than tag".to_string());
+    }
+    let cipher = ChaCha20Poly1305::new_from_slice(&derive_file_key(key, file_id))
         .map_err(|e| format!("Cipher init error: {}", e))?;
-    let nonce = derive_chunk_nonce(chunk_index);
+    let nonce = derive_chunk_nonce(offset, ciphertext.len() - TAG_SIZE)?;
 
     cipher
         .decrypt(&nonce, ciphertext)

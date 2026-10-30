@@ -108,7 +108,13 @@ pub async fn setup_services(
     let mut disc_sub = discovery_handle.subscribe();
     let app_disc = app.clone();
     tokio::spawn(async move {
-        while let Ok(event) = disc_sub.recv().await {
+        loop {
+            // A lagged receiver only missed events; keep forwarding instead of exiting for good.
+            let event = match disc_sub.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
             match event {
                 DiscoveryEvent::Peer(PeerEvent::Discovered(peer)) => {
                     let _ = app_disc.emit("peer-found", &peer);
@@ -133,8 +139,25 @@ pub async fn setup_services(
 
             {
                 let mut map = pending_consents_bridge.write().await;
-                map.insert(req_id, consent_req.responder);
+                map.insert(req_id.clone(), consent_req.responder);
             }
+
+            // The server gives up waiting after 60s and drops its receiver. Once that happens,
+            // remove the stale entry and tell the UI to close the prompt.
+            let expiry_map = pending_consents_bridge.clone();
+            let expiry_app = app_consent.clone();
+            let expiry_id = req_id.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(61)).await;
+                let mut map = expiry_map.write().await;
+                if map.get(&expiry_id).is_some_and(|responder| responder.is_closed()) {
+                    map.remove(&expiry_id);
+                    let _ = expiry_app.emit(
+                        "transfer-request-expired",
+                        &serde_json::json!({ "request_id": expiry_id }),
+                    );
+                }
+            });
 
             let _ = app_consent.emit("transfer-requested", &req_payload);
             notifications::notify_incoming_transfer(
@@ -155,7 +178,13 @@ pub async fn setup_services(
         use std::collections::HashSet;
         let mut recorded_tokens = HashSet::new();
 
-        while let Ok(event) = server_events.recv().await {
+        loop {
+            // A lagged receiver only missed events; keep forwarding instead of exiting for good.
+            let event = match server_events.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
             match event {
                 ServerTransferEvent::Progress(progress) => {
                     let _ = app_server.emit("receive-progress", &progress);
@@ -186,7 +215,6 @@ pub async fn setup_services(
                                     session.request.files.len(),
                                     true,
                                 );
-                                let dl_dir = s_state.download_dir();
                                 let record = storage::history::TransferHistoryRecord {
                                     id: uuid::Uuid::new_v4().to_string(),
                                     session_token: Some(completed.session_token.clone()),
@@ -204,7 +232,7 @@ pub async fn setup_services(
                                         .iter()
                                         .map(|f| storage::history::HistoryFileItem {
                                             name: f.name.clone(),
-                                            path: Some(dl_dir.join(&f.name).to_string_lossy().to_string()),
+                                            path: session.saved_paths.get(&f.file_id).cloned(),
                                             size: f.size,
                                         })
                                         .collect(),
@@ -226,7 +254,6 @@ pub async fn setup_services(
                     if !recorded_tokens.contains(&cancelled.session_token) {
                         recorded_tokens.insert(cancelled.session_token.clone());
                         if let Some(session) = s_state.get_session(&cancelled.session_token).await {
-                            let dl_dir = s_state.download_dir();
                             let record = storage::history::TransferHistoryRecord {
                                 id: uuid::Uuid::new_v4().to_string(),
                                 session_token: Some(cancelled.session_token.clone()),
@@ -244,7 +271,7 @@ pub async fn setup_services(
                                     .iter()
                                     .map(|f| storage::history::HistoryFileItem {
                                         name: f.name.clone(),
-                                        path: Some(dl_dir.join(&f.name).to_string_lossy().to_string()),
+                                        path: session.saved_paths.get(&f.file_id).cloned(),
                                         size: f.size,
                                     })
                                     .collect(),
@@ -262,7 +289,7 @@ pub async fn setup_services(
         }
     });
 
-    // 10. Background maintenance task to prune expired server sessions (> 1 hour TTL)
+    // 10. Background maintenance task to prune server sessions idle for more than 1 hour
     let prune_state = server_state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));

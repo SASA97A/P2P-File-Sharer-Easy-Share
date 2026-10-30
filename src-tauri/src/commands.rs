@@ -319,8 +319,10 @@ pub async fn respond_transfer_request(
 ) -> Result<(), String> {
     let mut pending = state.pending_consents.write().await;
     if let Some(responder) = pending.remove(&request_id) {
-        let _ = responder.send(accept);
-        Ok(())
+        // send fails when the sender side already timed out and stopped waiting
+        responder
+            .send(accept)
+            .map_err(|_| "This transfer request has expired".to_string())
     } else {
         Err("Pending transfer request not found or expired".to_string())
     }
@@ -990,6 +992,9 @@ pub async fn show_in_folder(path: String) -> Result<(), String> {
 }
 
 /// Opens the specified file using the system's default application.
+///
+/// Uses the OS open API directly rather than `cmd /c start`, so shell metacharacters in
+/// peer-chosen file names (`&`, `^`, `|`) are never interpreted as commands.
 #[tauri::command]
 pub async fn open_file(path: String) -> Result<(), String> {
     let file_path = PathBuf::from(&path);
@@ -997,29 +1002,8 @@ pub async fn open_file(path: String) -> Result<(), String> {
         return Err(format!("File does not exist: {}", path));
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", &path])
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
-    }
-
-    Ok(())
+    tauri_plugin_opener::open_path(&file_path, None::<&str>)
+        .map_err(|e| format!("Failed to open file: {}", e))
 }
 
 /// Payload describing system tray and notification preferences.

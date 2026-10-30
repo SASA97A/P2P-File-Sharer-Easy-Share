@@ -289,11 +289,8 @@ pub async fn handle_transfer_chunk(
             encrypted_payload.extend_from_slice(&chunk);
         }
 
-        let chunk_index = query
-            .chunk_index
-            .unwrap_or_else(|| query.offset / (crate::client::DEFAULT_CHUNK_SIZE as u64));
-
-        let decrypted = crate::crypto::decrypt_chunk(key, chunk_index, &encrypted_payload)
+        let decrypted =
+            crate::crypto::decrypt_chunk(key, &query.file_id, query.offset, &encrypted_payload)
             .map_err(|e| (StatusCode::UNAUTHORIZED, e))?;
 
         let decrypted_len = decrypted.len() as u64;
@@ -362,6 +359,7 @@ pub async fn handle_transfer_chunk(
             session
                 .file_progress
                 .insert(query.file_id.clone(), current_total);
+            session.last_activity = Instant::now();
             let mut tr = session.tracker.lock().unwrap();
             tr.update(current_total, file_size, Instant::now())
         } else {
@@ -427,6 +425,24 @@ pub async fn handle_transfer_finish(
 
     let part_path =
         FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
+
+    // Empty files carry no chunks, so no .part was ever written; create it here.
+    if !part_path.exists() && file.size == 0 {
+        if let Some(parent) = part_path.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to create directories: {}", e),
+                )
+            })?;
+        }
+        tokio::fs::File::create(&part_path).await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create empty .part file: {}", e),
+            )
+        })?;
+    }
 
     if !part_path.exists() {
         return Err((
@@ -504,6 +520,10 @@ pub async fn handle_transfer_finish(
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&payload.session_token) {
             session.file_progress.insert(payload.file_id.clone(), file.size);
+            session.last_activity = Instant::now();
+            session
+                .saved_paths
+                .insert(payload.file_id.clone(), saved_path_str.clone());
             let all_finished = session.request.files.iter().all(|f| {
                 session.file_progress.get(&f.file_id).copied().unwrap_or(0) >= f.size
             });

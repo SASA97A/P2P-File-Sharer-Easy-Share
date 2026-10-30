@@ -180,3 +180,45 @@ async fn test_app_state_history_workflow() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn test_concurrent_add_record_keeps_every_record() {
+    let dir = setup_test_dir("concurrent_add");
+    let handles: Vec<_> = (0..16)
+        .map(|i| {
+            let dir = dir.clone();
+            std::thread::spawn(move || {
+                easy_share_lib::storage::history::add_record(
+                    &dir,
+                    sample_record(&format!("rec-{}", i), "f.bin", TransferDirection::Sent),
+                )
+                .unwrap();
+            })
+        })
+        .collect();
+    for h in handles {
+        h.join().unwrap();
+    }
+    assert_eq!(load_history(&dir).len(), 16, "no record may be lost to a concurrent write");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_corrupt_history_is_backed_up_before_overwrite() {
+    let dir = setup_test_dir("corrupt_backup");
+    let corrupt = "[{\"id\": \"rec-1\", \"timest";
+    fs::write(dir.join("history.json"), corrupt).unwrap();
+
+    assert!(load_history(&dir).is_empty());
+    easy_share_lib::storage::history::add_record(
+        &dir,
+        sample_record("rec-2", "new.bin", TransferDirection::Received),
+    )
+    .unwrap();
+
+    let backup = fs::read_to_string(dir.join("history.json.corrupt")).expect("backup missing");
+    assert_eq!(backup, corrupt);
+    assert_eq!(load_history(&dir).len(), 1);
+    assert!(!dir.join("history.json.tmp").exists());
+    let _ = fs::remove_dir_all(&dir);
+}

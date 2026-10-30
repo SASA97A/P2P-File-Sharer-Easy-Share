@@ -774,7 +774,8 @@ impl TransferClient {
 
             let chunk_index = current_offset / (self.chunk_size as u64);
             let (payload, query_chunk_index) = if let Some(ref key) = session_key {
-                let encrypted = crate::crypto::encrypt_chunk(key, chunk_index, &buffer)
+                let encrypted =
+                    crate::crypto::encrypt_chunk(key, &file.file_id, current_offset, &buffer)
                     .map_err(|e| ClientError::Other(format!("Encryption error: {}", e)))?;
                 (encrypted, Some(chunk_index))
             } else {

@@ -1132,3 +1132,35 @@ async fn test_server_transfer_events_emission() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_server_session_pruning_keeps_long_running_active_sessions() {
+    let temp_dir = setup_test_dir("session_pruning_active");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+
+    let req = TransferRequest::new(
+        "req-long",
+        "Sender",
+        "windows",
+        vec![FileMetadata::new("f1", "big.bin", 10, None)],
+    );
+    let token = state.create_session(req).await.unwrap().token;
+
+    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+    // Simulate a chunk arriving: the session is old but still active
+    state
+        .sessions
+        .write()
+        .await
+        .get_mut(&token)
+        .unwrap()
+        .last_activity = std::time::Instant::now();
+
+    let pruned = state
+        .prune_expired_sessions(std::time::Duration::from_millis(10))
+        .await;
+    assert_eq!(pruned, 0, "an active session must survive past its creation age");
+    assert!(state.get_session(&token).await.is_some());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

@@ -76,7 +76,12 @@ pub struct SessionState {
     pub request: TransferRequest,
     pub status: TransferStatus,
     pub created_at: Instant,
+    /// Last time a chunk or finish request touched this session; pruning is based on idleness.
+    pub last_activity: Instant,
     pub file_progress: HashMap<String, u64>,
+    /// Final on-disk path of each committed file, keyed by file_id. Set only after the
+    /// .part file is committed, so it reflects sanitizing, folders and collision renames.
+    pub saved_paths: HashMap<String, String>,
     pub tracker: Arc<std::sync::Mutex<crate::client::metrics::ThroughputTracker>>,
     pub session_key: Option<crate::crypto::SessionKey>,
 }
@@ -299,7 +304,9 @@ impl ServerState {
             request,
             status: TransferStatus::Accepted,
             created_at: Instant::now(),
+            last_activity: Instant::now(),
             file_progress: offsets.clone(),
+            saved_paths: HashMap::new(),
             tracker: Arc::new(std::sync::Mutex::new(
                 crate::client::ThroughputTracker::new(),
             )),
@@ -321,12 +328,13 @@ impl ServerState {
         self.sessions.read().await.get(token).cloned()
     }
 
-    /// Prunes expired transfer sessions from state whose age exceeds `max_age`.
+    /// Prunes transfer sessions that have been idle (no chunk or finish request) for longer
+    /// than `max_idle`, so long-running active transfers are never cut off mid-way.
     /// Returns the number of evicted sessions.
-    pub async fn prune_expired_sessions(&self, max_age: std::time::Duration) -> usize {
+    pub async fn prune_expired_sessions(&self, max_idle: std::time::Duration) -> usize {
         let mut sessions = self.sessions.write().await;
         let before_count = sessions.len();
-        sessions.retain(|_token, session| session.created_at.elapsed() < max_age);
+        sessions.retain(|_token, session| session.last_activity.elapsed() < max_idle);
         before_count - sessions.len()
     }
 }
