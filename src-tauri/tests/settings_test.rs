@@ -28,6 +28,8 @@ fn test_save_and_load_settings() {
         minimize_to_tray: None,
         notifications_enabled: None,
         encryption_enabled: None,
+        device_id: None,
+        remember_paired_devices: None,
     };
 
     let save_res = save_settings(&dir, &settings);

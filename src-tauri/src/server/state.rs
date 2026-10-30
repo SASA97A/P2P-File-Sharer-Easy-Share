@@ -94,8 +94,11 @@ pub const PAIR_ATTEMPTS_BEFORE_PIN_ROTATION: u32 = 10;
 const PAIR_PENDING_TTL: Duration = Duration::from_secs(60);
 const MAX_PENDING_PAIRS: usize = 64;
 const MAX_STORED_PAIRINGS: usize = 256;
-/// How long pairing stays open after the PIN was last shown, if the dialog is never closed.
+/// Default pairing window, used by `set_pairing_open(true)`.
 pub const PAIRING_OPEN_WINDOW: Duration = Duration::from_secs(600);
+/// Pairing windows the user can choose, in minutes. There is deliberately no "always" option:
+/// an always-open device would let anyone on the network keep guessing PINs.
+pub const PAIRING_WINDOW_CHOICES_MINUTES: [u64; 2] = [10, 30];
 
 /// Why a pairing run was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,9 +120,28 @@ pub struct PairingRegistry {
     unconfirmed_attempts: u32,
     open_until: Option<Instant>,
     attempts_per_minute: u32,
+    attempts_before_rotation: u32,
+    /// Config directory to keep accepted pairings in, when "Remember paired devices" is on
+    store_dir: Option<PathBuf>,
 }
 
 impl PairingRegistry {
+    fn persist(&self) {
+        if let Some(ref dir) = self.store_dir {
+            let stored: Vec<_> = self
+                .order
+                .iter()
+                .filter_map(|id| {
+                    self.keys.get(id).map(|key| crate::storage::pairings::StoredAcceptedPairing {
+                        pair_id: id.clone(),
+                        key_hex: key.to_hex(),
+                    })
+                })
+                .collect();
+            let _ = crate::storage::pairings::save_accepted(dir, &stored);
+        }
+    }
+
     fn new() -> Self {
         Self {
             keys: HashMap::new(),
@@ -130,6 +152,8 @@ impl PairingRegistry {
             unconfirmed_attempts: 0,
             open_until: None,
             attempts_per_minute: PAIR_ATTEMPTS_PER_MINUTE,
+            attempts_before_rotation: PAIR_ATTEMPTS_BEFORE_PIN_ROTATION,
+            store_dir: None,
         }
     }
 }
@@ -266,7 +290,7 @@ impl ServerState {
             }
             reg.attempts_in_window += 1;
             reg.unconfirmed_attempts += 1;
-            if reg.unconfirmed_attempts > PAIR_ATTEMPTS_BEFORE_PIN_ROTATION {
+            if reg.unconfirmed_attempts > reg.attempts_before_rotation {
                 reg.unconfirmed_attempts = 1;
                 true
             } else {
@@ -321,18 +345,81 @@ impl ServerState {
         }
         reg.order.push_back(pair_id.to_string());
         reg.keys.insert(pair_id.to_string(), key);
+        reg.persist();
         Ok(())
     }
 
-    /// Opens pairing (the PIN is on screen) for `PAIRING_OPEN_WINDOW`, or closes it.
-    /// Opening again extends the window.
-    pub fn set_pairing_open(&self, open: bool) {
-        self.pairing_registry().open_until = open.then(|| Instant::now() + PAIRING_OPEN_WINDOW);
+    /// Loads accepted pairings saved by an earlier run.
+    pub fn load_accepted_pairings(&self, config_dir: &std::path::Path) {
+        let stored = crate::storage::pairings::load_accepted(config_dir);
+        let mut reg = self.pairing_registry();
+        for entry in stored {
+            if let Some(key) = crate::pairing::pake::PairingKey::from_hex(&entry.key_hex) {
+                if !reg.keys.contains_key(&entry.pair_id) {
+                    reg.order.push_back(entry.pair_id.clone());
+                }
+                reg.keys.insert(entry.pair_id, key);
+            }
+        }
+        while reg.order.len() > MAX_STORED_PAIRINGS {
+            if let Some(oldest) = reg.order.pop_front() {
+                reg.keys.remove(&oldest);
+            }
+        }
     }
 
-    /// Overrides the per-minute pairing attempt limit (default `PAIR_ATTEMPTS_PER_MINUTE`).
-    pub fn set_pair_attempts_per_minute(&self, limit: u32) {
-        self.pairing_registry().attempts_per_minute = limit;
+    /// Starts (`Some(dir)`) or stops (`None`) keeping accepted pairings on disk.
+    /// Starting writes the current pairings; stopping deletes the file.
+    pub fn set_pairing_persistence(&self, config_dir: Option<PathBuf>) {
+        let mut reg = self.pairing_registry();
+        if config_dir.is_none() {
+            if let Some(ref dir) = reg.store_dir {
+                crate::storage::pairings::remove_accepted(dir);
+            }
+        }
+        reg.store_dir = config_dir;
+        reg.persist();
+    }
+
+    /// Forgets every pairing other devices made with this one, in memory and on disk.
+    pub fn forget_accepted_pairings(&self) {
+        let mut reg = self.pairing_registry();
+        reg.keys.clear();
+        reg.order.clear();
+        if let Some(ref dir) = reg.store_dir {
+            crate::storage::pairings::remove_accepted(dir);
+        }
+    }
+
+    /// Number of pairings other devices made with this one.
+    pub fn accepted_pairing_count(&self) -> usize {
+        self.pairing_registry().keys.len()
+    }
+
+    /// Opens pairing for `PAIRING_OPEN_WINDOW`, or closes it.
+    pub fn set_pairing_open(&self, open: bool) {
+        self.set_pairing_window(open.then_some(PAIRING_OPEN_WINDOW));
+    }
+
+    /// Opens pairing for `window` from now (restarting any running window), or closes it.
+    pub fn set_pairing_window(&self, window: Option<Duration>) {
+        self.pairing_registry().open_until = window.map(|w| Instant::now() + w);
+    }
+
+    /// Time left before pairing closes, or `None` when pairing is off.
+    pub fn pairing_remaining(&self) -> Option<Duration> {
+        self.pairing_registry()
+            .open_until
+            .and_then(|until| until.checked_duration_since(Instant::now()))
+            .filter(|left| !left.is_zero())
+    }
+
+    /// Overrides the pairing attempt limits (defaults `PAIR_ATTEMPTS_PER_MINUTE` and
+    /// `PAIR_ATTEMPTS_BEFORE_PIN_ROTATION`).
+    pub fn set_pair_attempt_limits(&self, per_minute: u32, before_rotation: u32) {
+        let mut reg = self.pairing_registry();
+        reg.attempts_per_minute = per_minute;
+        reg.attempts_before_rotation = before_rotation;
     }
 
     /// Whether this device currently accepts pairing runs.

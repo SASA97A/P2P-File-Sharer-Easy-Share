@@ -31,6 +31,14 @@ impl PairingKey {
     pub fn as_bytes(&self) -> &[u8; PAIRING_KEY_SIZE] {
         &self.0
     }
+
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.0)
+    }
+
+    pub fn from_hex(hex_str: &str) -> Option<Self> {
+        hex::decode(hex_str).ok()?.try_into().ok().map(PairingKey)
+    }
 }
 
 impl std::fmt::Debug for PairingKey {

@@ -11,6 +11,7 @@ import {
 } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
 import { setupPairing } from "./pairing.js";
+import { setupPairingVisibility } from "./pairing-visibility.js";
 import { setupSettings } from "./settings.js";
 import { setupHistory } from "./history.js";
 import { setupNav } from "./nav.js";
@@ -240,6 +241,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 5. Device Pairing Setup (PIN, QR Code, Direct IP)
   // -------------------------------------------------------------
   setupPairing();
+  setupPairingVisibility();
 
   // -------------------------------------------------------------
   // 6. Settings Setup (Device Name, Downloads Folder)

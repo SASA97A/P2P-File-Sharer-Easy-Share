@@ -34,8 +34,19 @@
 
         <div class="nav-spacer"></div>
 
+        <button class="nav-item pair-eye-rail" id="pairEyeRailBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Pairing off. Change" title="Pairing off">
+          <span class="pair-eye-icon"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg></span>
+          <span class="pair-eye-time mono"></span>
+        </button>
+
         <div class="device-card" id="myDeviceBadge">
-          <span class="eyebrow">This device</span>
+          <div class="device-card-head">
+            <span class="eyebrow">This device</span>
+            <button class="pair-eye" id="pairEyeBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Pairing off. Change" title="Pairing off">
+              <span class="pair-eye-icon"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg></span>
+              <span class="pair-eye-time mono"></span>
+            </button>
+          </div>
           <div class="device-card-row">
             <span class="device-card-icon" id="myDeviceIcon">
               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
@@ -235,6 +246,19 @@
                 </div>
               </div>
               <div class="settings-row">
+                <label for="settingsRememberPairedToggle" class="settings-label">
+                  <span class="settings-label-title">Remember paired devices</span>
+                  <span class="settings-label-desc" id="settingsRememberPairedDesc">Skip the PIN next time. Pairings are kept after the app restarts.</span>
+                </label>
+                <div class="settings-controls">
+                  <button class="btn btn-ghost btn-sm btn-danger hidden" id="settingsForgetPairedBtn" type="button">Forget all</button>
+                  <label class="switch">
+                    <input type="checkbox" id="settingsRememberPairedToggle" />
+                    <span class="switch-slider" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="settings-row">
                 <label for="settingsSpeedLimitSelect" class="settings-label">
                   <span class="settings-label-title">Upload speed limit</span>
                   <span class="settings-label-desc">Leave room for other traffic on your network.</span>
@@ -395,6 +419,14 @@
           <button class="tab pairing-tab" id="tabAddressBtn" type="button" role="tab" aria-selected="false" aria-controls="viewAddress" tabindex="-1">Direct IP</button>
         </div>
 
+        <div class="pair-status-row" id="pairStatusRow">
+          <div class="pair-status is-off" id="pairStatus" aria-live="polite">
+            <span class="pair-status-icon pair-eye-icon"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg></span>
+            <span class="pair-status-text" id="pairStatusText">Pairing is off. Other devices can't pair with this PIN or QR code.</span>
+            <button class="btn btn-primary btn-sm" id="pairStatusBtn" type="button" aria-haspopup="menu" aria-expanded="false">Turn on</button>
+          </div>
+        </div>
+
         <!-- PIN -->
         <div class="tab-panel pin-panel" id="viewPin" role="tabpanel" aria-labelledby="tabPinBtn">
           <div class="sub-card">
@@ -485,5 +517,25 @@
     <div id="toast-container" aria-live="polite"></div>
 
     <script type="module" src="./script/renderer.js"></script>
+    <!-- Pairing visibility menu, shared by the sidebar eye and the pairing dialog -->
+    <div class="pair-menu hidden" id="pairMenu" role="menu" aria-labelledby="pairMenuTitle">
+      <div class="pair-menu-head">
+        <div class="pair-menu-title" id="pairMenuTitle">Accept pairing</div>
+        <div class="pair-menu-desc">Lets other devices pair using this device's PIN or QR code.</div>
+      </div>
+      <div class="pair-menu-sep"></div>
+      <button class="pair-opt" type="button" role="menuitemradio" aria-checked="true" data-minutes="0">
+        <span class="pair-opt-check" aria-hidden="true"></span>
+        <span class="pair-opt-main">Off</span>
+      </button>
+      <button class="pair-opt" type="button" role="menuitemradio" aria-checked="false" data-minutes="10">
+        <span class="pair-opt-check" aria-hidden="true"></span>
+        <span class="pair-opt-main">10 minutes<span class="pair-opt-meta mono"></span></span>
+      </button>
+      <button class="pair-opt" type="button" role="menuitemradio" aria-checked="false" data-minutes="30">
+        <span class="pair-opt-check" aria-hidden="true"></span>
+        <span class="pair-opt-main">30 minutes<span class="pair-opt-meta mono"></span></span>
+      </button>
+    </div>
   </body>
 </html>

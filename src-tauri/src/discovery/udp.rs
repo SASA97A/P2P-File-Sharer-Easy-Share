@@ -27,6 +27,8 @@ pub struct HeartbeatMessage {
     pub ip: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pairing_pin: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
 }
 
 impl HeartbeatMessage {
@@ -40,6 +42,7 @@ impl HeartbeatMessage {
             port: info.port,
             ip,
             pairing_pin: None, // Protected: secret pairing PIN is never broadcast over UDP
+            device_id: info.device_id.clone(),
         }
     }
 
@@ -57,6 +60,7 @@ impl HeartbeatMessage {
             port: self.port,
             // A PIN in an announcement is never trusted; pairing runs over SPAKE2
             pairing_pin: None,
+            device_id: self.device_id.clone(),
         }
     }
 }

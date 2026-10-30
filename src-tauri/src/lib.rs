@@ -42,13 +42,26 @@ pub async fn setup_services(
     let version = env!("CARGO_PKG_VERSION").to_string();
     let initial_port = 5050;
 
+    // Stable install id, created once; paired devices remember this device by it
+    let device_id = match settings.device_id.clone() {
+        Some(id) => id,
+        None => {
+            let id = uuid::Uuid::new_v4().to_string();
+            let mut updated = storage::settings::load_settings(&config_dir);
+            updated.device_id = Some(id.clone());
+            let _ = storage::settings::save_settings(&config_dir, &updated);
+            id
+        }
+    };
+
     let device_info = DeviceInfo::new(
         device_name,
         "desktop",
         os,
         version,
         initial_port,
-    );
+    )
+    .with_device_id(device_id);
 
     // 2. Resolve and ensure download directory exists (using persisted custom path if set)
     let download_dir = if let Some(custom_dir) = settings.download_dir {
@@ -355,7 +368,11 @@ pub fn run() {
             commands::get_my_device_info,
             commands::get_my_pairing_info,
             commands::regenerate_pairing_pin,
-            commands::close_pairing,
+            commands::get_pairing_status,
+            commands::set_pairing_mode,
+            commands::get_paired_devices_status,
+            commands::set_remember_paired_devices,
+            commands::forget_paired_devices,
             commands::connect_by_pin,
             commands::connect_by_address,
             commands::get_discovered_peers,

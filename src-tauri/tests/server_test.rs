@@ -28,6 +28,7 @@ fn sample_device_info() -> DeviceInfo {
         "2.0.0",
         0,
     )
+    .with_device_id("test-device-id")
 }
 
 #[tokio::test]
@@ -103,11 +104,11 @@ async fn test_server_secure_pair_endpoint() {
 
     // 3. Wrong PIN fails on the client, before anything is confirmed
     assert!(tc.pair_peer_url(&base, "000000").await.is_err());
-    assert!(tc.get_pairing(&base).await.is_none());
+    assert_eq!(tc.pairing_count().await, 0);
 
     // 4. Correct PIN pairs, and both sides end up with the same key
     tc.pair_peer_url(&base, "839421").await.expect("pairing with correct PIN");
-    let pairing = tc.get_pairing(&base).await.expect("client keeps the pairing");
+    let pairing = tc.get_pairing("test-device-id").await.expect("client keeps the pairing");
     assert_eq!(state.pairing_key(&pairing.pair_id), Some(pairing.key.clone()));
 
     // 5. The old plaintext endpoint is gone
@@ -1226,6 +1227,35 @@ async fn test_pairing_closed_device_takes_no_attempts() {
     state.set_pairing_open(true);
     let (_, msg_a) = easy_share_lib::pairing::pake::client_start("456456");
     assert!(state.pair_start(&msg_a).await.is_ok());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_pairing_window_defaults_off_and_follows_user_choice() {
+    let temp_dir = setup_test_dir("pair_window");
+    let state = Arc::new(ServerState::new(sample_device_info(), temp_dir.clone()));
+
+    // Off until the user picks a duration
+    assert!(state.pairing_remaining().is_none());
+    assert!(!state.is_pairing_open());
+    assert!(!state.get_public_device_info().await.pairing_open);
+
+    // 30 minutes chosen
+    state.set_pairing_window(Some(std::time::Duration::from_secs(30 * 60)));
+    let left = state.pairing_remaining().expect("pairing should be open");
+    assert!(left > std::time::Duration::from_secs(29 * 60) && left <= std::time::Duration::from_secs(30 * 60));
+    assert!(state.get_public_device_info().await.pairing_open);
+
+    // Turned off again
+    state.set_pairing_window(None);
+    assert!(state.pairing_remaining().is_none());
+
+    // A window that runs out closes pairing on its own
+    state.set_pairing_window(Some(std::time::Duration::from_millis(20)));
+    tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    assert!(state.pairing_remaining().is_none());
+    assert!(!state.is_pairing_open());
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

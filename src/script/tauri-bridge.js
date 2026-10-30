@@ -330,6 +330,39 @@ async function callInvoke(command, args = {}) {
       };
     }
 
+    case "get_paired_devices_status": {
+      return {
+        remember: Boolean(mockState.rememberPaired),
+        paired_count: mockState.pairedCount ?? 2,
+        accepted_count: 0,
+      };
+    }
+
+    case "set_remember_paired_devices": {
+      mockState.rememberPaired = Boolean(args.remember);
+      return {
+        remember: mockState.rememberPaired,
+        paired_count: mockState.pairedCount ?? 2,
+        accepted_count: 0,
+      };
+    }
+
+    case "forget_paired_devices": {
+      mockState.pairedCount = 0;
+      return { remember: Boolean(mockState.rememberPaired), paired_count: 0, accepted_count: 0 };
+    }
+
+    case "get_pairing_status": {
+      const left = Math.max(0, Math.round(((mockState.pairingOpenUntil || 0) - Date.now()) / 1000));
+      return { open: left > 0, remaining_secs: left };
+    }
+
+    case "set_pairing_mode": {
+      const minutes = Number(args.minutes) || 0;
+      mockState.pairingOpenUntil = minutes ? Date.now() + minutes * 60000 : 0;
+      return { open: minutes > 0, remaining_secs: minutes * 60 };
+    }
+
     case "regenerate_pairing_pin": {
       const newPin = Math.floor(100000 + Math.random() * 900000).toString();
       mockState.deviceInfo.pairing_pin = newPin;
@@ -658,8 +691,24 @@ export async function regeneratePairingPin() {
   return await callInvoke("regenerate_pairing_pin");
 }
 
-export async function closePairing() {
-  return await callInvoke("close_pairing");
+export async function getPairedDevicesStatus() {
+  return await callInvoke("get_paired_devices_status");
+}
+
+export async function setRememberPairedDevices(remember) {
+  return await callInvoke("set_remember_paired_devices", { remember });
+}
+
+export async function forgetPairedDevices() {
+  return await callInvoke("forget_paired_devices");
+}
+
+export async function getPairingStatus() {
+  return await callInvoke("get_pairing_status");
+}
+
+export async function setPairingMode(minutes) {
+  return await callInvoke("set_pairing_mode", { minutes });
 }
 
 /**

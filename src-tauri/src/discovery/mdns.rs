@@ -38,6 +38,9 @@ impl MdnsDiscovery {
         properties.insert("os".to_string(), self.device_info.os.clone());
         properties.insert("type".to_string(), self.device_info.device_type.clone());
         properties.insert("v".to_string(), self.device_info.version.clone());
+        if let Some(ref id) = self.device_info.device_id {
+            properties.insert("id".to_string(), id.clone());
+        }
         // Note: PIN is intentionally NOT published in mDNS TXT records for privacy and security.
 
         let best_ip = crate::discovery::nic::get_best_physical_ip()
@@ -88,6 +91,7 @@ impl MdnsDiscovery {
                             .to_string();
                         // A PIN in an announcement is never trusted; pairing runs over SPAKE2
                         let pairing_pin: Option<String> = None;
+                        let device_id = properties.get_property_val_str("id").map(|s| s.to_string());
                         let port = info.get_port();
 
                         // Avoid discovering ourselves
@@ -109,6 +113,7 @@ impl MdnsDiscovery {
                             ip: ip_str,
                             port,
                             pairing_pin,
+                            device_id,
                         };
 
                         let fullname_key = info.get_fullname().to_string();

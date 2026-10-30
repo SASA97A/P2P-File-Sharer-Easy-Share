@@ -184,12 +184,11 @@ pub async fn get_my_device_info(state: State<'_, AppState>) -> Result<DeviceInfo
 }
 
 /// Returns the local device's pairing info including 6-digit PIN, QR SVG, and direct URL.
-/// Showing the PIN opens pairing on this device (or extends the open window).
+/// Viewing it does not open pairing; the user turns pairing on explicitly.
 #[tauri::command]
 pub async fn get_my_pairing_info(
     state: State<'_, AppState>,
 ) -> Result<PairingInfoPayload, String> {
-    state.server_state.set_pairing_open(true);
     build_pairing_payload(&state).await
 }
 
@@ -199,15 +198,75 @@ pub async fn regenerate_pairing_pin(
     state: State<'_, AppState>,
 ) -> Result<PairingInfoPayload, String> {
     state.regenerate_pairing_pin().await;
-    state.server_state.set_pairing_open(true);
     build_pairing_payload(&state).await
 }
 
-/// Closes pairing on this device once the PIN is no longer on screen.
+/// Whether this device accepts pairing, and for how much longer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PairingStatusPayload {
+    pub open: bool,
+    pub remaining_secs: u64,
+}
+
+fn pairing_status(state: &AppState) -> PairingStatusPayload {
+    match state.server_state.pairing_remaining() {
+        Some(left) => PairingStatusPayload {
+            open: true,
+            remaining_secs: left.as_secs().max(1),
+        },
+        None => PairingStatusPayload {
+            open: false,
+            remaining_secs: 0,
+        },
+    }
+}
+
+/// Returns whether pairing is open and the time left.
 #[tauri::command]
-pub async fn close_pairing(state: State<'_, AppState>) -> Result<(), String> {
-    state.server_state.set_pairing_open(false);
-    Ok(())
+pub async fn get_pairing_status(state: State<'_, AppState>) -> Result<PairingStatusPayload, String> {
+    Ok(pairing_status(&state))
+}
+
+/// Returns whether paired devices are remembered across restarts, and how many there are.
+#[tauri::command]
+pub async fn get_paired_devices_status(
+    state: State<'_, AppState>,
+) -> Result<crate::app_state::PairedDevicesStatus, String> {
+    Ok(state.paired_devices_status().await)
+}
+
+/// Turns "Remember paired devices" on (pairings saved to disk) or off (saved pairings deleted).
+#[tauri::command]
+pub async fn set_remember_paired_devices(
+    state: State<'_, AppState>,
+    remember: bool,
+) -> Result<crate::app_state::PairedDevicesStatus, String> {
+    state.set_remember_paired_devices(remember).await
+}
+
+/// Forgets every pairing in both directions; devices must pair again with a PIN.
+#[tauri::command]
+pub async fn forget_paired_devices(
+    state: State<'_, AppState>,
+) -> Result<crate::app_state::PairedDevicesStatus, String> {
+    Ok(state.forget_paired_devices().await)
+}
+
+/// Turns pairing off (`minutes = 0`) or on for 10 or 30 minutes, restarting the timer.
+#[tauri::command]
+pub async fn set_pairing_mode(
+    state: State<'_, AppState>,
+    minutes: u64,
+) -> Result<PairingStatusPayload, String> {
+    let window = match minutes {
+        0 => None,
+        m if crate::server::state::PAIRING_WINDOW_CHOICES_MINUTES.contains(&m) => {
+            Some(std::time::Duration::from_secs(m * 60))
+        }
+        other => return Err(format!("Unsupported pairing duration: {} minutes", other)),
+    };
+    state.server_state.set_pairing_window(window);
+    Ok(pairing_status(&state))
 }
 
 /// Connects to a remote peer on the local network by scanning for a matching 6-digit PIN.
@@ -270,6 +329,7 @@ pub async fn connect_by_pin(
     };
 
     state.add_manual_peer(peer.clone()).await;
+    state.save_paired_devices().await;
     let _ = app.emit("peer-found", &peer);
     Ok(peer)
 }
@@ -294,6 +354,7 @@ pub async fn connect_by_address(
     }
 
     state.add_manual_peer(peer.clone()).await;
+    state.save_paired_devices().await;
     let _ = app.emit("peer-found", &peer);
     Ok(peer)
 }
@@ -333,6 +394,7 @@ pub async fn add_manual_peer(
     };
 
     state.add_manual_peer(peer.clone()).await;
+    state.save_paired_devices().await;
     let _ = app.emit("peer-found", &peer);
     Ok(peer)
 }
@@ -426,16 +488,46 @@ pub async fn start_transfer(
     );
 
     let mut pairing = None;
+    let mut peer_device_id = peer.device_id.clone();
     if encryption_enabled {
-        pairing = state.transfer_client.get_pairing(&peer.base_url()).await;
+        // Pairings are kept by the peer's stable device id; ask the peer if discovery didn't say
+        if peer_device_id.is_none() {
+            peer_device_id = state
+                .transfer_client
+                .probe_peer(&peer)
+                .await
+                .ok()
+                .and_then(|info| info.device_id);
+        }
+
+        if let Some(ref id) = peer_device_id {
+            pairing = state.transfer_client.get_pairing(id).await;
+        }
         if pairing.is_none() {
             if let Some(ref pin) = peer.pairing_pin {
-                state
+                let info = state
                     .transfer_client
                     .pair_peer(&peer, pin)
                     .await
                     .map_err(|e| format!("Pairing with {} failed: {}", peer.device_name, e))?;
-                pairing = state.transfer_client.get_pairing(&peer.base_url()).await;
+                peer_device_id = info.device_id.or(peer_device_id);
+                if let Some(ref id) = peer_device_id {
+                    pairing = state.transfer_client.get_pairing(id).await;
+                }
+                state.save_paired_devices().await;
+            }
+        }
+
+        // A device that forgot our pairing must be paired again; never fall back to sending
+        // without the pairing check.
+        if pairing.is_none() {
+            if let Some(ref id) = peer_device_id {
+                if state.transfer_client.needs_repair(id).await {
+                    return Err(format!(
+                        "{} no longer recognizes this device. Pair with it again using its PIN before sending.",
+                        peer.device_name
+                    ));
+                }
             }
         }
 
@@ -462,9 +554,15 @@ pub async fn start_transfer(
         Ok(resp) => resp,
         Err(e) => {
             let msg = e.to_string();
-            // The peer restarted and no longer knows this pairing; drop ours so it can re-pair
-            if pairing.is_some() && msg.contains("Unknown pairing") {
-                state.transfer_client.remove_pairing(&peer.base_url()).await;
+            // The peer no longer knows this pairing (it restarted without remembering devices,
+            // or forgot them). Block sending to it until it is paired again.
+            if let (Some(p), true) = (pairing.as_ref(), msg.contains("Unknown pairing")) {
+                state.transfer_client.mark_needs_repair(&p.device_id).await;
+                state.save_paired_devices().await;
+                return Err(format!(
+                    "{} no longer recognizes this device. Pair with it again using its PIN before sending.",
+                    peer.device_name
+                ));
             }
             return Err(format!("Transfer handshake failed: {}", msg));
         }

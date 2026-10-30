@@ -29,6 +29,7 @@ fn sample_device_info() -> DeviceInfo {
         "2.0.0",
         5050,
     )
+    .with_device_id("test-host-id")
 }
 
 #[tokio::test]
@@ -369,6 +370,7 @@ async fn test_connect_by_address_and_pin_matching() {
         0,
     );
     target_info.pairing_pin = Some("482910".to_string());
+    target_info.device_id = Some("direct-target-id".to_string());
 
     let target_server_state = Arc::new(ServerState::new(target_info, temp_dir.clone()));
     target_server_state.set_pairing_open(true);
@@ -403,7 +405,7 @@ async fn test_connect_by_address_and_pin_matching() {
     let normalized_wrong =
         easy_share_lib::pairing::pin::normalize_pin("111 - 222").expect("should normalize");
     assert!(client.pair_open_peer(&peer, &normalized_wrong).await.is_err());
-    assert!(client.get_pairing(&peer.base_url()).await.is_none());
+    assert_eq!(client.pairing_count().await, 0);
 
     // 4. The right PIN pairs over SPAKE2 with the device that is showing it
     let normalized_input =
@@ -413,7 +415,7 @@ async fn test_connect_by_address_and_pin_matching() {
         .await
         .expect("pairing should succeed with correct PIN");
     assert_eq!(authenticated.device_name, "Direct-Target");
-    assert!(client.get_pairing(&peer.base_url()).await.is_some());
+    assert_eq!(client.pairing_count().await, 1);
 }
 
 #[tokio::test]
@@ -555,4 +557,151 @@ async fn test_app_state_cancellation_token_lifecycle() {
     assert!(!token2.is_cancelled());
 
     let _ = fs::remove_dir_all(&temp_dir);
+}
+
+/// Starts a receiver that accepts pairing with `pin`, returning its state and peer handle.
+async fn start_pairable_receiver(dir: &std::path::Path, pin: &str) -> (Arc<ServerState>, PeerInfo) {
+    let info = DeviceInfo::new("Remembered-Receiver", "desktop", "windows", "2.0.0", 0)
+        .with_pairing_pin(pin)
+        .with_device_id("remembered-receiver-id");
+    let state = Arc::new(ServerState::new(info, dir.to_path_buf()));
+    state.set_pairing_open(true);
+    let (port, _task) = start_server(state.clone(), 0).await.expect("receiver must start");
+    let peer = PeerInfo::new("Remembered-Receiver", "desktop", "windows", "127.0.0.1", port);
+    (state, peer)
+}
+
+#[tokio::test]
+async fn test_remember_paired_devices_survives_restart_on_both_sides() {
+    let sender_cfg = setup_test_dir("remember_sender_cfg");
+    let receiver_cfg = setup_test_dir("remember_receiver_cfg");
+
+    // Receiver side: an AppState with remembering on owns the server state
+    let (receiver_server, peer) = start_pairable_receiver(&receiver_cfg, "246802").await;
+    let receiver_app = AppState::with_config_dir(
+        receiver_server.clone(),
+        None,
+        receiver_cfg.clone(),
+        receiver_cfg.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+    receiver_app.set_remember_paired_devices(true).await.unwrap();
+
+    // Sender side
+    let sender_server = Arc::new(ServerState::new(sample_device_info(), sender_cfg.clone()));
+    let sender_app = AppState::with_config_dir(
+        sender_server,
+        None,
+        sender_cfg.clone(),
+        sender_cfg.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+    sender_app.set_remember_paired_devices(true).await.unwrap();
+
+    sender_app.transfer_client.pair_peer(&peer, "246802").await.expect("pairing");
+    sender_app.save_paired_devices().await;
+    let pairing = sender_app
+        .transfer_client
+        .get_pairing("remembered-receiver-id")
+        .await
+        .expect("sender keeps pairing");
+
+    // "Restart" both: fresh states loaded from the same config dirs
+    let receiver_restarted = Arc::new(ServerState::new(
+        DeviceInfo::new("Remembered-Receiver", "desktop", "windows", "2.0.0", 0),
+        receiver_cfg.clone(),
+    ));
+    let _receiver_app2 = AppState::with_config_dir(
+        receiver_restarted.clone(),
+        None,
+        receiver_cfg.clone(),
+        receiver_cfg.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+    assert_eq!(
+        receiver_restarted.pairing_key(&pairing.pair_id),
+        Some(pairing.key.clone()),
+        "receiver must remember the pairing after restart"
+    );
+
+    let sender_restarted = AppState::with_config_dir(
+        Arc::new(ServerState::new(sample_device_info(), sender_cfg.clone())),
+        None,
+        sender_cfg.clone(),
+        sender_cfg.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+    let reloaded = sender_restarted
+        .transfer_client
+        .get_pairing("remembered-receiver-id")
+        .await
+        .expect("sender must remember the pairing after restart");
+    assert_eq!(reloaded.key, pairing.key);
+    assert_eq!(reloaded.pair_id, pairing.pair_id);
+
+    // Turning remembering off deletes the saved pairings
+    sender_restarted.set_remember_paired_devices(false).await.unwrap();
+    assert!(!sender_cfg
+        .join(easy_share_lib::storage::pairings::TRUSTED_PAIRINGS_FILE)
+        .exists());
+
+    let _ = fs::remove_dir_all(&sender_cfg);
+    let _ = fs::remove_dir_all(&receiver_cfg);
+}
+
+#[tokio::test]
+async fn test_pairings_are_not_saved_when_remember_is_off() {
+    let sender_cfg = setup_test_dir("no_remember_sender_cfg");
+    let receiver_cfg = setup_test_dir("no_remember_receiver_cfg");
+    let (_receiver_server, peer) = start_pairable_receiver(&receiver_cfg, "135791").await;
+
+    let sender_app = AppState::with_config_dir(
+        Arc::new(ServerState::new(sample_device_info(), sender_cfg.clone())),
+        None,
+        sender_cfg.clone(),
+        sender_cfg.clone(),
+        Arc::new(RwLock::new(HashMap::new())),
+    );
+    assert!(!sender_app.paired_devices_status().await.remember, "remembering defaults to off");
+
+    sender_app.transfer_client.pair_peer(&peer, "135791").await.expect("pairing");
+    sender_app.save_paired_devices().await;
+    assert!(!sender_cfg
+        .join(easy_share_lib::storage::pairings::TRUSTED_PAIRINGS_FILE)
+        .exists());
+    assert!(!receiver_cfg
+        .join(easy_share_lib::storage::pairings::ACCEPTED_PAIRINGS_FILE)
+        .exists());
+
+    let _ = fs::remove_dir_all(&sender_cfg);
+    let _ = fs::remove_dir_all(&receiver_cfg);
+}
+
+#[tokio::test]
+async fn test_forgotten_pairing_blocks_sending_until_paired_again() {
+    let receiver_cfg = setup_test_dir("needs_repair_receiver_cfg");
+    let (receiver_server, peer) = start_pairable_receiver(&receiver_cfg, "864200").await;
+    let client = TransferClient::new();
+
+    client.pair_peer(&peer, "864200").await.expect("pairing");
+    assert!(!client.needs_repair("remembered-receiver-id").await);
+
+    // The receiver forgets (e.g. restarted without remembering devices)
+    receiver_server.forget_accepted_pairings();
+    client.mark_needs_repair("remembered-receiver-id").await;
+    assert!(client.needs_repair("remembered-receiver-id").await);
+    assert!(client.get_pairing("remembered-receiver-id").await.is_none());
+
+    // The block survives a save/load round-trip
+    let exported = client.export_pairings().await;
+    let restored = TransferClient::new();
+    restored.import_pairings(exported);
+    assert!(restored.needs_repair("remembered-receiver-id").await);
+
+    // Pairing again lifts the block
+    client.pair_peer(&peer, "864200").await.expect("re-pairing");
+    assert!(!client.needs_repair("remembered-receiver-id").await);
+    assert!(client.get_pairing("remembered-receiver-id").await.is_some());
+
+    let _ = fs::remove_dir_all(&receiver_cfg);
 }

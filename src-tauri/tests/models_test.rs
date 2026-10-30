@@ -14,6 +14,7 @@ fn test_peer_info_serialization_roundtrip() {
         ip: "192.168.1.50".to_string(),
         port: 5050,
         pairing_pin: None,
+        device_id: None,
     };
 
     let json_str = serde_json::to_string(&peer).expect("failed to serialize PeerInfo");
@@ -53,6 +54,7 @@ fn test_device_info_serialization_roundtrip() {
         port: 5050,
         pairing_pin: None,
         pairing_open: false,
+        device_id: None,
     };
 
     let json_str = serde_json::to_string(&device).expect("failed to serialize DeviceInfo");

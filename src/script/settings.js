@@ -17,6 +17,9 @@ import {
   setTraySettings,
   getEncryptionSettings,
   setEncryptionSettings,
+  getPairedDevicesStatus,
+  setRememberPairedDevices,
+  forgetPairedDevices,
 } from "./tauri-bridge.js";
 import { showToast } from "./ui.js";
 
@@ -65,9 +68,32 @@ export async function openSettingsView() {
     if (encToggle) {
       encToggle.checked = Boolean(encryptionEnabled);
     }
+
+    renderPairedDevicesStatus(await getPairedDevicesStatus());
   } catch (err) {
     console.error("Failed to load settings data:", err);
   }
+}
+
+/**
+ * Renders the "Remember paired devices" row from the backend status.
+ * @param {{remember: boolean, paired_count: number, accepted_count: number}} status
+ */
+function renderPairedDevicesStatus(status) {
+  if (!status) return;
+  const toggle = document.getElementById("settingsRememberPairedToggle");
+  const desc = document.getElementById("settingsRememberPairedDesc");
+  const forgetBtn = document.getElementById("settingsForgetPairedBtn");
+  // Pairings this device made plus pairings other devices made with it
+  const count = (Number(status.paired_count) || 0) + (Number(status.accepted_count) || 0);
+
+  if (toggle) toggle.checked = Boolean(status.remember);
+  if (desc) {
+    desc.innerHTML = count
+      ? `Skip the PIN next time · <span class="mono">${count}</span> ${count === 1 ? "pairing" : "pairings"}`
+      : "Skip the PIN next time. Pairings are kept after the app restarts.";
+  }
+  if (forgetBtn) forgetBtn.classList.toggle("hidden", count === 0);
 }
 
 /**
@@ -293,6 +319,44 @@ export function setupSettings() {
       } catch (err) {
         console.error("Failed to update encryption setting:", err);
         showToast(`Failed to update encryption setting: ${err}`, "error");
+      }
+    });
+  }
+
+  // Remember Paired Devices Toggle Handler
+  const rememberToggle = document.getElementById("settingsRememberPairedToggle");
+  if (rememberToggle) {
+    rememberToggle.addEventListener("change", async (e) => {
+      try {
+        const status = await setRememberPairedDevices(e.target.checked);
+        renderPairedDevicesStatus(status);
+        showToast(
+          status.remember
+            ? "Paired devices will be remembered after restart"
+            : "Paired devices will be forgotten when the app restarts",
+          "info"
+        );
+      } catch (err) {
+        e.target.checked = !e.target.checked;
+        console.error("Failed to update remember setting:", err);
+        showToast(`Failed to update setting: ${err}`, "error");
+      }
+    });
+  }
+
+  // Forget All Paired Devices Handler
+  const forgetPairedBtn = document.getElementById("settingsForgetPairedBtn");
+  if (forgetPairedBtn) {
+    forgetPairedBtn.addEventListener("click", async () => {
+      if (!confirm("Forget all paired devices? You'll need to enter a PIN to pair with them again.")) {
+        return;
+      }
+      try {
+        renderPairedDevicesStatus(await forgetPairedDevices());
+        showToast("All paired devices forgotten", "info");
+      } catch (err) {
+        console.error("Failed to forget paired devices:", err);
+        showToast(`Failed to forget paired devices: ${err}`, "error");
       }
     });
   }

@@ -127,6 +127,7 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
         port: 5050,
         ip: Some("127.0.0.1".to_string()),
         pairing_pin: Some("123456".to_string()),
+        device_id: None,
     };
 
     let payload = serde_json::to_vec(&heartbeat).expect("failed to serialize heartbeat");
@@ -168,6 +169,7 @@ async fn test_peer_tracker_deduplication_and_expiration() {
         ip: "192.168.1.10".to_string(),
         port: 5050,
         pairing_pin: None,
+        device_id: None,
     };
 
     let peer_b = PeerInfo {
@@ -177,6 +179,7 @@ async fn test_peer_tracker_deduplication_and_expiration() {
         ip: "192.168.1.11".to_string(),
         port: 5050,
         pairing_pin: None,
+        device_id: None,
     };
 
     // First time seeing peer A -> emit Discovered
@@ -226,6 +229,7 @@ async fn test_peer_tracker_deduplicates_same_device_across_ips() {
         ip: "192.168.1.150".to_string(),
         port: 5050,
         pairing_pin: Some("839421".to_string()),
+        device_id: None,
     };
 
     let peer_ethernet = PeerInfo {
@@ -235,6 +239,7 @@ async fn test_peer_tracker_deduplicates_same_device_across_ips() {
         ip: "10.0.0.150".to_string(),
         port: 5050,
         pairing_pin: Some("839421".to_string()),
+        device_id: None,
     };
 
     // 1. First announcement arrives over Wi-Fi
@@ -388,6 +393,7 @@ async fn test_peer_tracker_source_differentiation() {
         ip: "192.168.1.50".to_string(),
         port: 5050,
         pairing_pin: None,
+        device_id: None,
     };
     let peer_manual = PeerInfo {
         device_name: "Manual-Peer".to_string(),
@@ -396,6 +402,7 @@ async fn test_peer_tracker_source_differentiation() {
         ip: "192.168.1.60".to_string(),
         port: 5050,
         pairing_pin: None,
+        device_id: None,
     };
     let peer_mdns = PeerInfo {
         device_name: "mDNS-Peer".to_string(),
@@ -404,6 +411,7 @@ async fn test_peer_tracker_source_differentiation() {
         ip: "192.168.1.70".to_string(),
         port: 5050,
         pairing_pin: None,
+        device_id: None,
     };
 
     tracker.record_seen_with_source(peer_udp.clone(), PeerSource::Udp);

@@ -19,6 +19,11 @@ pub struct AppSettings {
     pub notifications_enabled: Option<bool>,
     #[serde(default)]
     pub encryption_enabled: Option<bool>,
+    /// Stable random id that identifies this install to paired devices
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(default)]
+    pub remember_paired_devices: Option<bool>,
 }
 
 impl AppSettings {
@@ -35,6 +40,11 @@ impl AppSettings {
     /// Returns whether end-to-end encryption is enabled. Defaults to `true`.
     pub fn encryption_enabled(&self) -> bool {
         self.encryption_enabled.unwrap_or(true)
+    }
+
+    /// Returns whether PIN pairings are kept on disk across restarts. Defaults to `false`.
+    pub fn remember_paired_devices(&self) -> bool {
+        self.remember_paired_devices.unwrap_or(false)
     }
 }
 

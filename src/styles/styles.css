@@ -447,6 +447,63 @@ input:focus-visible,
   color: var(--text-muted);
 }
 
+/* Pairing visibility eye, next to the "This device" label */
+.device-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -4px -4px 0 0;
+}
+
+.pair-eye {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 11px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.pair-eye:hover {
+  background: var(--border-2);
+  color: var(--text);
+}
+
+.pair-eye.is-on,
+.pair-eye-rail.is-on {
+  background: var(--accent-tint-2);
+  color: var(--accent-text);
+}
+
+.pair-eye-icon {
+  display: inline-flex;
+}
+
+.pair-eye-time:empty {
+  display: none;
+}
+
+/* Rail-only copy of the eye: the device card is hidden when the nav is collapsed */
+.pair-eye-rail {
+  display: none !important;
+}
+
+.app-body.nav-collapsed .pair-eye-rail {
+  display: flex !important;
+  flex-direction: column;
+  gap: 2px;
+  height: auto;
+  min-height: 36px;
+  padding: 6px 0;
+  font-size: 11px;
+}
+
 /* Collapsed rail (user toggle, or automatically on narrow windows) */
 .app-body.nav-collapsed .side-nav {
   flex-basis: var(--nav-rail);
@@ -2142,4 +2199,133 @@ span.hint-line {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ---------------------------------------------------------------
+ * Pairing visibility menu and dialog status strip
+ * ------------------------------------------------------------- */
+.pair-menu {
+  position: fixed;
+  z-index: 70;
+  width: 248px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--surface-dialog);
+  border: 1px solid var(--border-3);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+.pair-menu-head {
+  padding: 8px 10px 6px;
+}
+
+.pair-menu-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pair-menu-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.pair-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-2);
+}
+
+.pair-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.pair-opt:hover,
+.pair-opt:focus-visible {
+  background: var(--hover-row);
+  outline: none;
+}
+
+.pair-opt.is-selected {
+  background: var(--accent-tint);
+}
+
+.pair-opt-check {
+  display: inline-flex;
+  width: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.pair-opt-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pair-opt-meta {
+  font-size: 11px;
+  color: var(--accent-text);
+}
+
+.pair-opt-meta:empty {
+  display: none;
+}
+
+.pair-status-row {
+  padding: 16px 22px 0;
+}
+
+.pair-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-border);
+  font-size: 13px;
+}
+
+.pair-status-icon {
+  color: var(--accent-text);
+}
+
+.pair-status-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pair-status-time {
+  color: var(--accent-text);
+}
+
+.pair-status.is-off {
+  background: var(--surface-sub);
+  border-color: var(--border-3);
+}
+
+.pair-status.is-off .pair-status-icon {
+  color: var(--text-subtle);
+}
+
+/* While pairing is off, this device's PIN and QR code are not usable, so blur them */
+.pairing-dialog.is-pairing-off #myPairingPin span,
+.pairing-dialog.is-pairing-off #myPairingQrBox,
+.pairing-dialog.is-pairing-off #myPairingLink {
+  filter: blur(7px);
+  opacity: 0.5;
+  user-select: none;
 }

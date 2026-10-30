@@ -35,6 +35,7 @@ fn create_node_device(name: &str, port: u16) -> DeviceInfo {
         "2.0.0",
         port,
     )
+    .with_device_id(format!("id-{}", name))
 }
 
 /// Helper struct representing an in-process running node

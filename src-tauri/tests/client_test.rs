@@ -23,6 +23,7 @@ fn sample_device_info(port: u16) -> DeviceInfo {
         "2.0.0",
         port,
     )
+    .with_device_id("receiver-device-id")
 }
 
 /// Opens pairing on the receiver, pairs with it over SPAKE2 and returns the stored pairing.
@@ -33,9 +34,9 @@ async fn pair_with(
     pin: &str,
 ) -> easy_share_lib::client::PeerPairing {
     state.set_pairing_open(true);
-    client.pair_peer(peer, pin).await.expect("pairing failed");
+    let info = client.pair_peer(peer, pin).await.expect("pairing failed");
     client
-        .get_pairing(&peer.base_url())
+        .get_pairing(info.device_id.as_deref().expect("receiver has a device id"))
         .await
         .expect("pairing was not stored")
 }
@@ -688,7 +689,7 @@ async fn test_end_to_end_transfer_wrong_pin_auth_rejected() {
     state.set_pairing_open(true);
     let wrong = client.pair_peer(&peer, "000000").await;
     assert!(wrong.is_err(), "pairing with a wrong PIN must fail");
-    assert!(client.get_pairing(&peer.base_url()).await.is_none());
+    assert_eq!(client.pairing_count().await, 0);
 
     // A handshake tag that does not match the pairing key is rejected
     let pairing = pair_with(&state, &client, &peer, "123456").await;

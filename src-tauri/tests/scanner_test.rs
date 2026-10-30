@@ -25,6 +25,7 @@ fn sample_device_info(name: &str, pin: &str) -> DeviceInfo {
         0,
     )
     .with_pairing_pin(pin)
+    .with_device_id(format!("id-{}", name))
 }
 
 #[test]
@@ -88,9 +89,10 @@ async fn test_resolve_peer_by_address_formats() {
     let device = sample_device_info("Resolve-Target", "123456");
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
     state.set_pairing_open(true);
-    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
-    // attempt per address; a real LAN device sees one attempt per search.
-    state.set_pair_attempts_per_minute(1000);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it ~50
+    // concurrent pairing attempts; a real LAN device sees one attempt per search. Raise both
+    // limits so the PIN neither rate-limits nor rotates mid-sweep.
+    state.set_pair_attempt_limits(1000, 1000);
 
     let (port, _server_handle) = start_server(state.clone(), 0)
         .await
@@ -103,7 +105,8 @@ async fn test_resolve_peer_by_address_formats() {
         .await
         .expect("should resolve IP:port");
     assert_eq!(peer.device_name, "Resolve-Target");
-    assert_eq!(peer.ip, "127.0.0.1");
+    // Any 127.0.0.x reaches the same loopback server on Windows; whichever answers first wins
+    assert!(peer.ip.starts_with("127.0.0."), "unexpected ip {}", peer.ip);
     assert_eq!(peer.port, port);
     assert_eq!(peer.pairing_pin, None, "Plain IP resolution must not leak remote PIN");
 
@@ -137,9 +140,10 @@ async fn test_sweep_subnet_for_pin_success_and_short_circuit() {
     let device = sample_device_info("Subnet-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
     state.set_pairing_open(true);
-    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
-    // attempt per address; a real LAN device sees one attempt per search.
-    state.set_pair_attempts_per_minute(1000);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it ~50
+    // concurrent pairing attempts; a real LAN device sees one attempt per search. Raise both
+    // limits so the PIN neither rate-limits nor rotates mid-sweep.
+    state.set_pair_attempt_limits(1000, 1000);
 
     // Server listens on 127.0.0.1:{port}
     let (port, _server_handle) = start_server(state.clone(), 0)
@@ -154,7 +158,8 @@ async fn test_sweep_subnet_for_pin_success_and_short_circuit() {
         .expect("should discover device on subnet with formatted PIN");
 
     assert_eq!(peer.device_name, "Subnet-Target");
-    assert_eq!(peer.ip, "127.0.0.1");
+    // Any 127.0.0.x reaches the same loopback server on Windows; whichever answers first wins
+    assert!(peer.ip.starts_with("127.0.0."), "unexpected ip {}", peer.ip);
     assert_eq!(peer.port, port);
     assert_eq!(peer.pairing_pin, None, "the PIN is not kept after pairing");
 
@@ -167,9 +172,10 @@ async fn test_sweep_subnet_for_pin_rejections() {
     let device = sample_device_info("Subnet-Target-2", "654321");
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
     state.set_pairing_open(true);
-    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
-    // attempt per address; a real LAN device sees one attempt per search.
-    state.set_pair_attempts_per_minute(1000);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it ~50
+    // concurrent pairing attempts; a real LAN device sees one attempt per search. Raise both
+    // limits so the PIN neither rate-limits nor rotates mid-sweep.
+    state.set_pair_attempt_limits(1000, 1000);
 
     let (port, _server_handle) = start_server(state.clone(), 0)
         .await
@@ -202,9 +208,10 @@ async fn test_sweep_subnet_for_pin_ports_fallback() {
     let device = sample_device_info("Fallback-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
     state.set_pairing_open(true);
-    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
-    // attempt per address; a real LAN device sees one attempt per search.
-    state.set_pair_attempts_per_minute(1000);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it ~50
+    // concurrent pairing attempts; a real LAN device sees one attempt per search. Raise both
+    // limits so the PIN neither rate-limits nor rotates mid-sweep.
+    state.set_pair_attempt_limits(1000, 1000);
 
     // Server listens on ephemeral port (not 5050)
     let (port, _server_handle) = start_server(state.clone(), 0)
@@ -219,7 +226,8 @@ async fn test_sweep_subnet_for_pin_ports_fallback() {
         .expect("should discover device on fallback port");
 
     assert_eq!(peer.device_name, "Fallback-Target");
-    assert_eq!(peer.ip, "127.0.0.1");
+    // Any 127.0.0.x reaches the same loopback server on Windows; whichever answers first wins
+    assert!(peer.ip.starts_with("127.0.0."), "unexpected ip {}", peer.ip);
     assert_eq!(peer.port, port);
 
     let _ = fs::remove_dir_all(&temp_dir);
@@ -232,9 +240,10 @@ async fn test_sweep_subnet_for_pin_fallback_range_discovery() {
     let device = sample_device_info("Fallback-Range-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
     state.set_pairing_open(true);
-    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
-    // attempt per address; a real LAN device sees one attempt per search.
-    state.set_pair_attempts_per_minute(1000);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it ~50
+    // concurrent pairing attempts; a real LAN device sees one attempt per search. Raise both
+    // limits so the PIN neither rate-limits nor rotates mid-sweep.
+    state.set_pair_attempt_limits(1000, 1000);
 
     // Try binding to 5051 (one of the fallback ports in 5051..=5055)
     if let Ok((port, _server_handle)) = start_server(state.clone(), 5051).await {
@@ -245,7 +254,7 @@ async fn test_sweep_subnet_for_pin_fallback_range_discovery() {
             .expect("should discover device on fallback port 5051");
 
         assert_eq!(peer.device_name, "Fallback-Range-Target");
-        assert_eq!(peer.ip, "127.0.0.1");
+        assert!(peer.ip.starts_with("127.0.0."), "unexpected ip {}", peer.ip);
         assert_eq!(peer.port, port);
     }
 
@@ -259,9 +268,10 @@ async fn test_sweep_all_subnets_for_pin_discovery() {
     let device = sample_device_info("Multi-Subnet-Target", target_pin);
     let state = Arc::new(ServerState::new(device, temp_dir.clone()));
     state.set_pairing_open(true);
-    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it a pairing
-    // attempt per address; a real LAN device sees one attempt per search.
-    state.set_pair_attempts_per_minute(1000);
+    // On Windows every 127.0.0.x reaches this one server, so a single sweep sends it ~50
+    // concurrent pairing attempts; a real LAN device sees one attempt per search. Raise both
+    // limits so the PIN neither rate-limits nor rotates mid-sweep.
+    state.set_pair_attempt_limits(1000, 1000);
 
     let (port, _server_handle) = start_server(state.clone(), 0).await.expect("failed to start test server");
     let client = TransferClient::new();

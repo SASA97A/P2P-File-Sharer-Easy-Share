@@ -7,7 +7,6 @@
 import {
   getMyPairingInfo,
   regeneratePairingPin,
-  closePairing,
   connectByPin,
   connectByAddress,
 } from "./tauri-bridge.js";
@@ -16,7 +15,7 @@ import { showToast } from "./ui.js";
 
 // Active pairing information payload cache
 let activePairingInfo = null;
-// Re-reads pairing info while the dialog is open: keeps pairing open and shows a rotated PIN
+// Re-reads pairing info while the dialog is open so a rotated PIN shows up
 let pairingRefreshTimer = null;
 const PAIRING_REFRESH_MS = 5000;
 
@@ -188,6 +187,10 @@ export function setupPairing() {
       }
     });
 
+    // The pairing status only concerns this device's own PIN and QR code
+    const statusRow = document.getElementById("pairStatusRow");
+    if (statusRow) statusRow.classList.toggle("hidden", targetId === "address");
+
     if (targetId === "pin" && peerPinInput) {
       setTimeout(() => peerPinInput.focus(), 50);
     } else if (targetId === "address" && peerAddressInput) {
@@ -260,7 +263,6 @@ export function setupPairing() {
     clearAllStatus();
     clearInterval(pairingRefreshTimer);
     pairingRefreshTimer = null;
-    closePairing().catch((err) => console.error("Failed to close pairing:", err));
   }
 
   if (openBtn) {

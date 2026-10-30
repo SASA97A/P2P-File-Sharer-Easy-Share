@@ -304,13 +304,17 @@ pub struct TransferClient {
     client: reqwest::Client,
     chunk_size: usize,
     session_keys: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::crypto::SessionKey>>>,
-    /// Completed PIN pairings keyed by peer base URL.
+    /// Completed PIN pairings keyed by the peer's stable device id.
     pairings: Arc<tokio::sync::RwLock<std::collections::HashMap<String, PeerPairing>>>,
+    /// Device ids that rejected our pairing; nothing is sent to them until they are paired again.
+    needs_repair: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
 }
 
 /// A completed PIN pairing with a peer: its id on the peer and the shared pairing key.
 #[derive(Debug, Clone)]
 pub struct PeerPairing {
+    pub device_id: String,
+    pub device_name: String,
     pub pair_id: String,
     pub key: crate::pairing::pake::PairingKey,
 }
@@ -329,6 +333,7 @@ impl TransferClient {
             chunk_size: DEFAULT_CHUNK_SIZE,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            needs_repair: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         }
     }
 
@@ -339,6 +344,7 @@ impl TransferClient {
             chunk_size,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            needs_repair: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         }
     }
 
@@ -349,6 +355,7 @@ impl TransferClient {
             chunk_size: DEFAULT_CHUNK_SIZE,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            needs_repair: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         }
     }
 
@@ -359,6 +366,7 @@ impl TransferClient {
             chunk_size,
             session_keys: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             pairings: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            needs_repair: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         }
     }
 
@@ -370,21 +378,77 @@ impl TransferClient {
             .insert(session_token.to_string(), key);
     }
 
-    /// Returns the stored PIN pairing for a peer base URL, if any.
-    pub async fn get_pairing(&self, base_url: &str) -> Option<PeerPairing> {
-        self.pairings
-            .read()
-            .await
-            .get(base_url.trim_end_matches('/'))
-            .cloned()
+    /// Returns the stored PIN pairing for a peer's device id, if any.
+    pub async fn get_pairing(&self, device_id: &str) -> Option<PeerPairing> {
+        self.pairings.read().await.get(device_id).cloned()
     }
 
-    /// Forgets a stored PIN pairing (for example after the peer restarted and lost it).
-    pub async fn remove_pairing(&self, base_url: &str) {
-        self.pairings
-            .write()
-            .await
-            .remove(base_url.trim_end_matches('/'));
+    /// Drops the pairing for a device that no longer recognizes it and blocks sending to that
+    /// device until it is paired again, so a lost pairing never silently downgrades a transfer.
+    pub async fn mark_needs_repair(&self, device_id: &str) {
+        self.pairings.write().await.remove(device_id);
+        self.needs_repair.write().await.insert(device_id.to_string());
+    }
+
+    /// Whether sending to this device is blocked until it is paired again.
+    pub async fn needs_repair(&self, device_id: &str) -> bool {
+        self.needs_repair.read().await.contains(device_id)
+    }
+
+    /// Number of devices this client is paired with.
+    pub async fn pairing_count(&self) -> usize {
+        self.pairings.read().await.len()
+    }
+
+    /// Forgets every pairing and every pending re-pair block.
+    pub async fn clear_pairings(&self) {
+        self.pairings.write().await.clear();
+        self.needs_repair.write().await.clear();
+    }
+
+    /// Snapshot of pairings for saving to disk.
+    pub async fn export_pairings(&self) -> crate::storage::pairings::TrustedPairingsFile {
+        let pairings = self.pairings.read().await;
+        let needs_repair = self.needs_repair.read().await;
+        let mut stored: Vec<_> = pairings
+            .values()
+            .map(|p| crate::storage::pairings::StoredTrustedPairing {
+                device_id: p.device_id.clone(),
+                device_name: p.device_name.clone(),
+                pair_id: p.pair_id.clone(),
+                key_hex: p.key.to_hex(),
+            })
+            .collect();
+        stored.sort_by(|a, b| a.device_id.cmp(&b.device_id));
+        let mut blocked: Vec<_> = needs_repair.iter().cloned().collect();
+        blocked.sort();
+        crate::storage::pairings::TrustedPairingsFile {
+            pairings: stored,
+            needs_repair: blocked,
+        }
+    }
+
+    /// Restores pairings saved by an earlier run. Only for use at startup, before the client is
+    /// shared, so the locks are free.
+    pub fn import_pairings(&self, file: crate::storage::pairings::TrustedPairingsFile) {
+        if let (Ok(mut pairings), Ok(mut needs_repair)) =
+            (self.pairings.try_write(), self.needs_repair.try_write())
+        {
+            for p in file.pairings {
+                if let Some(key) = crate::pairing::pake::PairingKey::from_hex(&p.key_hex) {
+                    pairings.insert(
+                        p.device_id.clone(),
+                        PeerPairing {
+                            device_id: p.device_id,
+                            device_name: p.device_name,
+                            pair_id: p.pair_id,
+                            key,
+                        },
+                    );
+                }
+            }
+            needs_repair.extend(file.needs_repair);
+        }
     }
 
     /// Retrieves an authenticated session encryption key if present.
@@ -581,10 +645,16 @@ impl TransferClient {
             return Err(ClientError::StatusError { status, message });
         }
         let body = resp.json::<crate::server::routes::PairResponse>().await?;
+        let device_id = body.device_info.device_id.clone().ok_or_else(|| {
+            ClientError::Other("This device is too old to pair; update Easy Share on it".to_string())
+        })?;
 
+        self.needs_repair.write().await.remove(&device_id);
         self.pairings.write().await.insert(
-            base.to_string(),
+            device_id.clone(),
             PeerPairing {
+                device_id,
+                device_name: body.device_info.device_name.clone(),
                 pair_id: start.pair_id,
                 key,
             },

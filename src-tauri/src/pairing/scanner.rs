@@ -137,6 +137,7 @@ pub async fn resolve_peer_by_address(
         ip,
         port: resolved_port,
         pairing_pin: embedded_pin,
+        device_id: device_info.device_id,
     })
 }
 
@@ -177,6 +178,7 @@ async fn sweep_ips_on_port(
                         port: resolved_port,
                         // The PAKE pairing key is stored in the client; the PIN is not kept
                         pairing_pin: None,
+                        device_id: device_info.device_id,
                     })
                 }
                 _ => None,

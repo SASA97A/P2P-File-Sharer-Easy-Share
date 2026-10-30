@@ -23,6 +23,17 @@ pub struct AppState {
     pub cancellation_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
     pub transfer_controls: Arc<RwLock<HashMap<String, TransferControl>>>,
     pub speed_limit_bps: Arc<AtomicU64>,
+    pub remember_pairings: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// Whether pairings are remembered across restarts, and how many are known.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct PairedDevicesStatus {
+    pub remember: bool,
+    /// Devices this one paired with
+    pub paired_count: usize,
+    /// Devices that paired with this one
+    pub accepted_count: usize,
 }
 
 impl AppState {
@@ -54,16 +65,70 @@ impl AppState {
         let settings = crate::storage::settings::load_settings(&config_dir);
         let initial_speed_limit = settings.speed_limit_bps.unwrap_or(0);
         server_state.set_encryption_enabled(settings.encryption_enabled());
+
+        let remember = settings.remember_paired_devices();
+        let transfer_client = TransferClient::new();
+        if remember {
+            transfer_client.import_pairings(crate::storage::pairings::load_trusted(&config_dir));
+            server_state.load_accepted_pairings(&config_dir);
+            server_state.set_pairing_persistence(Some(config_dir.clone()));
+        }
+
         Self {
             server_state,
             discovery_handle: Arc::new(RwLock::new(discovery_handle)),
-            transfer_client: TransferClient::new(),
+            transfer_client,
             download_dir: Arc::new(std::sync::RwLock::new(download_dir)),
             config_dir,
             pending_consents,
             cancellation_tokens: Arc::new(RwLock::new(HashMap::new())),
             transfer_controls: Arc::new(RwLock::new(HashMap::new())),
             speed_limit_bps: Arc::new(AtomicU64::new(initial_speed_limit)),
+            remember_pairings: Arc::new(std::sync::atomic::AtomicBool::new(remember)),
+        }
+    }
+
+    /// Saves this device's pairings with other devices, if "Remember paired devices" is on.
+    /// Call after pairing succeeds or a pairing is dropped.
+    pub async fn save_paired_devices(&self) {
+        if self.remember_pairings.load(Ordering::SeqCst) {
+            let file = self.transfer_client.export_pairings().await;
+            let _ = crate::storage::pairings::save_trusted(&self.config_dir, &file);
+        }
+    }
+
+    /// Turns remembering pairings across restarts on or off. Off deletes the saved pairings;
+    /// the current ones still work until the app restarts.
+    pub async fn set_remember_paired_devices(&self, remember: bool) -> Result<PairedDevicesStatus, String> {
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.remember_paired_devices = Some(remember);
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+        self.remember_pairings.store(remember, Ordering::SeqCst);
+
+        if remember {
+            self.server_state
+                .set_pairing_persistence(Some(self.config_dir.clone()));
+            self.save_paired_devices().await;
+        } else {
+            self.server_state.set_pairing_persistence(None);
+            crate::storage::pairings::remove_trusted(&self.config_dir);
+        }
+        Ok(self.paired_devices_status().await)
+    }
+
+    /// Forgets every pairing in both directions, in memory and on disk.
+    pub async fn forget_paired_devices(&self) -> PairedDevicesStatus {
+        self.transfer_client.clear_pairings().await;
+        self.server_state.forget_accepted_pairings();
+        crate::storage::pairings::remove_trusted(&self.config_dir);
+        self.paired_devices_status().await
+    }
+
+    pub async fn paired_devices_status(&self) -> PairedDevicesStatus {
+        PairedDevicesStatus {
+            remember: self.remember_pairings.load(Ordering::SeqCst),
+            paired_count: self.transfer_client.pairing_count().await,
+            accepted_count: self.server_state.accepted_pairing_count(),
         }
     }
 

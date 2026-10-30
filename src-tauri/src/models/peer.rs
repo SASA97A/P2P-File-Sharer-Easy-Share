@@ -13,6 +13,9 @@ pub struct DeviceInfo {
     /// True while this device shows its PIN in the pairing dialog and accepts pairing runs.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pairing_open: bool,
+    /// Stable id of this install; paired devices are remembered by it, not by IP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
 }
 
 impl DeviceInfo {
@@ -31,7 +34,13 @@ impl DeviceInfo {
             port,
             pairing_pin: None,
             pairing_open: false,
+            device_id: None,
         }
+    }
+
+    pub fn with_device_id(mut self, id: impl Into<String>) -> Self {
+        self.device_id = Some(id.into());
+        self
     }
 
     pub fn with_pairing_pin(mut self, pin: impl Into<String>) -> Self {
@@ -50,6 +59,9 @@ pub struct PeerInfo {
     pub port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pairing_pin: Option<String>,
+    /// The peer's stable install id, when it announced or reported one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
 }
 
 impl PeerInfo {
@@ -67,6 +79,7 @@ impl PeerInfo {
             ip: ip.into(),
             port,
             pairing_pin: None,
+            device_id: None,
         }
     }
 
