@@ -110,7 +110,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: Easy Share ${{ github.ref_name }}
-          files: dist/*
+          # Windows and Linux artifacts keep their bundle subfolders (msi/, deb/, ...)
+          files: dist/**/*
           # 0.x builds are unsigned early releases
           prerelease: true
           generate_release_notes: true
