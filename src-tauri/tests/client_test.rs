@@ -1,4 +1,6 @@
-use easy_share_lib::client::{ClientError, FileToSend, TransferClient};
+use easy_share_lib::client::{
+    negotiate_session_key, ClientError, FileToSend, KeyNegotiationError, TransferClient,
+};
 use easy_share_lib::models::peer::{DeviceInfo, PeerInfo};
 use easy_share_lib::models::transfer::{FileMetadata, TransferRequest, TransferStatus};
 use easy_share_lib::server::{start_server, ConsentPolicy, ServerState};
@@ -903,6 +905,93 @@ async fn test_session_records_actual_saved_path_after_collision_rename() {
         Some(&finish.saved_path),
         "history must point at the renamed file, not the pre-existing one"
     );
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_sender_refuses_plaintext_when_receiver_has_encryption_off() {
+    let server_dir = setup_test_dir("e2ee_refuse_server");
+    let client_dir = setup_test_dir("e2ee_refuse_client");
+
+    let file_path = client_dir.join("secret.bin");
+    create_test_file(&file_path, 4096);
+    let file_to_send = FileToSend::from_path("f-secret", &file_path).unwrap();
+
+    let state = Arc::new(ServerState::new(sample_device_info(0), server_dir.clone()));
+    state.set_encryption_enabled(false);
+
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let mut req = TransferRequest::new("req-refuse", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Accepted);
+    let token = resp.session_token.clone().unwrap();
+
+    let result = negotiate_session_key(sender_secret, None, &req.request_id, &token, &resp);
+    assert_eq!(result.err(), Some(KeyNegotiationError::NotEncrypted));
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_sender_rejects_tampered_encrypted_answers_from_paired_receiver() {
+    let server_dir = setup_test_dir("e2ee_strip_server");
+    let client_dir = setup_test_dir("e2ee_strip_client");
+
+    let file_path = client_dir.join("secret.bin");
+    create_test_file(&file_path, 4096);
+    let file_to_send = FileToSend::from_path("f-strip", &file_path).unwrap();
+
+    let mut dev_info = sample_device_info(0);
+    dev_info.pairing_pin = Some("246810".to_string());
+    let state = Arc::new(ServerState::new(dev_info, server_dir.clone()));
+
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+    let pairing = pair_with(&state, &client, &peer, "246810").await;
+
+    let (sender_secret, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let mut req = TransferRequest::new("req-strip", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    attach_pairing(&mut req, &pairing);
+
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Accepted);
+    let token = resp.session_token.clone().unwrap();
+    let negotiate = |secret, resp: &easy_share_lib::models::transfer::TransferResponse| {
+        negotiate_session_key(secret, Some(&pairing), &req.request_id, &token, resp).err()
+    };
+    let fresh = || easy_share_lib::crypto::generate_ephemeral_keypair().0;
+
+    // Stripping the encryption mode must not skip the pairing proof and fall back to plaintext.
+    let mut stripped = resp.clone();
+    stripped.encryption_mode = None;
+    assert_eq!(negotiate(fresh(), &stripped), Some(KeyNegotiationError::NotEncrypted));
+
+    let mut no_key = resp.clone();
+    no_key.ephemeral_public_key = None;
+    assert_eq!(negotiate(fresh(), &no_key), Some(KeyNegotiationError::InvalidKey));
+
+    let mut bad_key = resp.clone();
+    bad_key.ephemeral_public_key = Some("not-hex".to_string());
+    assert_eq!(negotiate(fresh(), &bad_key), Some(KeyNegotiationError::InvalidKey));
+
+    let mut no_proof = resp.clone();
+    no_proof.pair_auth = None;
+    assert_eq!(negotiate(fresh(), &no_proof), Some(KeyNegotiationError::PairingUnproven));
+
+    assert_eq!(negotiate(sender_secret, &resp), None);
 
     let _ = fs::remove_dir_all(&server_dir);
     let _ = fs::remove_dir_all(&client_dir);

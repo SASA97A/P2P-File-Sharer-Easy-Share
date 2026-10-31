@@ -319,6 +319,65 @@ pub struct PeerPairing {
     pub key: crate::pairing::pake::PairingKey,
 }
 
+/// Why an encrypted handshake answer was rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyNegotiationError {
+    /// The receiver accepted without encryption (it has encryption turned off, or the answer was altered).
+    NotEncrypted,
+    /// The receiver's ephemeral public key is missing or malformed.
+    InvalidKey,
+    /// A paired receiver did not prove it holds the pairing key.
+    PairingUnproven,
+}
+
+/// Checks an accepted answer to an encrypted handshake and derives the session key.
+///
+/// Every answer that would leave the transfer unencrypted or the pairing unverified is an
+/// error, so a sender that asked for encryption never falls back to plaintext.
+pub fn negotiate_session_key(
+    sender_secret: crate::crypto::EphemeralSecret,
+    pairing: Option<&PeerPairing>,
+    request_id: &str,
+    session_token: &str,
+    response: &TransferResponse,
+) -> Result<crate::crypto::SessionKey, KeyNegotiationError> {
+    if response.encryption_mode.as_deref() != Some("ChaCha20Poly1305") {
+        return Err(KeyNegotiationError::NotEncrypted);
+    }
+    let peer_pub_hex = response
+        .ephemeral_public_key
+        .as_deref()
+        .ok_or(KeyNegotiationError::InvalidKey)?;
+    let peer_pub = crate::crypto::public_key_from_hex(peer_pub_hex)
+        .map_err(|_| KeyNegotiationError::InvalidKey)?;
+
+    // A paired receiver must prove it holds the pairing key for this exact session and
+    // ephemeral key; otherwise someone substituted the key.
+    if let Some(p) = pairing {
+        let proven = response.pin_verified == Some(true)
+            && response.pair_auth.as_deref().is_some_and(|auth| {
+                crate::pairing::pake::verify_response_auth(
+                    &p.key,
+                    request_id,
+                    session_token,
+                    peer_pub_hex,
+                    auth,
+                )
+            });
+        if !proven {
+            return Err(KeyNegotiationError::PairingUnproven);
+        }
+    }
+
+    let salt: &[u8] = pairing.map(|p| &p.key.as_bytes()[..]).unwrap_or(&[]);
+    Ok(crate::crypto::derive_session_key(
+        sender_secret,
+        &peer_pub,
+        salt,
+        session_token,
+    ))
+}
+
 impl Default for TransferClient {
     fn default() -> Self {
         Self::new()

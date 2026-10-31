@@ -570,57 +570,58 @@ pub async fn start_transfer(
 
     match response.status {
         TransferStatus::Accepted => {
-            let session_token = response.session_token.ok_or_else(|| {
+            let session_token = response.session_token.clone().ok_or_else(|| {
                 "Receiver accepted transfer but did not return a session token".to_string()
             })?;
 
             let mut session_key = None;
-            if response.encryption_mode.as_deref() == Some("ChaCha20Poly1305") {
-                if let (Some(sender_secret), Some(peer_pub_hex)) = (ephemeral_secret_opt, response.ephemeral_public_key.as_ref()) {
-                    if let Ok(peer_pub) = crate::crypto::public_key_from_hex(peer_pub_hex) {
-                        // A paired receiver must prove it holds the pairing key for this exact
-                        // session and ephemeral key; otherwise someone substituted the key.
-                        if let Some(ref p) = pairing {
-                            let proven = response.pin_verified == Some(true)
-                                && response.pair_auth.as_deref().is_some_and(|auth| {
-                                    crate::pairing::pake::verify_response_auth(
-                                        &p.key,
-                                        &request_id,
-                                        &session_token,
-                                        peer_pub_hex,
-                                        auth,
-                                    )
-                                });
-                            if !proven {
-                                let _ = state
-                                    .transfer_client
-                                    .cancel_transfer(
-                                        &peer,
-                                        &session_token,
-                                        Some("Pairing verification failed".to_string()),
-                                    )
-                                    .await;
-                                return Err(format!(
-                                    "{} could not prove the pairing; pair with it again",
-                                    peer.device_name
-                                ));
-                            }
-                        }
-                        let salt: &[u8] = pairing
-                            .as_ref()
-                            .map(|p| &p.key.as_bytes()[..])
-                            .unwrap_or(&[]);
-                        let key = crate::crypto::derive_session_key(
-                            sender_secret,
-                            &peer_pub,
-                            salt,
-                            &session_token,
-                        );
+            // We asked for encryption, so anything short of a verified encrypted session is
+            // refused rather than sent in plaintext.
+            if let Some(sender_secret) = ephemeral_secret_opt {
+                match crate::client::negotiate_session_key(
+                    sender_secret,
+                    pairing.as_ref(),
+                    &request_id,
+                    &session_token,
+                    &response,
+                ) {
+                    Ok(key) => {
                         state
                             .transfer_client
                             .register_session_key(&session_token, key.clone())
                             .await;
                         session_key = Some(key);
+                    }
+                    Err(err) => {
+                        use crate::client::KeyNegotiationError;
+                        let (reason, message) = match err {
+                            KeyNegotiationError::NotEncrypted => (
+                                "Encryption required",
+                                format!(
+                                    "{} has encryption turned off. Turn it on there, or turn off encryption here, to send.",
+                                    peer.device_name
+                                ),
+                            ),
+                            KeyNegotiationError::InvalidKey => (
+                                "Invalid encryption key",
+                                format!(
+                                    "{} sent an invalid encryption key; nothing was sent",
+                                    peer.device_name
+                                ),
+                            ),
+                            KeyNegotiationError::PairingUnproven => (
+                                "Pairing verification failed",
+                                format!(
+                                    "{} could not prove the pairing; pair with it again",
+                                    peer.device_name
+                                ),
+                            ),
+                        };
+                        let _ = state
+                            .transfer_client
+                            .cancel_transfer(&peer, &session_token, Some(reason.to_string()))
+                            .await;
+                        return Err(message);
                     }
                 }
             }
