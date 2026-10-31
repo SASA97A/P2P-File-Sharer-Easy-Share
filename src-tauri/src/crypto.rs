@@ -31,8 +31,7 @@ impl std::fmt::Debug for SessionKey {
 
 /// Generates a new ephemeral X25519 keypair for key exchange.
 pub fn generate_ephemeral_keypair() -> (EphemeralSecret, PublicKey) {
-    let mut rng = rand::rngs::OsRng;
-    let secret = EphemeralSecret::random_from_rng(&mut rng);
+    let secret = EphemeralSecret::random_from_rng(rand::rngs::OsRng);
     let public = PublicKey::from(&secret);
     (secret, public)
 }

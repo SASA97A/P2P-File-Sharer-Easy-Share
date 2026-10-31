@@ -106,6 +106,7 @@ pub async fn handle_pair_start(
 /// POST /api/v1/pair/finish
 ///
 /// Second half of a SPAKE2 PIN pairing: the client proves it derived the same key.
+#[allow(clippy::result_large_err)]
 pub async fn handle_pair_finish(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<PairFinishRequest>,
@@ -129,10 +130,19 @@ pub async fn handle_pair_finish(
 }
 
 /// POST /api/v1/transfer/request
+#[allow(clippy::result_large_err)]
 pub async fn handle_transfer_request(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<TransferRequest>,
 ) -> Result<Json<TransferResponse>, (StatusCode, Json<TransferResponse>)> {
+    // Decline bad keys and pairings before the user is asked about a transfer that can't succeed
+    if let Err(reason) = state.check_encrypted_request(&request) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(TransferResponse::declined(reason)),
+        ));
+    }
+
     match state.evaluate_consent(&request).await {
         Ok(()) => {
             match state.create_session(request).await {
@@ -213,6 +223,10 @@ pub async fn handle_transfer_status(
         status,
     }))
 }
+
+/// Largest plaintext an encrypted chunk may carry. Encrypted chunks are buffered whole before
+/// decryption; senders use 4 MiB chunks by default.
+pub const MAX_ENCRYPTED_CHUNK_SIZE: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 pub struct ChunkQuery {
@@ -311,7 +325,10 @@ pub async fn handle_transfer_chunk(
     let mut stream = body.into_data_stream();
 
     if let Some(ref key) = session_key {
-        // Collect encrypted payload for authenticated AEAD decryption
+        // Collect encrypted payload for authenticated AEAD decryption. The whole chunk is held in
+        // memory, so stop reading once it is larger than any valid chunk could be.
+        let max_payload = (file_size - query.offset).min(MAX_ENCRYPTED_CHUNK_SIZE)
+            + crate::crypto::TAG_SIZE as u64;
         let mut encrypted_payload = Vec::new();
         while let Some(chunk_res) = stream.next().await {
             let chunk = chunk_res.map_err(|e| {
@@ -320,6 +337,15 @@ pub async fn handle_transfer_chunk(
                     format!("Error reading body stream: {}", e),
                 )
             })?;
+            if encrypted_payload.len() as u64 + chunk.len() as u64 > max_payload {
+                return Err((
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    format!(
+                        "Encrypted chunk exceeds {} bytes (offset={}, file_size={})",
+                        max_payload, query.offset, file_size
+                    ),
+                ));
+            }
             encrypted_payload.extend_from_slice(&chunk);
         }
 
@@ -383,6 +409,7 @@ pub async fn handle_transfer_chunk(
             format!("Failed to flush buffer: {}", e),
         )
     })?;
+    drop(writer);
 
     let current_total = query.offset + bytes_written;
 
@@ -390,6 +417,15 @@ pub async fn handle_transfer_chunk(
     let (speed_bps, eta_seconds) = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&query.session_token) {
+            // Cancelled while this chunk was being written: the cancel could not delete the
+            // .part file we held open, so remove it now.
+            if session.status == TransferStatus::Cancelled {
+                let _ = tokio::fs::remove_file(&part_path).await;
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Transfer session has been cancelled".to_string(),
+                ));
+            }
             session
                 .file_progress
                 .insert(query.file_id.clone(), current_total);
@@ -523,15 +559,30 @@ pub async fn handle_transfer_finish(
         }
     }
 
-    let dest_path = FileManager::resolve_destination_path(
-        &state.download_dir(),
-        &file.name,
-        file.relative_path.as_deref(),
-    );
+    let download_dir = state.download_dir();
     let part_path_clone = part_path.clone();
-    let dest_path_clone = dest_path.clone();
-    tokio::task::spawn_blocking(move || {
-        FileManager::commit_part_file(&part_path_clone, &dest_path_clone)
+    let file_name = file.name.clone();
+    let relative_path = file.relative_path.clone();
+    let dest_path = tokio::task::spawn_blocking(move || {
+        // Another file can take the chosen name between picking it and committing; pick the
+        // next free name and try again rather than replacing it.
+        let mut attempts = 0;
+        loop {
+            let dest = FileManager::resolve_destination_path(
+                &download_dir,
+                &file_name,
+                relative_path.as_deref(),
+            );
+            match FileManager::commit_part_file(&part_path_clone, &dest) {
+                Ok(()) => return Ok(dest),
+                Err(crate::storage::file_manager::StorageError::Io(e))
+                    if e.kind() == std::io::ErrorKind::AlreadyExists && attempts < 5 =>
+                {
+                    attempts += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     })
     .await
     .map_err(|e| {
@@ -587,27 +638,12 @@ pub async fn handle_transfer_cancel(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<CancelRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let mut sessions = state.sessions.write().await;
-    let session = sessions.get_mut(&payload.session_token).ok_or((
-        StatusCode::UNAUTHORIZED,
-        "Invalid or expired session token".to_string(),
-    ))?;
-
-    session.status = TransferStatus::Cancelled;
-
-    for file in &session.request.files {
-        let part_path =
-            FileManager::get_part_path(&state.download_dir(), &file.name, &file.file_key());
-        if part_path.exists() {
-            let _ = tokio::fs::remove_file(part_path).await;
-        }
+    if !state.cancel_session(&payload.session_token, true).await {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid or expired session token".to_string(),
+        ));
     }
-
-    state.emit_event(crate::server::state::ServerTransferEvent::Cancelled(
-        crate::server::state::ReceiveCancelledPayload {
-            session_token: payload.session_token.clone(),
-        },
-    ));
 
     Ok(StatusCode::OK)
 }

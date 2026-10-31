@@ -996,3 +996,149 @@ async fn test_sender_rejects_tampered_encrypted_answers_from_paired_receiver() {
     let _ = fs::remove_dir_all(&server_dir);
     let _ = fs::remove_dir_all(&client_dir);
 }
+
+/// Starts an encrypted, unpaired session for `file` and returns its token.
+async fn open_encrypted_session(
+    client: &TransferClient,
+    peer: &PeerInfo,
+    request_id: &str,
+    file: &FileToSend,
+) -> String {
+    let (_, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let mut req = TransferRequest::new(request_id, "Sender", "windows", vec![file.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    let resp = client.request_transfer(peer, &req).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Accepted);
+    assert_eq!(resp.encryption_mode.as_deref(), Some("ChaCha20Poly1305"));
+    resp.session_token.unwrap()
+}
+
+#[tokio::test]
+async fn test_oversized_encrypted_chunk_is_rejected() {
+    let server_dir = setup_test_dir("e2ee_oversize_server");
+    let client_dir = setup_test_dir("e2ee_oversize_client");
+
+    let file_path = client_dir.join("small.bin");
+    create_test_file(&file_path, 1000);
+    let file_to_send = FileToSend::from_path("f-small", &file_path).unwrap();
+
+    let state = Arc::new(ServerState::new(sample_device_info(0), server_dir.clone()));
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+    let token = open_encrypted_session(&client, &peer, "req-oversize", &file_to_send).await;
+
+    // One byte more than the 1000-byte file plus the AEAD tag
+    let body = vec![0u8; 1000 + easy_share_lib::crypto::TAG_SIZE + 1];
+    let err = client
+        .send_chunk(&peer, &token, "f-small", 0, body)
+        .await
+        .unwrap_err();
+    match err {
+        ClientError::StatusError { status, .. } => {
+            assert_eq!(status, reqwest::StatusCode::PAYLOAD_TOO_LARGE)
+        }
+        other => panic!("expected 413, got {:?}", other),
+    }
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_receiver_cancel_deletes_parts_and_stops_sender() {
+    let server_dir = setup_test_dir("recv_cancel_server");
+    let client_dir = setup_test_dir("recv_cancel_client");
+
+    let file_path = client_dir.join("big.bin");
+    create_test_file(&file_path, 256 * 1024);
+    let file_to_send = FileToSend::from_path("f-big", &file_path).unwrap();
+
+    let state = Arc::new(ServerState::new(sample_device_info(0), server_dir.clone()));
+    let mut events = state.subscribe_events();
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
+    let client = TransferClient::with_chunk_size(64 * 1024);
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let req = TransferRequest::new("req-recv-cancel", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    let token = resp.session_token.unwrap();
+
+    // Send the first quarter so a .part file exists
+    client
+        .send_file_chunks_with_limit(&peer.base_url(), &token, &file_to_send, 0, Some(64 * 1024), |_, _| {})
+        .await
+        .unwrap();
+    let meta = file_to_send.to_metadata();
+    let part_path = FileManager::get_part_path(&server_dir, &meta.name, &meta.file_key());
+    assert!(part_path.exists());
+
+    // The user cancels on the receiving device
+    assert!(state.cancel_session(&token, false).await);
+    assert!(!part_path.exists(), "partial file should be deleted");
+
+    let cancelled = loop {
+        match events.recv().await.unwrap() {
+            easy_share_lib::server::ServerTransferEvent::Cancelled(c) => break c,
+            _ => continue,
+        }
+    };
+    assert_eq!(cancelled.session_token, token);
+    assert!(!cancelled.by_sender);
+
+    // The sender's next chunk is refused as a receiver cancel, not a generic failure
+    let err = client
+        .send_chunk(&peer, &token, "f-big", 64 * 1024, vec![0u8; 1024])
+        .await
+        .unwrap_err();
+    assert!(err.is_cancelled_by_peer(), "unexpected error: {:?}", err);
+    assert!(!part_path.exists(), "a refused chunk must not recreate the partial file");
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}
+
+#[tokio::test]
+async fn test_bad_pairing_is_declined_before_consent_prompt() {
+    let server_dir = setup_test_dir("precheck_server");
+    let client_dir = setup_test_dir("precheck_client");
+
+    let file_path = client_dir.join("x.bin");
+    create_test_file(&file_path, 1024);
+    let file_to_send = FileToSend::from_path("f-x", &file_path).unwrap();
+
+    let (tx, mut consent_rx) = tokio::sync::mpsc::channel(4);
+    let state = Arc::new(ServerState::with_consent(
+        sample_device_info(0),
+        server_dir.clone(),
+        ConsentPolicy::Channel(tx),
+    ));
+    let (port, _handle) = start_server(state.clone(), 0).await.unwrap();
+    let client = TransferClient::new();
+    let peer = PeerInfo::new("Receiver", "desktop", "windows", "127.0.0.1", port);
+
+    let (_, sender_pub) = easy_share_lib::crypto::generate_ephemeral_keypair();
+    let mut req = TransferRequest::new("req-precheck", "Sender", "windows", vec![file_to_send.to_metadata()]);
+    req.encryption_mode = Some("ChaCha20Poly1305".to_string());
+    req.ephemeral_public_key = Some(easy_share_lib::crypto::public_key_to_hex(&sender_pub));
+    req.pair_id = Some("no-such-pairing".to_string());
+    req.pair_auth = Some("00".repeat(32));
+
+    let resp = client.request_transfer(&peer, &req).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Declined);
+    assert!(resp.reason.as_deref().unwrap_or("").contains("Unknown pairing"));
+
+    let mut bad_key = req.clone();
+    bad_key.request_id = "req-precheck-key".to_string();
+    bad_key.pair_id = None;
+    bad_key.pair_auth = None;
+    bad_key.ephemeral_public_key = Some("zz".to_string());
+    let resp = client.request_transfer(&peer, &bad_key).await.unwrap();
+    assert_eq!(resp.status, TransferStatus::Declined);
+
+    assert!(consent_rx.try_recv().is_err(), "the user must not be asked");
+
+    let _ = fs::remove_dir_all(&server_dir);
+    let _ = fs::remove_dir_all(&client_dir);
+}

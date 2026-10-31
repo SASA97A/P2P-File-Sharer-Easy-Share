@@ -146,7 +146,7 @@ fn test_commit_part_file_atomic_rename() {
 }
 
 #[test]
-fn test_commit_part_file_existing_dest_replaced() {
+fn test_commit_part_file_never_replaces_existing_dest() {
     let temp_dir = std::env::temp_dir().join("easy_share_test_commit_replace");
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).expect("failed to create temp dir");
@@ -154,28 +154,18 @@ fn test_commit_part_file_existing_dest_replaced() {
     let part_path = temp_dir.join("test.bin.part");
     let dest_path = temp_dir.join("test.bin");
 
-    // Pre-create destination file with stale content and set read-only attribute
-    fs::write(&dest_path, b"stale data").expect("failed to write stale dest");
-    let mut perms = fs::metadata(&dest_path).expect("get perms").permissions();
-    perms.set_readonly(true);
-    fs::set_permissions(&dest_path, perms).expect("set readonly");
-
-    // Create part file with fresh content
-    fs::write(&part_path, b"fresh replacement data").expect("failed to write part file");
+    // A file the user already has at the destination must survive
+    fs::write(&dest_path, b"existing user data").expect("failed to write existing dest");
+    fs::write(&part_path, b"incoming data").expect("failed to write part file");
 
     let result = FileManager::commit_part_file(&part_path, &dest_path);
-    assert!(
-        result.is_ok(),
-        "commit_part_file should replace existing dest without failing: {:?}",
-        result.err()
-    );
+    match result {
+        Err(StorageError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::AlreadyExists),
+        other => panic!("expected AlreadyExists, got {:?}", other),
+    }
 
-    assert!(!part_path.exists(), "part file should not exist after commit");
-    assert!(dest_path.exists(), "dest file should exist after commit");
-    assert_eq!(
-        fs::read(&dest_path).expect("failed to read dest"),
-        b"fresh replacement data"
-    );
+    assert_eq!(fs::read(&dest_path).expect("failed to read dest"), b"existing user data");
+    assert!(part_path.exists(), "part file must be kept when the commit is refused");
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

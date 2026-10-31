@@ -552,7 +552,7 @@ async fn test_e2e_multi_node_peer_discovery() {
     assert_eq!(info_a2.device_name, "Alpha-2");
     assert_eq!(info_b.device_name, "Beta-1");
 
-    let all_peers = vec![info_a1, info_a2, info_b];
+    let all_peers = [info_a1, info_a2, info_b];
     assert_eq!(all_peers.len(), 3);
 
     node_alpha1.cleanup();

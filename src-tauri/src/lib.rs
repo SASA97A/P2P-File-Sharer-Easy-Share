@@ -252,7 +252,7 @@ pub async fn setup_services(
                                     total_bytes: session.request.total_bytes,
                                     error_message: None,
                                 };
-                                if let Ok(_) = storage::history::add_record(&c_dir, record) {
+                                if storage::history::add_record(&c_dir, record).is_ok() {
                                     let history = storage::history::load_history(&c_dir);
                                     let _ = app_server.emit("history-updated", &history);
                                 }
@@ -291,7 +291,7 @@ pub async fn setup_services(
                                 total_bytes: session.request.total_bytes,
                                 error_message: Some("Transfer cancelled".to_string()),
                             };
-                            if let Ok(_) = storage::history::add_record(&c_dir, record) {
+                            if storage::history::add_record(&c_dir, record).is_ok() {
                                 let history = storage::history::load_history(&c_dir);
                                 let _ = app_server.emit("history-updated", &history);
                             }

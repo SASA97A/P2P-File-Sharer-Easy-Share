@@ -467,19 +467,25 @@ export function setupTransfer() {
   // -------------------------------------------------------------
   // Incoming (Receiver) Session Cancelled Event
   // -------------------------------------------------------------
-  onReceiveCancelled((_payload) => {
+  onReceiveCancelled((payload) => {
     hideReceiveProgress();
     receiveCompleted = 0;
+    // A cancel from this device already showed its own toast.
+    if (payload?.by_sender === false) return;
     showToast("Incoming transfer was cancelled by the sender.", "info");
   });
 
   // -------------------------------------------------------------
   // Outbound Transfer Cancelled Event
   // -------------------------------------------------------------
-  onTransferCancelled((_payload) => {
+  onTransferCancelled((payload) => {
     if (!isSending) return;
     exitSendingUi();
-    showToast("Transfer was cancelled.", "info");
+    const byReceiver = payload?.reason === "Transfer cancelled by receiver";
+    showToast(
+      byReceiver ? "The receiver cancelled the transfer." : "Transfer was cancelled.",
+      "info"
+    );
   });
 
   // -------------------------------------------------------------

@@ -144,6 +144,18 @@ impl fmt::Display for ClientError {
     }
 }
 
+impl ClientError {
+    /// True when the receiver refused a chunk or finish because its user cancelled the session.
+    pub fn is_cancelled_by_peer(&self) -> bool {
+        matches!(
+            self,
+            ClientError::StatusError { status, message }
+                if *status == reqwest::StatusCode::BAD_REQUEST
+                    && message == "Transfer session has been cancelled"
+        )
+    }
+}
+
 impl std::error::Error for ClientError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -893,6 +905,7 @@ impl TransferClient {
     }
 
     /// Sends chunks of a file with optional byte limit and cooperative cancellation/pause check.
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_file_chunks_with_control<F>(
         &self,
         base_url: &str,
@@ -971,6 +984,10 @@ impl TransferClient {
 
             let remaining_file = file.size - current_offset;
             let mut chunk_len = (self.chunk_size as u64).min(remaining_file);
+            if session_key.is_some() {
+                // Receivers buffer encrypted chunks whole and reject anything larger.
+                chunk_len = chunk_len.min(crate::server::routes::MAX_ENCRYPTED_CHUNK_SIZE);
+            }
 
             if let Some(limit) = max_bytes_to_send {
                 let remaining_limit = limit - total_sent_in_call;
@@ -1036,6 +1053,7 @@ impl TransferClient {
     }
 
     /// Sends chunks of a file with optional byte limit and cooperative cancellation check.
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_file_chunks_with_cancellation<F>(
         &self,
         base_url: &str,

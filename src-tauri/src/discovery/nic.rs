@@ -146,7 +146,7 @@ pub fn get_best_physical_ip_from_list(ifaces: &[(String, IpAddr)]) -> Option<IpA
         .map(|(name, ip)| (ip, score_interface(name, ip)))
         .collect();
 
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    scored.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     scored.first().map(|(ip, _)| **ip)
 }
 
@@ -172,7 +172,7 @@ pub fn list_candidate_ips() -> Vec<IpAddr> {
             })
             .collect();
 
-        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.sort_by_key(|entry| std::cmp::Reverse(entry.1));
         scored.into_iter().map(|(ip, _)| ip).collect()
     } else {
         local_ip_address::local_ip().ok().into_iter().collect()
@@ -195,7 +195,7 @@ pub fn get_candidate_subnets_from_list(ifaces: &[(String, IpAddr)]) -> Vec<std::
         })
         .collect();
 
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    scored.sort_by_key(|entry| std::cmp::Reverse(entry.1));
 
     let mut result = Vec::new();
     for (subnet, _) in scored {

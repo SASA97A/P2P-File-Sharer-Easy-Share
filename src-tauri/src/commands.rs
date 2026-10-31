@@ -674,7 +674,7 @@ pub async fn start_transfer(
                         total_bytes: total_batch_bytes,
                         error_message: err_msg,
                     };
-                    if let Ok(_) = crate::storage::history::add_record(&config_dir, record) {
+                    if crate::storage::history::add_record(&config_dir, record).is_ok() {
                         let hist = crate::storage::history::load_history(&config_dir);
                         let _ = app_handle.emit("history-updated", &hist);
                     }
@@ -795,6 +795,24 @@ pub async fn start_transfer(
                             record_sender_history(
                                 crate::storage::history::HistoryStatus::Cancelled,
                                 Some("Transfer cancelled by user".to_string()),
+                            );
+                            crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
+                            tokens_registry.write().await.remove(&token_clone);
+                            controls_registry.write().await.remove(&token_clone);
+                            return;
+                        }
+
+                        if err.is_cancelled_by_peer() {
+                            let _ = app_handle.emit(
+                                "transfer-cancelled",
+                                &TransferCancelledPayload {
+                                    session_token: token_clone.clone(),
+                                    reason: "Transfer cancelled by receiver".to_string(),
+                                },
+                            );
+                            record_sender_history(
+                                crate::storage::history::HistoryStatus::Cancelled,
+                                Some("Transfer cancelled by receiver".to_string()),
                             );
                             crate::tray::update_tray_tooltip(&app_handle, "Easy Share - Ready");
                             tokens_registry.write().await.remove(&token_clone);
@@ -946,11 +964,9 @@ pub async fn cancel_transfer(
             .await;
     }
 
-    // 3. Cancel in local server state if this device was the receiver
-    let mut sessions = state.server_state.sessions.write().await;
-    if let Some(session) = sessions.get_mut(&session_token) {
-        session.status = TransferStatus::Cancelled;
-    }
+    // 3. If this device was the receiver, cancel the session: refuse further chunks, delete
+    //    the partial files and record it in history
+    state.server_state.cancel_session(&session_token, false).await;
 
     crate::tray::update_tray_tooltip(&app, "Easy Share - Ready");
 

@@ -38,6 +38,8 @@ pub struct ReceiveCompletedPayload {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReceiveCancelledPayload {
     pub session_token: String,
+    /// True when the sender cancelled, false when the user cancelled on this device.
+    pub by_sender: bool,
 }
 
 /// High-level receiver-side transfer events emitted by the Axum server.
@@ -61,14 +63,12 @@ pub enum ConsentPolicy {
     AutoAccept,
     AutoDecline(String),
     Channel(mpsc::Sender<ConsentRequest>),
-    Custom(
-        Arc<
-            dyn Fn(&TransferRequest) -> Pin<Box<dyn Future<Output = bool> + Send>>
-                + Send
-                + Sync,
-        >,
-    ),
+    Custom(ConsentCallback),
 }
+
+/// Async callback deciding whether to accept a transfer request.
+pub type ConsentCallback =
+    Arc<dyn Fn(&TransferRequest) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
 /// Internal state for an active or past transfer session.
 #[derive(Debug, Clone)]
@@ -482,6 +482,48 @@ impl ServerState {
         }
     }
 
+    /// Checks the encryption and pairing fields of a transfer request without creating anything.
+    ///
+    /// Returns `None` when the transfer will be unencrypted, otherwise the sender's ephemeral key
+    /// and the pairing key it proved (if it claimed a pairing). Called before the consent prompt
+    /// so requests that can never succeed are declined without asking the user.
+    pub fn check_encrypted_request(
+        &self,
+        request: &TransferRequest,
+    ) -> Result<Option<(crate::crypto::PublicKey, Option<crate::pairing::pake::PairingKey>)>, String>
+    {
+        let Some(sender_pub_hex) = request.ephemeral_public_key.as_deref() else {
+            return Ok(None);
+        };
+        if !self.is_encryption_enabled()
+            || request.encryption_mode.as_deref() != Some("ChaCha20Poly1305")
+        {
+            return Ok(None);
+        }
+        let sender_pub = crate::crypto::public_key_from_hex(sender_pub_hex)
+            .map_err(|e| format!("Invalid sender ephemeral public key: {}", e))?;
+
+        let pairing_key = match request.pair_id.as_deref() {
+            Some(pair_id) => {
+                let key = self
+                    .pairing_key(pair_id)
+                    .ok_or_else(|| "Unknown pairing; pair with this device again".to_string())?;
+                let auth = request.pair_auth.as_deref().unwrap_or("");
+                if !crate::pairing::pake::verify_request_auth(
+                    &key,
+                    &request.request_id,
+                    sender_pub_hex,
+                    auth,
+                ) {
+                    return Err("Pairing verification failed".to_string());
+                }
+                Some(key)
+            }
+            None => None,
+        };
+        Ok(Some((sender_pub, pairing_key)))
+    }
+
     /// Creates a new session entry in state, negotiating encryption and discovering partial offsets.
     pub async fn create_session(&self, request: TransferRequest) -> Result<SessionCreated, String> {
         let token = format!("sess-{}", uuid::Uuid::new_v4());
@@ -503,36 +545,8 @@ impl ServerState {
         let mut pin_verified = None;
         let mut pair_auth = None;
 
-        if self.is_encryption_enabled()
-            && request.encryption_mode.as_deref() == Some("ChaCha20Poly1305")
-            && request.ephemeral_public_key.is_some()
-        {
-            let sender_pub_hex = request.ephemeral_public_key.as_ref().unwrap();
-            let sender_pub = crate::crypto::public_key_from_hex(sender_pub_hex)
-                .map_err(|e| format!("Invalid sender ephemeral public key: {}", e))?;
-
-            let pairing_key = match request.pair_id.as_deref() {
-                Some(pair_id) => {
-                    let key = self.pairing_key(pair_id).ok_or_else(|| {
-                        "Unknown pairing; pair with this device again".to_string()
-                    })?;
-                    let auth = request.pair_auth.as_deref().unwrap_or("");
-                    if !crate::pairing::pake::verify_request_auth(
-                        &key,
-                        &request.request_id,
-                        sender_pub_hex,
-                        auth,
-                    ) {
-                        return Err("Pairing verification failed".to_string());
-                    }
-                    pin_verified = Some(true);
-                    Some(key)
-                }
-                None => {
-                    pin_verified = Some(false);
-                    None
-                }
-            };
+        if let Some((sender_pub, pairing_key)) = self.check_encrypted_request(&request)? {
+            pin_verified = Some(pairing_key.is_some());
 
             let (receiver_secret, receiver_pub) = crate::crypto::generate_ephemeral_keypair();
             let receiver_pub_hex = crate::crypto::public_key_to_hex(&receiver_pub);
@@ -578,6 +592,40 @@ impl ServerState {
     /// Retrieves session data by session token.
     pub async fn get_session(&self, token: &str) -> Option<SessionState> {
         self.sessions.read().await.get(token).cloned()
+    }
+
+    /// Cancels a receiving session: marks it cancelled so further chunks and finishes are
+    /// refused, deletes its partial files and emits `Cancelled`. Used both when the sender
+    /// cancels and when the user cancels on this device. Returns false for an unknown token.
+    pub async fn cancel_session(&self, token: &str, by_sender: bool) -> bool {
+        let part_paths: Vec<std::path::PathBuf> = {
+            let mut sessions = self.sessions.write().await;
+            let Some(session) = sessions.get_mut(token) else {
+                return false;
+            };
+            if session.status == TransferStatus::Cancelled {
+                return true;
+            }
+            session.status = TransferStatus::Cancelled;
+            session
+                .request
+                .files
+                .iter()
+                .map(|f| FileManager::get_part_path(&self.download_dir(), &f.name, &f.file_key()))
+                .collect()
+        };
+
+        for part_path in part_paths {
+            if part_path.exists() {
+                let _ = tokio::fs::remove_file(part_path).await;
+            }
+        }
+
+        self.emit_event(ServerTransferEvent::Cancelled(ReceiveCancelledPayload {
+            session_token: token.to_string(),
+            by_sender,
+        }));
+        true
     }
 
     /// Prunes transfer sessions that have been idle (no chunk or finish request) for longer

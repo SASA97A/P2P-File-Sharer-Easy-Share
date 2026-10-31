@@ -58,8 +58,7 @@ impl FileManager {
         let normalized = name.replace('\\', "/");
         let raw_filename = normalized
             .split('/')
-            .filter(|segment| !segment.is_empty() && *segment != "." && *segment != "..")
-            .next_back()
+            .rfind(|segment| !segment.is_empty() && *segment != "." && *segment != "..")
             .unwrap_or("unnamed_file");
 
         // Step 2: Replace invalid filesystem characters, control characters, and Unicode bidi/hidden formatting chars
@@ -221,8 +220,9 @@ impl FileManager {
         }
     }
 
-    /// Atomically moves/renames the temporary `.part` file to the final destination path,
-    /// with robust atomic replacement and cross-device fallback guards.
+    /// Moves the temporary `.part` file to the final destination path. Fails with
+    /// `AlreadyExists` instead of replacing a file that is already there, and falls back to a
+    /// copy where hard links aren't supported.
     pub fn commit_part_file(part_path: &Path, dest_path: &Path) -> Result<(), StorageError> {
         if !part_path.exists() {
             return Err(StorageError::FileNotFound(part_path.to_path_buf()));
@@ -233,27 +233,32 @@ impl FileManager {
             }
         }
 
-        // Try direct rename first (atomic on Unix and clean Windows moves)
-        if let Err(_err) = fs::rename(part_path, dest_path) {
-            // Guard: If dest_path exists, clear read-only flags and remove prior to retry
-            if dest_path.exists() {
-                if let Ok(metadata) = fs::metadata(dest_path) {
-                    let mut perms = metadata.permissions();
-                    if perms.readonly() {
-                        perms.set_readonly(false);
-                        let _ = fs::set_permissions(dest_path, perms);
-                    }
-                }
-                let _ = fs::remove_file(dest_path);
-            }
-
-            // Retry rename after clearing collision
-            if let Err(_second_err) = fs::rename(part_path, dest_path) {
-                // Cross-device/cross-filesystem fallback (copy then remove source)
-                fs::copy(part_path, dest_path)?;
+        // Never replace an existing file: `fs::rename` overwrites on every platform, so the part
+        // is hard-linked into place, which fails atomically if the destination already exists.
+        match fs::hard_link(part_path, dest_path) {
+            Ok(()) => {
                 let _ = fs::remove_file(part_path);
+                return Ok(());
             }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => return Err(err.into()),
+            // Hard links unsupported (e.g. FAT/exFAT or a network share): copy instead
+            Err(_) => {}
         }
+
+        let mut dest = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dest_path)?;
+        let copied = fs::File::open(part_path)
+            .and_then(|mut src| io::copy(&mut src, &mut dest))
+            .and_then(|_| dest.sync_all());
+        drop(dest);
+        if let Err(err) = copied {
+            // Don't leave a half-written file behind
+            let _ = fs::remove_file(dest_path);
+            return Err(err.into());
+        }
+        let _ = fs::remove_file(part_path);
         Ok(())
     }
 
