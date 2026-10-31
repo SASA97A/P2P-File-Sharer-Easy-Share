@@ -1,4 +1,4 @@
-# Easy Share (v2.0)
+# Easy Share (v0.1)
 
 A fast, lightweight and secure **local P2P file sharing desktop app** built with **Tauri 2** and **Rust**. Send files and folders between devices on the same network at full line speed, with no internet connection or cloud service involved.
 

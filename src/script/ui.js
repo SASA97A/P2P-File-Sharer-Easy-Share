@@ -297,12 +297,16 @@ export function updateMyDeviceBadge(deviceInfo) {
 
   const iconEl = document.getElementById("myDeviceIcon");
   const nameEl = document.getElementById("myDeviceName");
+  const versionEl = document.getElementById("settingsAppVersion");
 
   if (iconEl) {
     iconEl.innerHTML = getDeviceIconSvg(deviceInfo.os, deviceInfo.device_type, { size: 16 });
   }
   if (nameEl) {
     nameEl.textContent = deviceInfo.device_name || "Local Device";
+  }
+  if (versionEl && deviceInfo.version) {
+    versionEl.textContent = deviceInfo.version;
   }
 }
 

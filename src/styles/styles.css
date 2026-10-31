@@ -1621,6 +1621,15 @@ input:focus-visible,
   padding: 0 8px;
 }
 
+/* App version, a quiet line under the last settings section */
+.settings-version {
+  max-width: 720px;
+  margin: 12px 0 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
 .status-dot {
   width: 6px;
   height: 6px;
