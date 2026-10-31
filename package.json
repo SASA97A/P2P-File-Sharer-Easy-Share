@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SASA97A/File-Sharer.git"
+    "url": "git+https://github.com/SASA97A/P2P-File-Sharer-Easy-Share.git"
   },
   "keywords": [
     "p2p",
@@ -18,7 +18,7 @@
     "rust"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
