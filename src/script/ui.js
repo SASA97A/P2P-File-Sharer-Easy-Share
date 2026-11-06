@@ -695,6 +695,76 @@ export function showConsentModal(request) {
   });
 }
 
+// Confirmation dialog for destructive actions
+let cancelActiveConfirm = null;
+
+/**
+ * Asks the user to confirm a destructive action. Focus starts on Cancel, and
+ * Escape or a backdrop click cancels.
+ * @param {Object} options
+ * @param {string} options.title
+ * @param {string} options.desc
+ * @param {string} options.confirmLabel Names the action, such as "Clear history"
+ * @param {string} [options.icon="trash"] Icon name from icons.js
+ * @returns {Promise<boolean>} true only when the user confirmed
+ */
+export function showConfirm({ title, desc, confirmLabel, icon = "trash" }) {
+  const modal = document.getElementById("confirm-modal");
+  const cancelBtn = document.getElementById("confirmCancelBtn");
+  const okBtn = document.getElementById("confirmOkBtn");
+  if (!modal || !cancelBtn || !okBtn) return Promise.resolve(false);
+
+  if (cancelActiveConfirm) cancelActiveConfirm();
+
+  document.getElementById("confirmTitle").textContent = title;
+  document.getElementById("confirmDesc").textContent = desc;
+  document.getElementById("confirmIcon").innerHTML = getIconSvg(icon, { size: 20 });
+  okBtn.textContent = confirmLabel;
+
+  const previousFocus = document.activeElement;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  cancelBtn.focus();
+
+  return new Promise((resolve) => {
+    const finish = (answer) => {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      cancelBtn.removeEventListener("click", onCancel);
+      okBtn.removeEventListener("click", onOk);
+      modal.removeEventListener("click", onBackdrop);
+      window.removeEventListener("keydown", onKey);
+      cancelActiveConfirm = null;
+      if (previousFocus && previousFocus.focus) previousFocus.focus();
+      resolve(answer);
+    };
+
+    const onCancel = () => finish(false);
+    const onOk = () => finish(true);
+    const onBackdrop = (e) => {
+      if (e.target === modal) finish(false);
+    };
+    const onKey = (e) => {
+      // An incoming transfer request can open on top and owns the keyboard
+      const consent = document.getElementById("consent-modal");
+      if (consent && !consent.classList.contains("hidden")) return;
+
+      if (e.key === "Escape") {
+        finish(false);
+      } else if (e.key === "Tab") {
+        e.preventDefault();
+        (document.activeElement === cancelBtn ? okBtn : cancelBtn).focus();
+      }
+    };
+
+    cancelActiveConfirm = onCancel;
+    cancelBtn.addEventListener("click", onCancel);
+    okBtn.addEventListener("click", onOk);
+    modal.addEventListener("click", onBackdrop);
+    window.addEventListener("keydown", onKey);
+  });
+}
+
 /**
  * Closes the consent prompt for a request the sender is no longer waiting on.
  * @param {string} requestId

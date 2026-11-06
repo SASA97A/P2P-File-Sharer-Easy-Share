@@ -73,8 +73,6 @@ globalThis.document = {
   addEventListener: () => {},
 };
 
-globalThis.confirm = () => true;
-
 import {
   setupHistory,
   openHistoryView,

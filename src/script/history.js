@@ -12,6 +12,7 @@ import {
 } from "./tauri-bridge.js";
 import { showView } from "./nav.js";
 import { getIconSvg } from "./icons.js";
+import { showConfirm } from "./ui.js";
 
 let cachedRecords = [];
 let currentFilter = "all"; // 'all' | 'sent' | 'received'
@@ -226,7 +227,13 @@ export function closeHistoryView() {
 
 async function handleClearHistory() {
   if (!cachedRecords.length) return;
-  if (confirm("Clear all transfer history? Received files stay on disk.")) {
+  const confirmed = await showConfirm({
+    title: "Clear transfer history?",
+    desc: "All records are removed from this device. Received files stay on disk.",
+    confirmLabel: "Clear history",
+    icon: "trash",
+  });
+  if (confirmed) {
     try {
       await clearTransferHistory();
       cachedRecords = [];

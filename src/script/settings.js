@@ -21,7 +21,7 @@ import {
   setRememberPairedDevices,
   forgetPairedDevices,
 } from "./tauri-bridge.js";
-import { showToast } from "./ui.js";
+import { showConfirm, showToast } from "./ui.js";
 
 import { showView, getCurrentView } from "./nav.js";
 
@@ -348,9 +348,13 @@ export function setupSettings() {
   const forgetPairedBtn = document.getElementById("settingsForgetPairedBtn");
   if (forgetPairedBtn) {
     forgetPairedBtn.addEventListener("click", async () => {
-      if (!confirm("Forget all paired devices? You'll need to enter a PIN to pair with them again.")) {
-        return;
-      }
+      const confirmed = await showConfirm({
+        title: "Forget all paired devices?",
+        desc: "You'll need to enter a PIN to pair with them again.",
+        confirmLabel: "Forget all",
+        icon: "linkOff",
+      });
+      if (!confirmed) return;
       try {
         renderPairedDevicesStatus(await forgetPairedDevices());
         showToast("All paired devices forgotten", "info");

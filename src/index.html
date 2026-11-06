@@ -369,6 +369,23 @@
       </aside>
     </div>
 
+    <!-- Confirmation for destructive actions. Sits before the consent dialog so an incoming request stacks on top -->
+    <div id="confirm-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="dialog confirm-dialog" id="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmDesc" tabindex="-1">
+        <div class="confirm-head">
+          <span class="confirm-icon" id="confirmIcon"></span>
+          <div class="confirm-titles">
+            <h2 class="dialog-title" id="confirmTitle"></h2>
+            <p class="dialog-desc" id="confirmDesc"></p>
+          </div>
+        </div>
+        <div class="dialog-actions two-col">
+          <button id="confirmCancelBtn" class="btn btn-ghost btn-lg" type="button">Cancel</button>
+          <button id="confirmOkBtn" class="btn btn-danger-solid btn-lg" type="button"></button>
+        </div>
+      </div>
+    </div>
+
     <!-- Incoming transfer consent dialog -->
     <div id="consent-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="dialog consent-dialog" role="dialog" aria-modal="true" aria-labelledby="consentModalTitle">
