@@ -1,6 +1,6 @@
 [package]
 name = "easy-share"
-version = "0.1.0"
+version = "0.1.1"
 description = "High-performance P2P file sharing desktop application"
 authors = ["Easy Share Contributors"]
 edition = "2021"
