@@ -1,6 +1,6 @@
 {
   "name": "easy-share",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "description": "High-performance P2P file sharing desktop application",
   "scripts": {
     "tauri": "tauri",
