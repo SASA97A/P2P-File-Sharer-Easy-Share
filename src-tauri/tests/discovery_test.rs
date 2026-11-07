@@ -158,6 +158,72 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
     );
 }
 
+fn vpn_and_wifi() -> Vec<(String, IpAddr)> {
+    vec![
+        ("Ethernet 2".to_string(), IpAddr::V4(Ipv4Addr::new(10, 140, 75, 88))),
+        ("Wi-Fi".to_string(), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 215))),
+    ]
+}
+
+#[test]
+fn test_selected_adapter_overrides_the_best_guess() {
+    use easy_share_lib::discovery::nic::select_ip_from_list;
+    let ifaces = vpn_and_wifi();
+    let wifi = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 215));
+    let vpn = IpAddr::V4(Ipv4Addr::new(10, 140, 75, 88));
+
+    assert_eq!(select_ip_from_list(&ifaces, None), Some(vpn));
+    assert_eq!(select_ip_from_list(&ifaces, Some("Wi-Fi")), Some(wifi));
+}
+
+#[test]
+fn test_missing_selected_adapter_falls_back_to_the_best_guess() {
+    use easy_share_lib::discovery::nic::select_ip_from_list;
+    let ifaces = vpn_and_wifi();
+    let vpn = IpAddr::V4(Ipv4Addr::new(10, 140, 75, 88));
+
+    assert_eq!(select_ip_from_list(&ifaces, Some("Wi-Fi 9")), Some(vpn));
+}
+
+#[test]
+fn test_adapter_with_a_virtual_looking_name_can_be_selected() {
+    use easy_share_lib::discovery::nic::select_ip_from_list;
+    let tap = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 40));
+    let ifaces = vec![
+        ("Tap Office LAN".to_string(), tap),
+        ("Wi-Fi".to_string(), IpAddr::V4(Ipv4Addr::new(192, 168, 50, 2))),
+    ];
+
+    assert_eq!(select_ip_from_list(&ifaces, Some("Tap Office LAN")), Some(tap));
+}
+
+#[test]
+fn test_network_options_list_usable_ipv4_once_per_adapter_best_first() {
+    use easy_share_lib::discovery::nic::network_options_from_list;
+    let ifaces = vec![
+        ("vEthernet (WSL)".to_string(), IpAddr::V4(Ipv4Addr::new(172, 20, 0, 1))),
+        ("Loopback".to_string(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+        ("Wi-Fi".to_string(), "fe80::1".parse().unwrap()),
+        ("Wi-Fi".to_string(), "2001:db8::1".parse().unwrap()),
+        ("Wi-Fi".to_string(), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 215))),
+        ("Wi-Fi".to_string(), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 216))),
+        ("Ethernet 2".to_string(), IpAddr::V4(Ipv4Addr::new(10, 140, 75, 88))),
+    ];
+
+    let summary: Vec<(String, String)> = network_options_from_list(&ifaces)
+        .into_iter()
+        .map(|option| (option.adapter, option.ip))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("Ethernet 2".to_string(), "10.140.75.88".to_string()),
+            ("Wi-Fi".to_string(), "192.168.1.215".to_string()),
+            ("vEthernet (WSL)".to_string(), "172.20.0.1".to_string()),
+        ]
+    );
+}
+
 fn heartbeat_advertising(ip: &str) -> HeartbeatMessage {
     HeartbeatMessage {
         magic: "EASYSHARE_DISCOVERY".to_string(),

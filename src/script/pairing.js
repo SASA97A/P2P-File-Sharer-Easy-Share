@@ -12,6 +12,7 @@ import {
 } from "./tauri-bridge.js";
 import { upsertPeer, setSelectedPeer } from "./peers.js";
 import { showToast } from "./ui.js";
+import { refreshNetworkOptions } from "./network.js";
 
 // Active pairing information payload cache
 let activePairingInfo = null;
@@ -23,7 +24,7 @@ const PAIRING_REFRESH_MS = 5000;
  * Updates the modal UI with current device pairing info
  * @param {Object} info
  */
-function renderPairingInfo(info) {
+export function renderPairingInfo(info) {
   if (!info) return;
   activePairingInfo = info;
 
@@ -235,6 +236,8 @@ export function setupPairing() {
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
 
+    refreshNetworkOptions();
+
     try {
       const info = await getMyPairingInfo();
       renderPairingInfo(info);
@@ -247,7 +250,7 @@ export function setupPairing() {
     pairingRefreshTimer = setInterval(async () => {
       try {
         const info = await getMyPairingInfo();
-        if (!activePairingInfo || info.pin !== activePairingInfo.pin) {
+        if (!activePairingInfo || info.pin !== activePairingInfo.pin || info.ip !== activePairingInfo.ip) {
           renderPairingInfo(info);
         }
       } catch (_err) {

@@ -22,6 +22,7 @@ import {
   forgetPairedDevices,
 } from "./tauri-bridge.js";
 import { showConfirm, showToast } from "./ui.js";
+import { refreshNetworkOptions } from "./network.js";
 
 import { showView, getCurrentView } from "./nav.js";
 
@@ -70,6 +71,7 @@ export async function openSettingsView() {
     }
 
     renderPairedDevicesStatus(await getPairedDevicesStatus());
+    await refreshNetworkOptions();
   } catch (err) {
     console.error("Failed to load settings data:", err);
   }

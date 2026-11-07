@@ -1239,6 +1239,45 @@ pub async fn set_tray_settings(
     })
 }
 
+/// The networks this device can use, and the one it is using now.
+#[derive(Debug, Clone, Serialize)]
+pub struct NetworkOptionsPayload {
+    pub options: Vec<crate::discovery::nic::NetworkOption>,
+    pub selected: Option<String>,
+}
+
+fn network_options_payload() -> NetworkOptionsPayload {
+    let options = crate::discovery::nic::list_network_options();
+    let current = crate::discovery::nic::get_best_physical_ip().map(|ip| ip.to_string());
+    let selected = options
+        .iter()
+        .find(|option| Some(&option.ip) == current.as_ref())
+        .map(|option| option.adapter.clone());
+    NetworkOptionsPayload { options, selected }
+}
+
+/// Returns the networks this device can use.
+#[tauri::command]
+pub async fn get_network_options() -> Result<NetworkOptionsPayload, String> {
+    Ok(network_options_payload())
+}
+
+/// Selects the network whose address other devices should use to reach this one.
+#[tauri::command]
+pub async fn set_network_adapter(
+    state: State<'_, AppState>,
+    adapter: String,
+) -> Result<NetworkOptionsPayload, String> {
+    let known = crate::discovery::nic::list_network_options()
+        .iter()
+        .any(|option| option.adapter == adapter);
+    if !known {
+        return Err(format!("Network '{}' is no longer available", adapter));
+    }
+    state.set_preferred_adapter(adapter).await?;
+    Ok(network_options_payload())
+}
+
 /// Returns whether end-to-end encryption is enabled.
 #[tauri::command]
 pub async fn get_encryption_settings(state: State<'_, AppState>) -> Result<bool, String> {

@@ -396,4 +396,16 @@ impl AppState {
         self.server_state.set_encryption_enabled(enabled);
         Ok(enabled)
     }
+
+    /// Saves the selected network adapter and starts using its address.
+    pub async fn set_preferred_adapter(&self, adapter: String) -> Result<(), String> {
+        let mut settings = crate::storage::settings::load_settings(&self.config_dir);
+        settings.preferred_adapter = Some(adapter.clone());
+        crate::storage::settings::save_settings(&self.config_dir, &settings)?;
+        crate::discovery::nic::set_preferred_adapter(Some(adapter));
+        if let Some(handle) = self.discovery_handle.read().await.as_ref() {
+            handle.refresh_advertised_address().await;
+        }
+        Ok(())
+    }
 }

@@ -285,7 +285,7 @@ pub async fn sweep_subnet_for_pin(
     }
 }
 
-/// Sweeps all candidate physical subnets (Ethernet subnets first, then Wi-Fi).
+/// Sweeps the network this device is using, plus loopback for a second local instance.
 /// Short-circuits immediately upon discovering a matching peer.
 pub async fn sweep_all_subnets_for_pin(
     client: &TransferClient,
@@ -294,7 +294,7 @@ pub async fn sweep_all_subnets_for_pin(
     concurrency_limit: usize,
     timeout_ms: u64,
 ) -> Result<PeerInfo, String> {
-    let mut candidate_subnets = crate::discovery::nic::get_candidate_subnets();
+    let mut candidate_subnets = crate::discovery::nic::get_scan_subnets();
     let loopback_subnet = std::net::Ipv4Addr::new(127, 0, 0, 0);
     if !candidate_subnets.contains(&loopback_subnet) {
         candidate_subnets.push(loopback_subnet);
@@ -319,8 +319,13 @@ pub async fn sweep_all_subnets_for_pin(
         }
     }
 
+    let network_hint = if crate::discovery::nic::list_network_options().len() > 1 {
+        " If it is on another network, change this device's network in Settings."
+    } else {
+        ""
+    };
     Err(format!(
-        "No nearby device is showing PIN {}. Open Pair device on the other device and try again.",
-        normalized
+        "No nearby device is showing PIN {}. Open Pair device on the other device and try again.{}",
+        normalized, network_hint
     ))
 }

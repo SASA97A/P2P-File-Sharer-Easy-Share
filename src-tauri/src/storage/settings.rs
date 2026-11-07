@@ -24,6 +24,9 @@ pub struct AppSettings {
     pub device_id: Option<String>,
     #[serde(default)]
     pub remember_paired_devices: Option<bool>,
+    /// Name of the network adapter whose address this device uses
+    #[serde(default)]
+    pub preferred_adapter: Option<String>,
 }
 
 impl AppSettings {

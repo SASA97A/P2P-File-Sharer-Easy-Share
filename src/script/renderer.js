@@ -10,7 +10,8 @@ import {
   removePeer,
 } from "./peers.js";
 import { setupTransfer } from "./transfer.js";
-import { setupPairing } from "./pairing.js";
+import { setupPairing, renderPairingInfo } from "./pairing.js";
+import { setupNetworkSelector } from "./network.js";
 import { setupPairingVisibility } from "./pairing-visibility.js";
 import { setupSettings } from "./settings.js";
 import { setupHistory } from "./history.js";
@@ -53,6 +54,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (err) {
     console.error("Failed to fetch local address:", err);
   }
+
+  setupNetworkSelector((pairing) => {
+    updateMyAddress(pairing.ip, pairing.port);
+    renderPairingInfo(pairing);
+  });
 
   try {
     const peers = await getDiscoveredPeers();

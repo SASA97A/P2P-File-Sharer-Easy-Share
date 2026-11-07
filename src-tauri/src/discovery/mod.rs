@@ -83,6 +83,16 @@ impl DiscoveryHandle {
         Ok(peer)
     }
 
+    /// Re-registers mDNS so it advertises the currently selected address.
+    pub async fn refresh_advertised_address(&self) {
+        if let Some(mdns) = self.mdns_handle.write().await.as_mut() {
+            mdns.stop();
+            if let Err(e) = mdns.start() {
+                eprintln!("mDNS discovery failed to restart: {}", e);
+            }
+        }
+    }
+
     pub async fn stop(&self) {
         let mut tasks = self.tasks.write().await;
         for task in tasks.drain(..) {

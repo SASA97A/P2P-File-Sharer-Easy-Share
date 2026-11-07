@@ -1632,6 +1632,17 @@ input:focus-visible,
   padding: 0 8px;
 }
 
+.net-select {
+  width: auto;
+  max-width: 280px;
+}
+
+.net-fact dd.net-hint {
+  min-height: 0;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
 /* App version, a quiet line under the last settings section */
 .settings-version {
   max-width: 720px;

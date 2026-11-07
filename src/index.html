@@ -319,6 +319,11 @@
           <section class="settings-section" aria-labelledby="sNet">
             <h2 class="settings-heading" id="sNet">Network</h2>
             <dl class="net-facts">
+              <div class="net-fact hidden" id="settingsNetworkField">
+                <dt><label for="settingsNetworkSelect">Network</label></dt>
+                <dd><select class="settings-select net-select" id="settingsNetworkSelect"></select></dd>
+                <dd class="net-hint">Pick the network the other device is on.</dd>
+              </div>
               <div class="net-fact">
                 <dt>Address</dt>
                 <dd>
@@ -491,8 +496,8 @@
           <div class="qr-box" id="myPairingQrBox" role="img" aria-label="Pairing QR code"></div>
           <div class="qr-text">
             <div>
-              <div class="qr-title">Scan with a phone camera</div>
-              <div class="qr-desc">The code carries this device's address and PIN, so the phone connects in one step.</div>
+              <div class="qr-title">Copy this link to the other device</div>
+              <div class="qr-desc">Paste it under Direct IP there. It carries this device's address and PIN, so they connect in one step.</div>
             </div>
             <div class="link-box mono" id="myPairingLink">easyshare://pair</div>
             <div>
@@ -517,6 +522,11 @@
           <div class="status-box hidden" id="addressStatusBox">
             <span class="status-spinner" id="addressStatusSpinner"></span>
             <span class="status-text" id="addressStatusMessage"></span>
+          </div>
+          <div class="field-stack hidden" id="pairNetworkField">
+            <label class="field-label strong" for="pairNetworkSelect">Your network</label>
+            <select class="input" id="pairNetworkSelect"></select>
+            <span class="hint-line">Pick the network the other device is on.</span>
           </div>
           <div class="sub-card row">
             <div>

@@ -30,6 +30,7 @@ fn test_save_and_load_settings() {
         encryption_enabled: None,
         device_id: None,
         remember_paired_devices: None,
+        preferred_adapter: None,
     };
 
     let save_res = save_settings(&dir, &settings);
@@ -237,4 +238,20 @@ async fn test_settings_encryption_default_and_persistence() {
     assert!(app_state.is_encryption_enabled().await);
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_preferred_adapter_round_trips_and_defaults_to_none() {
+    use easy_share_lib::storage::settings::{load_settings, save_settings, AppSettings};
+    let dir = std::env::temp_dir().join(format!("easy_share_adapter_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(load_settings(&dir).preferred_adapter, None);
+
+    let settings = AppSettings {
+        preferred_adapter: Some("Wi-Fi".to_string()),
+        ..Default::default()
+    };
+    save_settings(&dir, &settings).unwrap();
+    assert_eq!(load_settings(&dir).preferred_adapter, Some("Wi-Fi".to_string()));
+    let _ = std::fs::remove_dir_all(&dir);
 }

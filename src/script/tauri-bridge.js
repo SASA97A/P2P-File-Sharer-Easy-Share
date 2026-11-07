@@ -89,6 +89,13 @@ const mockState = {
   minimize_to_tray: true,
   notifications_enabled: true,
   encryption_enabled: true,
+  networks: {
+    options: [
+      { adapter: "Ethernet 2", ip: "10.140.75.88" },
+      { adapter: "Wi-Fi", ip: "192.168.1.215" },
+    ],
+    selected: "Ethernet 2",
+  },
   peers: [],
   history: [
     {
@@ -288,6 +295,14 @@ async function callInvoke(command, args = {}) {
       return enabled;
     }
 
+    case "get_network_options":
+      return mockState.networks;
+
+    case "set_network_adapter": {
+      mockState.networks = { ...mockState.networks, selected: args.adapter };
+      return mockState.networks;
+    }
+
     case "inspect_paths": {
       const paths = args.paths || [];
       return paths.map((p) => {
@@ -316,7 +331,8 @@ async function callInvoke(command, args = {}) {
     case "get_my_pairing_info": {
       const pin = mockState.deviceInfo.pairing_pin || "839421";
       const formatted_pin = `${pin.slice(0, 3)} - ${pin.slice(3, 6)}`;
-      const ip = "127.0.0.1";
+      const { options, selected } = mockState.networks;
+      const ip = options.find((network) => network.adapter === selected).ip;
       const port = mockState.deviceInfo.port || 5050;
       const direct_url = `easyshare://pair?ip=${ip}&port=${port}&pin=${pin}&name=${encodeURIComponent(mockState.deviceInfo.device_name)}`;
       const qr_svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="160" height="160"><rect width="100" height="100" fill="#ffffff"/><rect x="10" y="10" width="25" height="25" fill="#222222"/><rect x="65" y="10" width="25" height="25" fill="#222222"/><rect x="10" y="65" width="25" height="25" fill="#222222"/><rect x="42" y="42" width="16" height="16" fill="#4caf50"/></svg>`;
@@ -675,6 +691,23 @@ export async function setEncryptionSettings(enabled) {
   const isEnabled = typeof enabled === "object" ? !!enabled.enabled : !!enabled;
   const res = await callInvoke("set_encryption_settings", { enabled: isEnabled });
   return typeof res === "boolean" ? res : isEnabled;
+}
+
+/**
+ * Lists the networks this device can use and the one it is using now
+ * @returns {Promise<{options: Array<{adapter: string, ip: string}>, selected: string|null}>}
+ */
+export async function getNetworkOptions() {
+  return await callInvoke("get_network_options");
+}
+
+/**
+ * Selects the network whose address other devices should use
+ * @param {string} adapter
+ * @returns {Promise<{options: Array<{adapter: string, ip: string}>, selected: string|null}>}
+ */
+export async function setNetworkAdapter(adapter) {
+  return await callInvoke("set_network_adapter", { adapter });
 }
 
 /**

@@ -1,4 +1,28 @@
+use serde::Serialize;
 use std::net::IpAddr;
+use std::sync::RwLock;
+
+/// A network this device can be reached on, offered to the user as a choice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NetworkOption {
+    pub adapter: String,
+    pub ip: String,
+}
+
+/// The adapter the user picked. Saved by name because its IP can change between connections.
+static PREFERRED_ADAPTER: RwLock<Option<String>> = RwLock::new(None);
+
+/// Sets the adapter whose address this device uses, or `None` to use the best guess.
+pub fn set_preferred_adapter(adapter: Option<String>) {
+    *PREFERRED_ADAPTER.write().unwrap_or_else(|e| e.into_inner()) = adapter;
+}
+
+fn preferred_adapter() -> Option<String> {
+    PREFERRED_ADAPTER
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
 
 /// Detects if a network adapter is virtual (e.g. Docker, WSL, VMware, VirtualBox, Tailscale, VPN).
 pub fn is_virtual_adapter(name: &str) -> bool {
@@ -150,14 +174,66 @@ pub fn get_best_physical_ip_from_list(ifaces: &[(String, IpAddr)]) -> Option<IpA
     scored.first().map(|(ip, _)| **ip)
 }
 
-/// Discovers the best physical LAN IP on the host system.
+/// Lists the networks to choose from, one per adapter, best guess first. Adapters with
+/// virtual-looking names stay in the list because names cannot reliably identify a VPN.
+pub fn network_options_from_list(ifaces: &[(String, IpAddr)]) -> Vec<NetworkOption> {
+    let mut scored: Vec<(&String, &IpAddr, i32)> = ifaces
+        .iter()
+        .filter(|(_, ip)| ip.is_ipv4() && is_usable_ip(ip))
+        .map(|(name, ip)| (name, ip, score_interface(name, ip)))
+        .collect();
+    scored.sort_by_key(|entry| std::cmp::Reverse(entry.2));
+
+    let mut options: Vec<NetworkOption> = Vec::new();
+    for (name, ip, _) in scored {
+        if !options.iter().any(|option| &option.adapter == name) {
+            options.push(NetworkOption {
+                adapter: name.clone(),
+                ip: ip.to_string(),
+            });
+        }
+    }
+    options
+}
+
+/// Picks the preferred adapter's address, or the best guess when it is unset or gone.
+pub fn select_ip_from_list(ifaces: &[(String, IpAddr)], preferred: Option<&str>) -> Option<IpAddr> {
+    let chosen = preferred.and_then(|name| {
+        network_options_from_list(ifaces)
+            .into_iter()
+            .find(|option| option.adapter == name)
+            .and_then(|option| option.ip.parse().ok())
+    });
+    chosen.or_else(|| get_best_physical_ip_from_list(ifaces))
+}
+
+/// Returns the networks this device can choose between.
+pub fn list_network_options() -> Vec<NetworkOption> {
+    local_ip_address::list_afinet_netifas()
+        .map(|netifas| network_options_from_list(&netifas))
+        .unwrap_or_default()
+}
+
+/// Returns the address this device uses: the selected network's, otherwise the best guess.
 pub fn get_best_physical_ip() -> Option<IpAddr> {
     if let Ok(netifas) = local_ip_address::list_afinet_netifas() {
-        if let Some(ip) = get_best_physical_ip_from_list(&netifas) {
+        if let Some(ip) = select_ip_from_list(&netifas, preferred_adapter().as_deref()) {
             return Some(ip);
         }
     }
     local_ip_address::local_ip().ok()
+}
+
+/// Returns the `/24` a PIN search covers: only the network this device is using, so the search
+/// does not probe other networks such as a corporate VPN.
+pub fn get_scan_subnets() -> Vec<std::net::Ipv4Addr> {
+    match get_best_physical_ip() {
+        Some(IpAddr::V4(v4)) => {
+            let octets = v4.octets();
+            vec![std::net::Ipv4Addr::new(octets[0], octets[1], octets[2], 0)]
+        }
+        _ => get_candidate_subnets(),
+    }
 }
 
 /// Returns all usable candidate physical IPs on the host system.

@@ -111,6 +111,7 @@ pub async fn setup_services(
     let active_device_info = server_state.get_device_info().await;
 
     // 6. Start Discovery Service
+    crate::discovery::nic::set_preferred_adapter(settings.preferred_adapter.clone());
     let (discovery_svc, _disc_rx) =
         DiscoveryService::new(active_device_info, DiscoveryConfig::default()).await?;
     let discovery_handle = discovery_svc.start().await?;
@@ -392,6 +393,8 @@ pub fn run() {
             commands::set_tray_settings,
             commands::get_encryption_settings,
             commands::set_encryption_settings,
+            commands::get_network_options,
+            commands::set_network_adapter,
             commands::inspect_paths,
             commands::pick_files,
             commands::pick_folder,
