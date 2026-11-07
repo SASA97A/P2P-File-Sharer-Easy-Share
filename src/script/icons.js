@@ -34,6 +34,8 @@ export const ICONS = {
   ban: `<svg ${LUCIDE_ATTRS} class="lucide lucide-ban"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>`,
   arrowUpRight: `<svg ${LUCIDE_ATTRS} class="lucide lucide-arrow-up-right"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>`,
   arrowDownLeft: `<svg ${LUCIDE_ATTRS} class="lucide lucide-arrow-down-left"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg>`,
+  windowMaximize: `<svg ${LUCIDE_ATTRS} class="lucide lucide-square"><rect width="16" height="16" x="4" y="4" rx="2"/></svg>`,
+  windowRestore: `<svg ${LUCIDE_ATTRS} class="lucide lucide-copy"><rect width="13" height="13" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
   externalLink: `<svg ${LUCIDE_ATTRS} class="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
   folder: `<svg ${LUCIDE_ATTRS} class="lucide lucide-folder"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`,
   trash: `<svg ${LUCIDE_ATTRS} class="lucide lucide-trash"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,

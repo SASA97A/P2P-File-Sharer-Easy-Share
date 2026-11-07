@@ -46,6 +46,13 @@ async function getListen() {
   return null;
 }
 
+/**
+ * Resolves the native app window, or null in a plain browser
+ */
+export async function getAppWindow() {
+  return await getWebviewWindow();
+}
+
 // Helper to resolve the active Tauri Webview / Window handle for window-scoped events
 async function getWebviewWindow() {
   if (typeof window !== "undefined") {

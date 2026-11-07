@@ -24,6 +24,7 @@
   --border-3: #2c2c31;
   --border-row: #1a1a1d;
   --border-strong: #3a3a40;
+  --titlebar-height: 37px;
   --control: #2a2a2f;
   --control-hover: #3a3a41;
   --control-border: #3f3f46;
@@ -339,8 +340,59 @@ input:focus-visible,
 /* ---------------------------------------------------------------
  * App shell
  * ------------------------------------------------------------- */
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--titlebar-height);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  user-select: none;
+}
+
+/* Lets drags on the title reach the bar's drag region */
+.titlebar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.titlebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.titlebar-btn:hover,
+.titlebar-btn:focus-visible {
+  background: var(--control-hover);
+  color: var(--text);
+  outline: none;
+}
+
+.titlebar-close:hover,
+.titlebar-close:focus-visible {
+  background: #e5484d;
+  color: #fff;
+}
+
 .app-body {
-  height: 100vh;
+  height: calc(100vh - var(--titlebar-height));
   display: flex;
   min-height: 0;
 }
@@ -1735,7 +1787,7 @@ input:focus-visible,
  * ------------------------------------------------------------- */
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  inset: var(--titlebar-height) 0 0;
   z-index: 50;
   background: rgba(5, 5, 6, 0.72);
   display: flex;
@@ -1747,7 +1799,7 @@ input:focus-visible,
 .dialog {
   width: 480px;
   max-width: 100%;
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh - var(--titlebar-height) - 48px);
   overflow-y: auto;
   border-radius: 16px;
   background: var(--surface-dialog);

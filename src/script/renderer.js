@@ -12,6 +12,7 @@ import {
 import { setupTransfer } from "./transfer.js";
 import { setupPairing, renderPairingInfo } from "./pairing.js";
 import { setupNetworkSelector } from "./network.js";
+import { setupTitlebar } from "./titlebar.js";
 import { setupPairingVisibility } from "./pairing-visibility.js";
 import { setupSettings } from "./settings.js";
 import { setupHistory } from "./history.js";
@@ -36,6 +37,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const dropArea = document.getElementById("drop-area");
   const fileInput = document.getElementById("fileInput");
 
+  setupTitlebar();
   setupNav();
 
   // -------------------------------------------------------------
