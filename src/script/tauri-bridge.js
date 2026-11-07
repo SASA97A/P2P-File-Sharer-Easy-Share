@@ -87,7 +87,7 @@ const mockState = {
     device_name: "EasyShare-Browser",
     device_type: "desktop",
     os: "browser",
-    version: "0.1.4",
+    version: "0.1.5",
     port: 5050,
     pairing_pin: "839421",
   },
