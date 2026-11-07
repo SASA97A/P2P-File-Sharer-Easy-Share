@@ -24,6 +24,10 @@
   --border-3: #2c2c31;
   --border-row: #1a1a1d;
   --border-strong: #3a3a40;
+  --control: #2a2a2f;
+  --control-hover: #3a3a41;
+  --control-border: #3f3f46;
+  --control-border-hover: #6b6b75;
 
   /* Text */
   --text: #ececec;
@@ -199,14 +203,14 @@ input:focus-visible,
 }
 
 .btn-ghost {
-  border-color: var(--border-3);
-  background: #17171a;
+  border-color: var(--control-border);
+  background: var(--control);
   color: var(--text);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--border);
-  border-color: var(--border-strong);
+  background: var(--control-hover);
+  border-color: var(--control-border-hover);
   color: var(--text);
 }
 
@@ -1519,8 +1523,8 @@ input:focus-visible,
   width: 140px;
   max-width: 100%;
   border-radius: 8px;
-  border: 1px solid var(--border-3);
-  background: var(--surface-1);
+  border: 1px solid var(--control-border);
+  background: var(--control);
   color: var(--text);
   padding: 0 10px;
   font-size: 13px;
@@ -1613,8 +1617,8 @@ input:focus-visible,
   height: 40px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-3);
-  background: var(--surface-1);
+  border: 1px solid var(--control-border);
+  background: var(--control);
   color: var(--text);
   text-align: left;
 }
@@ -1628,7 +1632,8 @@ input:focus-visible,
 }
 
 .net-trigger:hover {
-  background: var(--hover-row);
+  background: var(--control-hover);
+  border-color: var(--control-border-hover);
 }
 
 .net-trigger:focus-visible {
