@@ -9,9 +9,20 @@ import { getIconSvg } from "./icons.js";
 import { showToast } from "./ui.js";
 
 const SELECTORS = [
-  { field: "settingsNetworkField", trigger: "settingsNetworkBtn", name: "settingsNetworkName", ip: "settingsNetworkIp" },
-  { field: "pairNetworkField", trigger: "pairNetworkBtn", name: "pairNetworkName", ip: "pairNetworkIp" },
+  { trigger: "settingsNetworkBtn", name: "settingsNetworkName", ip: "settingsNetworkIp" },
+  { trigger: "pairNetworkBtn", name: "pairNetworkName", ip: "pairNetworkIp" },
 ];
+
+const SINGLE_NETWORK_TEXT = {
+  title: "Your address",
+  desc: "Other devices can use it to reach this one.",
+};
+const MULTI_NETWORK_TEXT = {
+  title: "Your network",
+  desc: "Pick the network the other device is on.",
+  tooltip:
+    "Sets the address this device shows, its pairing link, and the network its PIN search scans. Nearby devices that find this one automatically use the address they can reach.",
+};
 
 const MENU_GAP = 6;
 const MENU_EDGE = 8;
@@ -19,6 +30,25 @@ const MENU_EDGE = 8;
 let currentNetworks = { options: [], selected: null };
 let onAddressChanged = () => {};
 let menuAnchor = null;
+
+/**
+ * Settings has one row: the selector with a choice of networks, otherwise the plain address
+ * @param {boolean} hasChoice
+ */
+function renderSettingsRow(hasChoice) {
+  const text = hasChoice ? MULTI_NETWORK_TEXT : SINGLE_NETWORK_TEXT;
+  const row = document.getElementById("settingsNetworkField");
+  const title = document.getElementById("settingsNetworkTitle");
+  const desc = document.getElementById("settingsNetworkDesc");
+  const trigger = document.getElementById("settingsNetworkBtn");
+  const address = document.getElementById("settingsLocalAddress");
+
+  if (row) row.title = text.tooltip || "";
+  if (title) title.textContent = text.title;
+  if (desc) desc.textContent = text.desc;
+  if (trigger) trigger.classList.toggle("hidden", !hasChoice);
+  if (address) address.classList.toggle("hidden", hasChoice);
+}
 
 /**
  * Shows the current network on every selector
@@ -29,13 +59,15 @@ export function renderNetworkOptions(networks) {
   const options = networks?.options || [];
   const current = options.find((option) => option.adapter === networks?.selected) || options[0];
 
-  SELECTORS.forEach(({ field, name, ip }) => {
-    const fieldEl = document.getElementById(field);
+  const hasChoice = options.length > 1;
+  renderSettingsRow(hasChoice);
+  document.getElementById("pairNetworkField")?.classList.toggle("hidden", !hasChoice);
+
+  SELECTORS.forEach(({ name, ip }) => {
     const nameEl = document.getElementById(name);
     const ipEl = document.getElementById(ip);
-    if (!fieldEl || !nameEl || !ipEl) return;
+    if (!nameEl || !ipEl) return;
 
-    fieldEl.classList.toggle("hidden", options.length < 2);
     nameEl.textContent = current?.adapter || "";
     nameEl.title = current?.adapter || "";
     ipEl.textContent = current?.ip || "";

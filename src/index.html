@@ -319,22 +319,14 @@
           <section class="settings-section" aria-labelledby="sNet">
             <h2 class="settings-heading" id="sNet">Network</h2>
             <div class="list-card">
-              <div class="settings-row hidden" id="settingsNetworkField" title="Sets the address this device shows, its pairing link, and the network its PIN search scans. Nearby devices that find this one automatically use the address they can reach.">
+              <div class="settings-row" id="settingsNetworkField">
                 <label for="settingsNetworkBtn" class="settings-label">
-                  <span class="settings-label-title">Your network</span>
-                  <span class="settings-label-desc">Pick the network the other device is on.</span>
+                  <span class="settings-label-title" id="settingsNetworkTitle">Your address</span>
+                  <span class="settings-label-desc" id="settingsNetworkDesc">Other devices can use it to reach this one.</span>
                 </label>
-                <div class="settings-controls">
-                  <button class="net-trigger" id="settingsNetworkBtn" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="networkMenu"><span class="net-trigger-text"><span class="net-trigger-name" id="settingsNetworkName"></span><span class="net-trigger-ip mono" id="settingsNetworkIp"></span></span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-label">
-                  <span class="settings-label-title">Address</span>
-                  <span class="settings-label-desc">Other devices can use it to reach this one.</span>
-                </div>
                 <div class="settings-controls settings-value">
                   <span class="mono" id="settingsLocalAddress">—</span>
+                  <button class="net-trigger hidden" id="settingsNetworkBtn" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="networkMenu"><span class="net-trigger-text"><span class="net-trigger-name" id="settingsNetworkName"></span><span class="net-trigger-ip mono" id="settingsNetworkIp"></span></span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
                   <button class="btn btn-ghost btn-sm" id="settingsCopyAddressBtn" type="button">Copy</button>
                 </div>
               </div>

@@ -9,6 +9,7 @@ function element(id) {
     id,
     textContent: "",
     title: "",
+    addEventListener: () => {},
     classList: {
       contains: (cls) => classes.has(cls),
       toggle: (cls, on) => (on ? classes.add(cls) : classes.delete(cls)),
@@ -31,7 +32,12 @@ const { renderNetworkOptions, selectNetwork, setupNetworkSelector } = await impo
   "../src/script/network.js"
 );
 
-const fields = [element("settingsNetworkField"), element("pairNetworkField")];
+const settingsRow = element("settingsNetworkField");
+const settingsTitle = element("settingsNetworkTitle");
+const settingsDesc = element("settingsNetworkDesc");
+const settingsTrigger = element("settingsNetworkBtn");
+const settingsAddress = element("settingsLocalAddress");
+const pairField = element("pairNetworkField");
 const names = [element("settingsNetworkName"), element("pairNetworkName")];
 const ips = [element("settingsNetworkIp"), element("pairNetworkIp")];
 
@@ -43,14 +49,24 @@ const twoNetworks = {
   selected: "Ethernet 2",
 };
 
-test("selectors stay hidden when there is one network", () => {
+test("one network shows the plain address and hides the selectors", () => {
   renderNetworkOptions({ options: [twoNetworks.options[1]], selected: "Wi-Fi" });
-  fields.forEach((field) => assert.equal(field.classList.contains("hidden"), true));
+  assert.equal(pairField.classList.contains("hidden"), true);
+  assert.equal(settingsTrigger.classList.contains("hidden"), true);
+  assert.equal(settingsAddress.classList.contains("hidden"), false);
+  assert.equal(settingsTitle.textContent, "Your address");
+  assert.equal(settingsDesc.textContent, "Other devices can use it to reach this one.");
+  assert.equal(settingsRow.title, "");
 });
 
 test("selectors show the current network's adapter and address with two networks", () => {
   renderNetworkOptions(twoNetworks);
-  fields.forEach((field) => assert.equal(field.classList.contains("hidden"), false));
+  assert.equal(pairField.classList.contains("hidden"), false);
+  assert.equal(settingsTrigger.classList.contains("hidden"), false);
+  assert.equal(settingsAddress.classList.contains("hidden"), true);
+  assert.equal(settingsTitle.textContent, "Your network");
+  assert.equal(settingsDesc.textContent, "Pick the network the other device is on.");
+  assert.match(settingsRow.title, /^Sets the address/);
   names.forEach((name) => {
     assert.equal(name.textContent, "Ethernet 2");
     assert.equal(name.title, "Ethernet 2");
