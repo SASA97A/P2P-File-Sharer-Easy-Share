@@ -158,6 +158,32 @@ async fn test_udp_heartbeat_broadcast_and_listener() {
     );
 }
 
+fn heartbeat_advertising(ip: &str) -> HeartbeatMessage {
+    HeartbeatMessage {
+        magic: "EASYSHARE_DISCOVERY".to_string(),
+        device_name: "Work-Laptop".to_string(),
+        device_type: "desktop".to_string(),
+        os: "windows".to_string(),
+        version: "0.1.1".to_string(),
+        port: 5050,
+        ip: Some(ip.to_string()),
+        pairing_pin: None,
+        device_id: None,
+    }
+}
+
+#[test]
+fn test_peer_ip_prefers_packet_source_over_advertised_vpn_address() {
+    let peer = heartbeat_advertising("10.140.75.88").to_peer_info("192.168.1.215");
+    assert_eq!(peer.ip, "192.168.1.215");
+}
+
+#[test]
+fn test_peer_ip_keeps_advertised_address_for_loopback_source() {
+    let peer = heartbeat_advertising("192.168.1.215").to_peer_info("127.0.0.1");
+    assert_eq!(peer.ip, "192.168.1.215");
+}
+
 #[tokio::test]
 async fn test_peer_tracker_deduplication_and_expiration() {
     let mut tracker = PeerTracker::new(Duration::from_millis(200));

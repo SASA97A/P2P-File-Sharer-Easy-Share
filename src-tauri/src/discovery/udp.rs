@@ -47,7 +47,14 @@ impl HeartbeatMessage {
     }
 
     pub fn to_peer_info(&self, sender_ip: &str) -> PeerInfo {
+        // The packet source is an address that demonstrably reached us. The advertised one
+        // can be a VPN adapter's, which this device has no route to.
+        let source_is_routable = sender_ip
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| crate::discovery::nic::is_usable_ip(&ip));
+
         let resolved_ip = match &self.ip {
+            _ if source_is_routable => sender_ip.to_string(),
             Some(ip) if ip != "127.0.0.1" && ip != "0.0.0.0" => ip.clone(),
             _ => sender_ip.to_string(),
         };
