@@ -15,6 +15,9 @@
   --surface-dialog: #161618;
   --surface-sub: #1b1b1e;
   --surface-toast: #1a1a1d;
+  /* App frame (title bar and side panels), one step lighter than the content */
+  --surface-chrome: #141417;
+  --surface-chrome-card: #1c1c20;
   --hover: #18181b;
   --hover-row: #1b1b1f;
 
@@ -24,6 +27,7 @@
   --border-3: #2c2c31;
   --border-row: #1a1a1d;
   --border-strong: #3a3a40;
+  --border-chrome: #2a2a2f;
   --titlebar-height: 37px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -372,8 +376,8 @@ input:focus-visible,
   align-items: center;
   justify-content: space-between;
   height: var(--titlebar-height);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid var(--border-chrome);
+  background: var(--surface-chrome);
   user-select: none;
 }
 
@@ -433,8 +437,8 @@ input:focus-visible,
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--surface-1);
-  border-right: 1px solid var(--border);
+  background: var(--surface-chrome);
+  border-right: 1px solid var(--border-chrome);
   overflow-y: auto;
   overflow-x: hidden;
   transition: flex-basis 0.18s ease, width 0.18s ease;
@@ -463,7 +467,7 @@ input:focus-visible,
 }
 
 .nav-item.is-active {
-  background: var(--accent-tint);
+  background: var(--accent-tint-2);
   color: var(--text-strong);
 }
 
@@ -499,8 +503,8 @@ input:focus-visible,
 .device-card {
   padding: 12px;
   border-radius: 10px;
-  background: var(--surface-3);
-  border: 1px solid var(--border-2);
+  background: var(--surface-chrome-card);
+  border: 1px solid var(--border-3);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1123,8 +1127,8 @@ input:focus-visible,
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--surface-1);
-  border-left: 1px solid var(--border);
+  background: var(--surface-chrome);
+  border-left: 1px solid var(--border-chrome);
   overflow-y: auto;
 }
 
@@ -1275,8 +1279,8 @@ input:focus-visible,
 .pair-card {
   padding: 14px;
   border-radius: 10px;
-  border: 1px solid var(--border-2);
-  background: var(--surface-3);
+  border: 1px solid var(--border-3);
+  background: var(--surface-chrome-card);
   display: flex;
   flex-direction: column;
   gap: 10px;
