@@ -393,6 +393,7 @@ pub fn run() {
             commands::set_tray_settings,
             commands::get_encryption_settings,
             commands::set_encryption_settings,
+            commands::open_repo_page,
             commands::get_network_options,
             commands::set_network_adapter,
             commands::inspect_paths,

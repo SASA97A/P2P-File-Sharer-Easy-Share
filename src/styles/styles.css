@@ -1598,65 +1598,131 @@ input:focus-visible,
 }
 
 /* Read-only network facts: no card, just a quiet definition strip */
-.net-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 32px;
-  margin: 0;
-  padding: 0 2px;
-}
-
-.net-fact {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.net-fact dt {
-  font-size: 12px;
-  color: var(--text-subtle);
-}
-
-.net-fact dd {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  margin: 0;
+.settings-value {
   font-size: 13px;
   color: var(--text-soft);
 }
 
-.net-copy {
-  height: 24px;
-  padding: 0 8px;
+.net-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-3);
+  background: var(--surface-1);
+  color: var(--text);
+  text-align: left;
 }
 
-.net-select {
-  width: auto;
-  max-width: 280px;
+/* Same height as the other settings controls */
+.settings-controls .net-trigger {
+  width: 280px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 10px;
 }
 
-.net-fact dd.net-hint {
-  min-height: 0;
+.net-trigger:hover {
+  background: var(--hover-row);
+}
+
+.net-trigger:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+
+.net-trigger > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.net-trigger-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.net-trigger-ip {
+  flex-shrink: 0;
+}
+
+.net-opt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.net-trigger-name,
+.net-opt-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net-trigger-ip,
+.net-opt-ip {
   font-size: 12px;
-  color: var(--text-subtle);
+  color: var(--text-muted);
+}
+
+.net-menu {
+  overflow-y: auto;
+}
+
+.net-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.net-opt:hover,
+.net-opt:focus-visible {
+  background: var(--hover-row);
+  outline: none;
+}
+
+.net-opt.is-selected {
+  background: var(--accent-tint);
+}
+
+.net-opt-check {
+  display: inline-flex;
+  width: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
 }
 
 /* App version, a quiet line under the last settings section */
+.settings-repo-btn {
+  width: 24px;
+  height: 24px;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
 .settings-version {
   max-width: 720px;
   margin: 12px 0 8px;
   text-align: center;
   font-size: 12px;
   color: var(--text-subtle);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #7cdc6e;
 }
 
 /* ---------------------------------------------------------------

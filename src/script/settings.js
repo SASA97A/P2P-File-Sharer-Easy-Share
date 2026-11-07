@@ -20,6 +20,7 @@ import {
   getPairedDevicesStatus,
   setRememberPairedDevices,
   forgetPairedDevices,
+  openRepoPage,
 } from "./tauri-bridge.js";
 import { showConfirm, showToast } from "./ui.js";
 import { refreshNetworkOptions } from "./network.js";
@@ -363,6 +364,19 @@ export function setupSettings() {
       } catch (err) {
         console.error("Failed to forget paired devices:", err);
         showToast(`Failed to forget paired devices: ${err}`, "error");
+      }
+    });
+  }
+
+  // GitHub Page Handler
+  const repoBtn = document.getElementById("settingsRepoBtn");
+  if (repoBtn) {
+    repoBtn.addEventListener("click", async () => {
+      try {
+        await openRepoPage();
+      } catch (err) {
+        console.error("Failed to open GitHub:", err);
+        showToast(`Could not open GitHub: ${err}`, "error");
       }
     });
   }

@@ -1204,6 +1204,17 @@ pub async fn open_file(path: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to open file: {}", e))
 }
 
+/// Opens the project's GitHub page in the default browser. The URL is fixed here so the
+/// frontend cannot use this command to open arbitrary links.
+#[tauri::command]
+pub async fn open_repo_page() -> Result<(), String> {
+    tauri_plugin_opener::open_url(
+        "https://github.com/SASA97A/P2P-File-Sharer-Easy-Share",
+        None::<&str>,
+    )
+    .map_err(|e| format!("Failed to open GitHub: {}", e))
+}
+
 /// Payload describing system tray and notification preferences.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TraySettingsPayload {

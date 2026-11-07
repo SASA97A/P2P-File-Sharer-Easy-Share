@@ -469,6 +469,9 @@ async function callInvoke(command, args = {}) {
     case "open_file":
       return null;
 
+    case "open_repo_page":
+      return null;
+
     case "pause_transfer":
       emitMockEvent("transfer-paused", { session_token: args.session_token || args.sessionToken });
       return true;
@@ -962,6 +965,13 @@ export async function showInFolder(path) {
  */
 export async function openFile(path) {
   return await callInvoke("open_file", { path });
+}
+
+/**
+ * Opens the project's GitHub page in the default browser
+ */
+export async function openRepoPage() {
+  return await callInvoke("open_repo_page");
 }
 
 /**
