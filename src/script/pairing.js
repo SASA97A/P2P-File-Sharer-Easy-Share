@@ -176,21 +176,23 @@ export function setupPairing() {
   function switchTab(targetId) {
     clearAllStatus();
 
-    tabs.forEach(({ btn, view, id }) => {
+    tabs.forEach(({ btn, view, id }, index) => {
       const isActive = id === targetId;
+      if (isActive) btn?.parentElement?.style.setProperty("--tab-index", String(index));
       if (btn) {
         btn.classList.toggle("active", isActive);
         btn.setAttribute("aria-selected", String(isActive));
         btn.setAttribute("tabindex", isActive ? "0" : "-1");
       }
+      // Hidden panels keep their space, so switching tabs does not resize the dialog
       if (view) {
-        view.classList.toggle("hidden", !isActive);
+        view.classList.toggle("is-inactive", !isActive);
       }
     });
 
     // The pairing status only concerns this device's own PIN and QR code
     const statusRow = document.getElementById("pairStatusRow");
-    if (statusRow) statusRow.classList.toggle("hidden", targetId === "address");
+    if (statusRow) statusRow.classList.toggle("is-inactive", targetId === "address");
 
     if (targetId === "pin" && peerPinInput) {
       setTimeout(() => peerPinInput.focus(), 50);

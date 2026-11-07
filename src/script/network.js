@@ -142,6 +142,7 @@ function positionMenu(menu, anchor) {
   const height = menu.offsetHeight;
   menu.style.left = `${Math.max(MENU_EDGE, Math.min(rect.left, window.innerWidth - width - MENU_EDGE))}px`;
   menu.style.top = `${openBelow ? rect.bottom + MENU_GAP : rect.top - MENU_GAP - height}px`;
+  menu.style.transformOrigin = openBelow ? "top left" : "bottom left";
 }
 
 function openMenu(anchor) {

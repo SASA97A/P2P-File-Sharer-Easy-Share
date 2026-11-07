@@ -25,6 +25,8 @@
   --border-row: #1a1a1d;
   --border-strong: #3a3a40;
   --titlebar-height: 37px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --control: #2a2a2f;
   --control-hover: #3a3a41;
   --control-border: #3f3f46;
@@ -160,6 +162,26 @@ input:focus-visible,
   }
 }
 
+@keyframes esFadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes esDialogIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes esMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
 @keyframes esSpin {
   to {
     transform: rotate(360deg);
@@ -187,11 +209,16 @@ input:focus-visible,
   white-space: nowrap;
   text-decoration: none;
   flex-shrink: 0;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease,
+    transform 0.12s var(--ease-out);
 }
 
 .btn[hidden] {
   display: none;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .btn:disabled {
@@ -376,6 +403,7 @@ input:focus-visible,
   border: 0;
   background: transparent;
   color: var(--text-muted);
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .titlebar-btn:hover,
@@ -602,6 +630,10 @@ input:focus-visible,
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.view:not(.hidden) {
+  animation: esFadeIn 0.15s var(--ease-out);
 }
 
 .history-view,
@@ -1623,7 +1655,7 @@ input:focus-visible,
   inset: 0;
   background-color: var(--surface-2);
   border: 1px solid var(--border-3);
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
   border-radius: 24px;
 }
 
@@ -1635,7 +1667,7 @@ input:focus-visible,
   left: 3px;
   bottom: 3px;
   background-color: var(--text-soft);
-  transition: all 0.2s ease;
+  transition: transform 0.2s var(--ease-out), background-color 0.2s ease;
   border-radius: 50%;
 }
 
@@ -1794,6 +1826,14 @@ input:focus-visible,
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+.modal-overlay:not(.hidden) {
+  animation: esFadeIn 0.15s var(--ease-out);
+}
+
+.modal-overlay:not(.hidden) > .dialog {
+  animation: esDialogIn 0.2s var(--ease-out);
 }
 
 .dialog {
@@ -1961,6 +2001,7 @@ input:focus-visible,
 }
 
 .tabs {
+  position: relative;
   margin: 18px 22px 0;
   padding: 4px;
   display: flex;
@@ -1985,10 +2026,60 @@ input:focus-visible,
   color: var(--text);
 }
 
+.tab {
+  position: relative;
+  z-index: 1;
+  transition: color 0.15s ease;
+}
+
 .tab.active {
-  background: var(--border-2);
   color: var(--text-strong);
+}
+
+/* One highlight slides between the three tabs instead of jumping */
+.tabs::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 16px) / 3);
+  border-radius: 7px;
+  background: var(--border-2);
   box-shadow: inset 0 0 0 1px #34343a;
+  transform: translateX(calc(var(--tab-index, 0) * (100% + 4px)));
+  transition: transform 0.2s var(--ease-in-out);
+}
+
+.tab-stack {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.tab-stack > .pair-status-row,
+.tab-stack > .tab-panel {
+  grid-column: 1;
+  align-self: start;
+  transition: opacity 0.15s var(--ease-out);
+}
+
+.tab-stack > .pair-status-row {
+  grid-row: 1;
+}
+
+.tab-stack > .tab-panel {
+  grid-row: 2;
+}
+
+/* Direct IP has no status strip, so it takes that row too */
+.tab-stack > #viewAddress {
+  grid-row: 1 / span 2;
+}
+
+.tab-stack > .is-inactive {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out), visibility 0s linear 0.15s;
 }
 
 .tab-panel {
@@ -2207,17 +2298,13 @@ span.hint-line {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   display: flex;
   gap: 12px;
-  animation: toastIn 0.18s ease-out;
+  transition: opacity 0.18s var(--ease-out), transform 0.18s var(--ease-out);
 }
 
-@keyframes toastIn {
-  from {
+@starting-style {
+  .toast {
     opacity: 0;
     transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
   }
 }
 
@@ -2383,17 +2470,44 @@ span.hint-line {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+  .pulse,
+  .device-empty::before,
+  .btn-icon.is-spinning svg,
+  .status-spinner {
+    animation: none;
+  }
+
+  .side-nav,
+  .file-bar-fill,
+  .progress-fill,
+  .switch-slider,
+  .switch-slider:before,
+  .tabs::before {
+    transition: none;
+  }
+
+  .modal-overlay:not(.hidden) > .dialog,
+  .pair-menu:not(.hidden) {
+    animation-name: esFadeIn;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+
+  .toast {
+    transition-property: opacity;
   }
 }
 
 /* ---------------------------------------------------------------
  * Pairing visibility menu and dialog status strip
  * ------------------------------------------------------------- */
+/* Origin is set to the trigger side when the menu is positioned */
+.pair-menu:not(.hidden) {
+  animation: esMenuIn 0.15s var(--ease-out);
+}
+
 .pair-menu {
   position: fixed;
   z-index: 70;

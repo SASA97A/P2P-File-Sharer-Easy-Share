@@ -130,6 +130,7 @@ function positionMenu(menu, anchor) {
   const top = fitsBelow ? rect.bottom + gap : Math.max(8, rect.top - gap - height);
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+  menu.style.transformOrigin = fitsBelow ? "top right" : "bottom right";
 }
 
 function openMenu(anchor) {
